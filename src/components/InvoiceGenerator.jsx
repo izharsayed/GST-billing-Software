@@ -15,6 +15,7 @@ import { suggestGstRate } from '../utils/hsnRates';
 import HelpButton from './HelpButton';
 import { getClientCredit, planCreditApplication } from '../utils/clientCredit';
 import ClientModal from './ClientModal';
+import ColdRoomSizerModal from './quotation/ColdRoomSizerModal';
 import { toast } from './Toast';
 
 // Rich text editor component that works with contentEditable properly
@@ -670,6 +671,8 @@ export default function InvoiceGenerator({ onBack, profile: profileProp, editing
   // thermal receipts; A4 users hit Print → OS dialog directly since the
   // OS dialog already shows a preview. See directPrint + executePrint.
   const [showPrintPreview, setShowPrintPreview] = useState(false);
+  const [showSizerModal, setShowSizerModal] = useState(false);
+  const [technicalSpecs, setTechnicalSpecs] = useState(draft?.technicalSpecs || null);
   const printRef = useRef(null);
   // v1.10.48 — reported: "live preview show full when browser zoom on 50%".
   // `transform: scale()` shrinks what is PAINTED but never the element's
@@ -875,11 +878,11 @@ export default function InvoiceGenerator({ onBack, profile: profileProp, editing
   // during a typing burst.
   useEffect(() => {
     const t = setTimeout(() => {
-      const draftData = { invoiceType, client, details, items, customTerms, customNotes, internalNote, extraSections, selectedTermsId, invoiceOptions, taxInclusive };
+      const draftData = { invoiceType, client, details, items, customTerms, customNotes, internalNote, extraSections, selectedTermsId, invoiceOptions, taxInclusive, technicalSpecs };
       try { sessionStorage.setItem('gst_invoiceDraft', JSON.stringify(draftData)); } catch { /* private mode / quota exceeded — skip */ }
     }, 400);
     return () => clearTimeout(t);
-  }, [invoiceType, client, details, items, customTerms, customNotes, internalNote, extraSections, selectedTermsId, invoiceOptions, taxInclusive]);
+  }, [invoiceType, client, details, items, customTerms, customNotes, internalNote, extraSections, selectedTermsId, invoiceOptions, taxInclusive, technicalSpecs]);
 
   // Mark initialized after first render cycle so auto-save doesn't trigger on load
   useEffect(() => {
@@ -1096,6 +1099,7 @@ export default function InvoiceGenerator({ onBack, profile: profileProp, editing
       if (d.internalNote !== undefined) setInternalNote(d.internalNote);
       if (d.extraSections) setExtraSections(d.extraSections);
       if (d.taxInclusive !== undefined) setTaxInclusive(d.taxInclusive);
+      if (d.technicalSpecs) setTechnicalSpecs(d.technicalSpecs);
       if (d.invoiceOptions) {
         // User's persisted defaults as base, bill options overlay
         // v1.10.19 — Backfill paymentAccountSnapshot for pre-v1.10.18 bills.
@@ -1451,6 +1455,27 @@ export default function InvoiceGenerator({ onBack, profile: profileProp, editing
     });
   };
 
+  const handleInsertColdRoom = (newItems, specs) => {
+    setItems(prev => {
+      const isSingleEmpty = prev.length === 1 && !prev[0].name && (Number(prev[0].rate) === 0 || !prev[0].rate);
+      const base = isSingleEmpty ? [] : prev;
+      return [...base, ...newItems.map((item, idx) => ({
+        id: (Date.now() + idx).toString(),
+        name: item.name,
+        hsn: item.hsn || '84189900',
+        quantity: Number(item.quantity) || 1,
+        unit: item.unit || 'Set',
+        rate: Number(item.rate) || 0,
+        discount: Number(item.discount) || 0,
+        taxPercent: item.taxPercent !== undefined ? Number(item.taxPercent) : (showGST ? defaultTaxRate : 0),
+        cessPercent: 0,
+      }))];
+    });
+    setTechnicalSpecs(specs);
+    setShowSizerModal(false);
+    toast('Cold-room equipment & technical specifications added to invoice!', 'success');
+  };
+
   // Custom unit handler — prompts for a label, persists to localStorage, applies to current item.
   // v1.10.7 — useCallback for the LineItem memoization benefit.
   const handleAddCustomUnit = useCallback(async (itemId) => {
@@ -1804,7 +1829,7 @@ export default function InvoiceGenerator({ onBack, profile: profileProp, editing
       // Kept from the saved bill: rebuilt from scratch, they used to be lost.
       ...(keepCancelled ? { cancelledAt: serverCopy?.cancelledAt || editingBill.cancelledAt || null } : {}),
       ...(isIssued && (serverCopy?.convertedTo || editingBill.convertedTo) ? { convertedTo: serverCopy?.convertedTo || editingBill.convertedTo } : {}),
-      data: { profile, client, details: { ...details, invoiceNumber: finalInvoiceNumber }, items, totals, invoiceType, customTerms, customNotes, internalNote, extraSections, invoiceOptions: invoiceOptionsWithSnapshot, taxInclusive,
+      data: { profile, client, details: { ...details, invoiceNumber: finalInvoiceNumber }, items, totals, invoiceType, customTerms, customNotes, internalNote, extraSections, invoiceOptions: invoiceOptionsWithSnapshot, taxInclusive, technicalSpecs,
         // A converted quotation/proforma/challan's stock moved to its invoice:
         // its own record stays empty, or a save would take the stock twice.
         stockApplied: isIssued && (serverCopy?.convertedTo || editingBill.convertedTo) ? {} : stockEffect(items, invoiceType, seedStatus) }
@@ -4374,6 +4399,15 @@ export default function InvoiceGenerator({ onBack, profile: profileProp, editing
             ))}
             <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center' }}>
               <button className="btn btn-secondary mt-2" onClick={addItem}><Plus size={18} /> Add Item</button>
+              <button
+                type="button"
+                className="btn btn-secondary mt-2"
+                style={{ borderColor: 'var(--primary-color)', color: 'var(--primary-color)', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                onClick={() => setShowSizerModal(true)}
+                title="Calculate cold-room cooling load and auto-match Emerson & Daikin equipment into this invoice"
+              >
+                <span>❄️</span> Cold-Room Sizer
+              </button>
               {!hasDeliveryCharge && (
                 <button type="button" className="btn btn-secondary mt-2" onClick={addDeliveryCharge}
                   title="Adds a 'Delivery charges' line, taxed at the goods' GST rate (composite supply)">
@@ -4386,6 +4420,40 @@ export default function InvoiceGenerator({ onBack, profile: profileProp, editing
                 </span>
               )}
             </div>
+
+            {technicalSpecs && (
+              <div style={{
+                margin: '0.75rem 0 0.5rem',
+                padding: '0.65rem 0.85rem',
+                background: 'rgba(59, 130, 246, 0.08)',
+                border: '1px solid rgba(59, 130, 246, 0.3)',
+                borderRadius: '8px',
+                display: 'flex',
+                justifyContent: 'space-between',
+                alignItems: 'center',
+                flexWrap: 'wrap',
+                gap: '0.5rem'
+              }}>
+                <div>
+                  <div style={{ fontWeight: 600, color: '#1d4ed8', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                    <span>❄️</span> Cold-Room Sizing Attached ({technicalSpecs.application?.toUpperCase()})
+                  </div>
+                  <div style={{ fontSize: '0.78rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    {technicalSpecs.length}×{technicalSpecs.width}×{technicalSpecs.height} {technicalSpecs.unit} ({technicalSpecs.volume} {technicalSpecs.unit === 'm' ? 'm³' : 'cu.ft'}) | <strong>Load:</strong> {technicalSpecs.estimatedLoadKw} kW @ {technicalSpecs.ambientTemp}°C
+                    {technicalSpecs.cdu && ` | CDU: ${technicalSpecs.cdu?.model_number || (typeof technicalSpecs.cdu === 'string' ? technicalSpecs.cdu : '')}`}
+                    {technicalSpecs.evaporator && ` | Evap: ${technicalSpecs.evaporator?.model_number || (typeof technicalSpecs.evaporator === 'string' ? technicalSpecs.evaporator : '')}`}
+                  </div>
+                </div>
+                <div style={{ display: 'flex', gap: '0.4rem' }}>
+                  <button type="button" className="btn btn-sm btn-secondary" style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem' }} onClick={() => setShowSizerModal(true)}>
+                    Edit Sizing
+                  </button>
+                  <button type="button" className="btn btn-sm btn-secondary" style={{ padding: '0.2rem 0.5rem', fontSize: '0.75rem', color: '#dc2626' }} onClick={() => setTechnicalSpecs(null)}>
+                    Remove
+                  </button>
+                </div>
+              </div>
+            )}
 
             {/* v1.10.22 — invoice-level (whole-bill) discount. Sits below
                 the line items so it reads as "…and then take X off the
@@ -4650,7 +4718,7 @@ export default function InvoiceGenerator({ onBack, profile: profileProp, editing
               <InvoicePreview ref={printRef} profile={profile} client={client} details={details}
                 items={items} totals={totals} invoiceType={invoiceType} customTerms={customTerms}
                 customNotes={customNotes} extraSections={extraSections} options={invoiceOptions}
-                cancelled={editingBill?.status === 'cancelled'} />
+                cancelled={editingBill?.status === 'cancelled'} technicalSpecs={technicalSpecs} />
             </div>
           </div>
         </div>
@@ -4679,6 +4747,14 @@ export default function InvoiceGenerator({ onBack, profile: profileProp, editing
         customNotes={customNotes}
         extraSections={extraSections}
         invoiceOptions={invoiceOptions}
+        technicalSpecs={technicalSpecs}
+      />
+
+      <ColdRoomSizerModal
+        isOpen={showSizerModal}
+        onClose={() => setShowSizerModal(false)}
+        onInsert={handleInsertColdRoom}
+        initialSpecs={technicalSpecs}
       />
 
       {/* P2 #32 — 3-option leave modal. Replaces the previous confusing

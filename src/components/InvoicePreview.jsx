@@ -13,7 +13,8 @@ import InvoiceGridLayout, { HsnSummaryTable } from './InvoiceGridLayout';
 // instance renders with previewOnly=true so it doesn't create a
 // duplicate id on the page — HTML-invalid + could confuse getElementById
 // lookups.
-const InvoicePreview = React.forwardRef(({ profile: profileProp, client, details, items, totals, invoiceType = 'tax-invoice', customTerms, customNotes, extraSections = [], options = {}, previewOnly = false, cancelled = false }, ref) => {
+const InvoicePreview = React.forwardRef(({ profile: profileProp, client, details, items, totals, invoiceType = 'tax-invoice', customTerms, customNotes, extraSections = [], options = {}, previewOnly = false, cancelled = false, technicalSpecs: technicalSpecsProp }, ref) => {
+  const technicalSpecs = technicalSpecsProp || options?.technicalSpecs || null;
   // v1.10.76 - the business profile can still be loading on the first render
   // (a page refresh while editing an invoice), and reading a bank field from
   // null blanked the whole app. Empty until it arrives.
@@ -1365,6 +1366,65 @@ const InvoicePreview = React.forwardRef(({ profile: profileProp, client, details
         <div style={{ margin: '0 2rem 0.5rem', padding: '0.5rem 0.75rem', background: 'var(--info-bg)', border: '1px solid var(--info-border)', borderRadius: 4, fontSize: '0.78rem', color: 'var(--info-text)', fontStyle: 'italic' }}>
           "Composition taxable person, not eligible to collect tax on supplies."
           &nbsp;<span style={{ fontStyle: 'normal', fontSize: '0.7rem' }}>(Rule 46A, CGST Rules)</span>
+        </div>
+      )}
+
+      {/* Refrigeration Technical Sizing & Equipment Selection */}
+      {technicalSpecs && (
+        <div data-pdf-page-boundary="" style={{
+          margin: pdfStyle === 'classic' ? '0.5rem 0' : '0 2rem 0.5rem',
+          padding: '0.6rem 0.8rem',
+          background: '#f8fafc',
+          border: `1px solid ${accent || '#2563eb'}40`,
+          borderRadius: '6px',
+          fontSize: '0.74rem',
+          color: '#334155',
+          lineHeight: 1.4
+        }}>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            borderBottom: '1px solid #e2e8f0',
+            paddingBottom: '0.3rem',
+            marginBottom: '0.4rem',
+            fontWeight: 700,
+            color: accent || '#1e40af'
+          }}>
+            <span>❄️ REFRIGERATION DESIGN & TECHNICAL SPECIFICATIONS</span>
+            <span style={{ fontSize: '0.68rem', fontWeight: 500, color: '#64748b' }}>
+              Ref: {technicalSpecs.catalogueSource || 'Emerson Ready Reckoner / Daikin Catalogue'}
+            </span>
+          </div>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.4rem' }}>
+            <div>
+              <strong>Application:</strong> {technicalSpecs.application === 'bmc' ? 'Bulk Milk Chiller (BMC)' : technicalSpecs.application === 'freezer' ? 'Freezer (-18°C to -25°C)' : 'Chiller (+2°C to +8°C)'}
+            </div>
+            <div>
+              <strong>Room Dimensions:</strong> {technicalSpecs.length} × {technicalSpecs.width} × {technicalSpecs.height} {technicalSpecs.unit} ({technicalSpecs.volume} {technicalSpecs.unit === 'm' ? 'm³' : 'cu.ft'})
+            </div>
+            <div>
+              <strong>Operating Ambient:</strong> {technicalSpecs.ambientTemp || 43}°C
+            </div>
+            <div>
+              <strong>Calculated Load:</strong> <strong>{technicalSpecs.estimatedLoadKw || technicalSpecs.estimatedKw || '—'} kW</strong>
+            </div>
+          </div>
+          {(technicalSpecs.cdu || technicalSpecs.evaporator || technicalSpecs.expansionValve) && (
+            <div style={{ marginTop: '0.4rem', paddingTop: '0.4rem', borderTop: '1px dashed #cbd5e1', fontSize: '0.72rem' }}>
+              {technicalSpecs.cdu && (
+                <div><strong>Condensing Unit (CDU):</strong> {technicalSpecs.cdu?.model_number ? `${technicalSpecs.cdu.brand_name || 'Emerson'} ${technicalSpecs.cdu.model_number} (${technicalSpecs.cdu.capacity} kW)` : (typeof technicalSpecs.cdu === 'string' ? technicalSpecs.cdu : '')}</div>
+              )}
+              {technicalSpecs.evaporator && (
+                <div><strong>Evaporator Unit:</strong> {technicalSpecs.evaporator?.model_number ? `${technicalSpecs.evaporator.brand_name || 'Daikin'} ${technicalSpecs.evaporator.model_number} (${technicalSpecs.evaporator.capacity} kW)` : (typeof technicalSpecs.evaporator === 'string' ? technicalSpecs.evaporator : '')}</div>
+              )}
+              {(technicalSpecs.expansionValve || technicalSpecs.orifice || technicalSpecs.solenoidValve || technicalSpecs.controller) && (
+                <div>
+                  <strong>Controls & Refrigeration Kit:</strong> TXV: {technicalSpecs.expansionValve || 'TIE-SW'} | Orifice: {technicalSpecs.orifice || 'TIO'} | Solenoid: {technicalSpecs.solenoidValve || '200RB'} | Controller: {technicalSpecs.controller?.model || (typeof technicalSpecs.controller === 'string' ? technicalSpecs.controller : 'Dixell XR02CX')}
+                </div>
+              )}
+            </div>
+          )}
         </div>
       )}
 
