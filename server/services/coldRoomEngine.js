@@ -84,7 +84,8 @@ export function recommendColdRoomEquipment({
     ];
 
     const liters = Number(dailyMilkLiters);
-    // Find closest BMC model in DB
+    const refRefr = refrigerant === 'R22' ? 'R22' : 'R404A';
+    // Find closest BMC model in DB for chosen refrigerant
     const models = db.prepare(`
       SELECT m.*, b.name as brand_name, p.name as product_name,
              prc.selling_price, prc.purchase_cost
@@ -92,17 +93,17 @@ export function recommendColdRoomEquipment({
       JOIN brands b ON m.brand_id = b.id
       JOIN products p ON m.product_id = p.id
       LEFT JOIN product_prices prc ON m.id = prc.model_id
-      WHERE m.catalogue_ref LIKE '%Reckoner 6%'
+      WHERE m.catalogue_ref LIKE '%Reckoner 6%' AND m.refrigerant = ?
       ORDER BY m.capacity ASC
-    `).all();
+    `).all(refRefr);
 
     let matched = null;
-    if (liters <= 600) matched = models.find(m => m.model_number.includes('515'));
-    else if (liters <= 1200) matched = models.find(m => m.model_number.includes('521'));
-    else if (liters <= 2200) matched = models.find(m => m.model_number.includes('521') && m.model_number.includes('*2'));
-    else if (liters <= 3200) matched = models.find(m => m.model_number.includes('538'));
-    else if (liters <= 4200) matched = models.find(m => m.model_number.includes('545'));
-    else if (liters <= 5500) matched = models.find(m => m.model_number.includes('548'));
+    if (liters <= 600) matched = models[0];
+    else if (liters <= 1200) matched = models[1] || models[0];
+    else if (liters <= 2200) matched = models[2] || models[1];
+    else if (liters <= 3200) matched = models[3] || models[2];
+    else if (liters <= 4200) matched = models[4] || models[3];
+    else if (liters <= 5500) matched = models[5] || models[models.length - 1];
     else {
       result.requiresTechnicalReview = true;
       result.reviewReason = `Daily milk load (${liters} L) exceeds standard catalogue limit of 5000 Liters.`;
@@ -370,13 +371,32 @@ export function recommendColdRoomEquipment({
       result.recommendations.controller = { model: 'Dixell XR06CX', bms: 'XR70CX' };
     } else {
       // EMERSON EXPLICIT
-      result.catalogueSource = 'Emerson Ready Reckoner 4 (ZXL Scroll)';
-      result.cataloguePage = '4';
-      result.recommendations.cdu = bestModel;
+      const isRecip = compressorType === 'reciprocating';
+      const reckonerRef = isRecip ? 'Ready Reckoner 5' : 'Ready Reckoner 4';
+      const reckonerPage = isRecip ? '5' : '4';
+      result.catalogueSource = `Emerson ${reckonerRef} (${isRecip ? 'Recip' : 'ZXL Scroll'})`;
+      result.cataloguePage = reckonerPage;
+
+      let chosenEmModel = bestModel;
+      if (isRecip) {
+        const recipFreezerModel = db.prepare(`
+          SELECT m.*, b.name as brand_name, p.name as product_name,
+                 prc.selling_price, prc.purchase_cost
+          FROM product_models m
+          JOIN brands b ON m.brand_id = b.id
+          JOIN products p ON m.product_id = p.id
+          LEFT JOIN product_prices prc ON m.id = prc.model_id
+          WHERE m.catalogue_ref LIKE '%Reckoner 5%'
+          ORDER BY ABS(m.capacity - ?) ASC
+          LIMIT 1
+        `).get(estKw);
+        if (recipFreezerModel) chosenEmModel = recipFreezerModel;
+      }
+      result.recommendations.cdu = chosenEmModel;
 
       const specs = db.prepare(`
         SELECT spec_key, spec_value FROM model_specifications WHERE model_id = ?
-      `).all(bestModel.id);
+      `).all(chosenEmModel.id);
 
       const specMap = Object.fromEntries(specs.map(s => [s.spec_key, s.spec_value]));
       result.recommendations.expansionValve = specMap.expansion_valve || 'TIE-SW';
@@ -395,7 +415,7 @@ export function recommendColdRoomEquipment({
         WHERE p.name LIKE '%Evaporator%' AND m.temp_range_min < 0
         ORDER BY ABS(m.capacity - ?) ASC
         LIMIT 1
-      `).get(bestModel.capacity);
+      `).get(chosenEmModel.capacity);
 
       result.recommendations.evaporator = evap;
     }

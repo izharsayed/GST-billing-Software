@@ -59,22 +59,6 @@ export function seedRefrigerationData() {
     const dkEvapProdId = upsertProduct('prod_daikin_evap', 'Daikin Air Cooling Unit (Evaporator)', evapCatId, daikinBrandId, 'Nos', '84189900', 'Daikin Indoor DX Unit Cooler with axial fans');
     const bmcProdId = upsertProduct('prod_emerson_bmc', 'Emerson Bulk Milk Chiller Unit', bmcCatId, emersonBrandId, 'Set', '84186990', 'Dedicated BMC refrigeration unit with agitator control');
 
-    // Helper to insert model + price
-    const insertModel = db.prepare(`
-      INSERT INTO product_models (
-        id, product_id, brand_id, model_number, description,
-        capacity, capacity_unit, temp_range_min, temp_range_max,
-        refrigerant, voltage_phase, catalogue_ref, catalogue_page, verification_status, is_active
-      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'verified', 1)
-      ON CONFLICT(brand_id, model_number) DO UPDATE SET
-        capacity = excluded.capacity,
-        temp_range_min = excluded.temp_range_min,
-        temp_range_max = excluded.temp_range_max,
-        refrigerant = excluded.refrigerant,
-        catalogue_ref = excluded.catalogue_ref,
-        catalogue_page = excluded.catalogue_page
-    `);
-
     const insertPrice = db.prepare(`
       INSERT INTO product_prices (id, product_id, model_id, purchase_cost, selling_price, min_selling_price)
       VALUES (?, ?, ?, ?, ?, ?)
@@ -86,6 +70,30 @@ export function seedRefrigerationData() {
       VALUES (?, ?, ?, ?, ?)
       ON CONFLICT(model_id, spec_key) DO UPDATE SET spec_value = excluded.spec_value
     `);
+
+    // Helper to reliably insert/update model + price without FK collisions
+    const saveModelAndPrice = (id, prodId, brandId, modelNum, desc, cap, unit, tMin, tMax, refr, volt, catRef, catPage) => {
+      const existing = db.prepare('SELECT id FROM product_models WHERE brand_id = ? AND model_number = ?').get(brandId, modelNum);
+      const actualId = existing ? existing.id : id;
+      if (!existing) {
+        db.prepare(`
+          INSERT INTO product_models (
+            id, product_id, brand_id, model_number, description,
+            capacity, capacity_unit, temp_range_min, temp_range_max,
+            refrigerant, voltage_phase, catalogue_ref, catalogue_page, verification_status, is_active
+          ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'verified', 1)
+        `).run(actualId, prodId, brandId, modelNum, desc, cap, unit, tMin, tMax, refr, volt, catRef, catPage);
+      } else {
+        db.prepare(`
+          UPDATE product_models SET
+            product_id = ?, description = ?, capacity = ?, capacity_unit = ?, temp_range_min = ?, temp_range_max = ?,
+            refrigerant = ?, voltage_phase = ?, catalogue_ref = ?, catalogue_page = ?
+          WHERE id = ?
+        `).run(prodId, desc, cap, unit, tMin, tMax, refr, volt, catRef, catPage, actualId);
+      }
+      insertPrice.run('prc_' + actualId, prodId, actualId, 0, 0, 0);
+      return actualId;
+    };
 
     // ---------------------------------------------------------------
     // 4. EMERSON READY RECKONER 1: Chiller (+4°C, R22, Recip)
@@ -102,14 +110,13 @@ export function seedRefrigerationData() {
     ];
 
     for (const item of emersonRr1) {
-      const mid = 'mod_em_r22_' + item.model;
-      insertModel.run(
-        mid, emCduProdId, emersonBrandId, item.model,
+      const mid = saveModelAndPrice(
+        'mod_em_r22_' + item.model,
+        emCduProdId, emersonBrandId, item.model,
         `Emerson Hermetic Reciprocating CDU for Chiller (${item.cap} kW @ +4°C)`,
         item.cap, 'kW', 2.0, 8.0, 'R22', '415V / 3Ph / 50Hz',
         'Emerson Ready Reckoner 1', '1'
       );
-      insertPrice.run('prc_' + mid, emCduProdId, mid, 0, 0, 0);
 
       insertSpec.run('sp_sz_m_' + mid, mid, 'room_size_m', item.size_m, 'm');
       insertSpec.run('sp_sz_ft_' + mid, mid, 'room_size_ft', item.size_ft, 'ft');
@@ -119,6 +126,39 @@ export function seedRefrigerationData() {
       insertSpec.run('sp_orifice_' + mid, mid, 'expansion_orifice', item.orifice, '');
       insertSpec.run('sp_sol_' + mid, mid, 'solenoid_valve', item.sol, '');
       insertSpec.run('sp_ctrl_' + mid, mid, 'controller', item.ctrl, '');
+    }
+
+    // ---------------------------------------------------------------
+    // 4b. EMERSON READY RECKONER 2: Chiller (+4°C, R404A, Recip)
+    // ---------------------------------------------------------------
+    const emersonRr2 = [
+      { model: 'KFJ461PQL', cap: 2.1, size_ft: '6*10*8', vol_ft3: 480, load_kw: 2.2, valve: 'TIE-SW', orifice: 'TIO-001', sol: '200RB 2T3T' },
+      { model: 'KHM511PQL', cap: 3.7, size_ft: '8*12*8', vol_ft3: 768, load_kw: 3.0, valve: 'TIE-SW', orifice: 'TIO-002', sol: '200RB 2T3T' },
+      { model: 'KHM514PQL', cap: 5.0, size_ft: '14*14*8', vol_ft3: 1568, load_kw: 5.1, valve: 'TIE-SW', orifice: 'TIO-003', sol: '200RB 2T3T' },
+      { model: 'KHM519PQL', cap: 6.0, size_ft: '14*16*8', vol_ft3: 1792, load_kw: 6.0, valve: 'TIE-SW', orifice: 'TIO-003', sol: '200RB 2T3T' },
+      { model: 'KHM522PQL', cap: 6.8, size_ft: '16*16*8', vol_ft3: 2048, load_kw: 7.1, valve: 'TIE-SW', orifice: 'TIO-004', sol: '200RB 3T4T' },
+      { model: 'KHM511PQL * 2', cap: 7.4, size_ft: '16*20*8', vol_ft3: 2560, load_kw: 7.7, valve: 'TIE-SW * 2', orifice: 'TIO-002 * 2', sol: '200RB 2T3T * 2' },
+      { model: 'KHM514PQL * 2', cap: 10.0, size_ft: '20*20*8', vol_ft3: 3200, load_kw: 9.1, valve: 'TIE-SW * 2', orifice: 'TIO-003 * 2', sol: '200RB 2T3T * 2' },
+      { model: 'KHM519PQL * 2', cap: 12.0, size_ft: '20*26*8', vol_ft3: 4160, load_kw: 11.5, valve: 'TIE-SW * 2', orifice: 'TIO-003 * 2', sol: '200RB 2T3T * 2' },
+      { model: 'KHM522PQL * 2', cap: 13.6, size_ft: '20*32*8', vol_ft3: 5120, load_kw: 13.8, valve: 'TIE-SW * 2', orifice: 'TIO-004 * 2', sol: '200RB 3T4T * 2' },
+    ];
+
+    for (const item of emersonRr2) {
+      const mid = saveModelAndPrice(
+        'mod_em_r404a_recip_' + item.model.replace(/[^a-zA-Z0-9]/g, '_'),
+        emCduProdId, emersonBrandId, item.model,
+        `Emerson Hermetic Reciprocating CDU for Chiller (${item.cap} kW @ +4°C, R404A)`,
+        item.cap, 'kW', 2.0, 8.0, 'R404A', '415V / 3Ph / 50Hz',
+        'Emerson Ready Reckoner 2', '2'
+      );
+
+      insertSpec.run('sp_sz_ft_' + mid, mid, 'room_size_ft', item.size_ft, 'ft');
+      insertSpec.run('sp_vol_ft3_' + mid, mid, 'room_volume_ft3', String(item.vol_ft3), 'ft3');
+      insertSpec.run('sp_load_kw_' + mid, mid, 'cooling_load_kw', String(item.load_kw), 'kW');
+      insertSpec.run('sp_valve_' + mid, mid, 'expansion_valve', item.valve, '');
+      insertSpec.run('sp_orifice_' + mid, mid, 'expansion_orifice', item.orifice, '');
+      insertSpec.run('sp_sol_' + mid, mid, 'solenoid_valve', item.sol, '');
+      insertSpec.run('sp_ctrl_' + mid, mid, 'controller', 'XR02CX', '');
     }
 
     // ---------------------------------------------------------------
@@ -140,14 +180,13 @@ export function seedRefrigerationData() {
     ];
 
     for (const item of emersonRr3) {
-      const mid = 'mod_em_scroll_' + item.model;
-      insertModel.run(
-        mid, emCduProdId, emersonBrandId, item.model,
+      const mid = saveModelAndPrice(
+        'mod_em_scroll_' + item.model,
+        emCduProdId, emersonBrandId, item.model,
         `Emerson Copeland Scroll CDU for Chiller (${item.cap} kW @ +4°C)`,
         item.cap, 'kW', 2.0, 8.0, 'R404A', '415V / 3Ph / 50Hz',
         'Emerson Ready Reckoner 3', '3'
       );
-      insertPrice.run('prc_' + mid, emCduProdId, mid, 0, 0, 0);
 
       insertSpec.run('sp_sz_ft_' + mid, mid, 'room_size_ft', item.size_ft, 'ft');
       insertSpec.run('sp_vol_ft3_' + mid, mid, 'room_volume_ft3', String(item.vol_ft3), 'ft3');
@@ -169,17 +208,49 @@ export function seedRefrigerationData() {
       { model: 'ZXL050E', cap: 5.7, size_ft: '14*20*8', vol_ft3: 2240, load_kw: 5.8, valve: 'TIE-SW', orifice: 'TIO-004', sol: '200RB 2T3T' },
       { model: 'ZXL060E', cap: 6.8, size_ft: '18*20*8', vol_ft3: 2880, load_kw: 6.9, valve: 'TIE-SW', orifice: 'TIO-005', sol: '200RB 3T4T' },
       { model: 'ZXL075E', cap: 7.6, size_ft: '20*20*8', vol_ft3: 3200, load_kw: 7.5, valve: 'TIE-SW', orifice: 'TIO-005', sol: '200RB 3T4T' },
+      // Dual Units
+      { model: 'ZXL035E * 2', cap: 8.4, size_ft: '20*24*8', vol_ft3: 3840, load_kw: 8.5, valve: 'TIE-SW * 2', orifice: 'TIO-003 * 2', sol: '200RB 2T3T * 2' },
+      { model: 'ZXL040E * 2', cap: 9.8, size_ft: '24*24*8', vol_ft3: 4608, load_kw: 9.9, valve: 'TIE-SW * 2', orifice: 'TIO-004 * 2', sol: '200RB 2T3T * 2' },
+      { model: 'ZXL050E * 2', cap: 11.4, size_ft: '20*32*8', vol_ft3: 5120, load_kw: 11.3, valve: 'TIE-SW * 2', orifice: 'TIO-004 * 2', sol: '200RB 2T3T * 2' },
+      { model: 'ZXL060E * 2', cap: 13.6, size_ft: '20*40*8', vol_ft3: 6400, load_kw: 13.5, valve: 'TIE-SW * 2', orifice: 'TIO-005 * 2', sol: '200RB 3T4T * 2' },
+      { model: 'ZXL075E * 2', cap: 15.2, size_ft: '24*40*8', vol_ft3: 7680, load_kw: 15.4, valve: 'TIE-SW * 2', orifice: 'TIO-005 * 2', sol: '200RB 3T4T * 2' },
     ];
 
     for (const item of emersonRr4) {
-      const mid = 'mod_em_zxl_' + item.model;
-      insertModel.run(
-        mid, emCduProdId, emersonBrandId, item.model,
+      const mid = saveModelAndPrice(
+        'mod_em_zxl_' + item.model.replace(/[^a-zA-Z0-9]/g, '_'),
+        emCduProdId, emersonBrandId, item.model,
         `Emerson Copeland ZXL Scroll CDU for Freezer (${item.cap} kW @ -20°C)`,
         item.cap, 'kW', -25.0, -18.0, 'R404A', '415V / 3Ph / 50Hz',
         'Emerson Ready Reckoner 4', '4'
       );
-      insertPrice.run('prc_' + mid, emCduProdId, mid, 0, 0, 0);
+
+      insertSpec.run('sp_sz_ft_' + mid, mid, 'room_size_ft', item.size_ft, 'ft');
+      insertSpec.run('sp_vol_ft3_' + mid, mid, 'room_volume_ft3', String(item.vol_ft3), 'ft3');
+      insertSpec.run('sp_load_kw_' + mid, mid, 'cooling_load_kw', String(item.load_kw), 'kW');
+      insertSpec.run('sp_valve_' + mid, mid, 'expansion_valve', item.valve, '');
+      insertSpec.run('sp_orifice_' + mid, mid, 'expansion_orifice', item.orifice, '');
+      insertSpec.run('sp_ctrl_' + mid, mid, 'controller', 'XR06CX', '');
+    }
+
+    // ---------------------------------------------------------------
+    // 6b. EMERSON READY RECKONER 5: Freezer (-20°C, R404A, Recip CDU)
+    // ---------------------------------------------------------------
+    const emersonRr5 = [
+      { model: 'KHM475LQL', cap: 1.6, size_ft: '6*4*8', vol_ft3: 192, load_kw: 1.5, valve: 'TIE-SW', orifice: 'TIO-002', sol: '200RB 2T3T' },
+      { model: 'KHM515LQL', cap: 2.8, size_ft: '8*10*8', vol_ft3: 640, load_kw: 2.7, valve: 'TIE-SW', orifice: 'TIO-003', sol: '200RB 2T3T' },
+      { model: 'KHM515LQL * 2', cap: 5.6, size_ft: '14*16*8', vol_ft3: 1792, load_kw: 4.8, valve: 'TIE-SW * 2', orifice: 'TIO-003 * 2', sol: '200RB 2T3T * 2' },
+      { model: 'KHM515LQL * 2 (Large)', cap: 5.6, size_ft: '14*20*8', vol_ft3: 2240, load_kw: 5.8, valve: 'TIE-SW * 2', orifice: 'TIO-003 * 2', sol: '200RB 2T3T * 2' },
+    ];
+
+    for (const item of emersonRr5) {
+      const mid = saveModelAndPrice(
+        'mod_em_recip_freezer_' + item.model.replace(/[^a-zA-Z0-9]/g, '_'),
+        emCduProdId, emersonBrandId, item.model,
+        `Emerson Hermetic Reciprocating CDU for Freezer (${item.cap} kW @ -20°C, R404A)`,
+        item.cap, 'kW', -25.0, -18.0, 'R404A', '415V / 3Ph / 50Hz',
+        'Emerson Ready Reckoner 5', '5'
+      );
 
       insertSpec.run('sp_sz_ft_' + mid, mid, 'room_size_ft', item.size_ft, 'ft');
       insertSpec.run('sp_vol_ft3_' + mid, mid, 'room_volume_ft3', String(item.vol_ft3), 'ft3');
@@ -203,14 +274,23 @@ export function seedRefrigerationData() {
 
     for (const item of emersonBmc) {
       if (item.r404a && item.r404a !== '---') {
-        const mid = 'mod_bmc_' + item.liters + 'L';
-        insertModel.run(
-          mid, bmcProdId, emersonBrandId, item.r404a,
-          `Bulk Milk Chiller Unit for ${item.liters} Liters (${item.cap_kw} kW)`,
+        const mid = saveModelAndPrice(
+          'mod_bmc_r404a_' + item.liters + 'L',
+          bmcProdId, emersonBrandId, item.r404a,
+          `Bulk Milk Chiller Unit for ${item.liters} Liters (${item.cap_kw} kW, R404A)`,
           item.cap_kw, 'kW', 2.0, 4.0, 'R404A', '415V / 3Ph / 50Hz',
           'Emerson Ready Reckoner 6', '6'
         );
-        insertPrice.run('prc_' + mid, bmcProdId, mid, 0, 0, 0);
+        insertSpec.run('sp_liters_' + mid, mid, 'milk_volume_liters', String(item.liters), 'L');
+      }
+      if (item.r22 && item.r22 !== '---') {
+        const mid = saveModelAndPrice(
+          'mod_bmc_r22_' + item.liters + 'L',
+          bmcProdId, emersonBrandId, item.r22,
+          `Bulk Milk Chiller Unit for ${item.liters} Liters (${item.cap_kw} kW, R22)`,
+          item.cap_kw, 'kW', 2.0, 4.0, 'R22', '415V / 3Ph / 50Hz',
+          'Emerson Ready Reckoner 6', '6'
+        );
         insertSpec.run('sp_liters_' + mid, mid, 'milk_volume_liters', String(item.liters), 'L');
       }
     }
@@ -237,16 +317,15 @@ export function seedRefrigerationData() {
     ];
 
     for (const item of daikinCdus) {
-      const mid = 'mod_dk_cdu_' + item.model;
       const capKw = Math.round((item.cap_w / 1000) * 100) / 100;
       const desc = `Daikin ${item.temp.includes('Low') ? 'Low-Temp' : 'Medium-Temp'} ${item.type} CDU ${item.hp} HP (${capKw} kW) with ${item.comp}`;
-      insertModel.run(
-        mid, dkCduProdId, daikinBrandId, item.model,
+      const mid = saveModelAndPrice(
+        'mod_dk_cdu_' + item.model,
+        dkCduProdId, daikinBrandId, item.model,
         desc,
         capKw, 'kW', item.temp.includes('Low') ? -25 : 0, item.temp.includes('Low') ? -15 : 15,
         item.refr, '415V / 3Ph / 50Hz', 'Daikin Cold Room Catalogue 2024', '3'
       );
-      insertPrice.run('prc_' + mid, dkCduProdId, mid, 0, 0, 0);
 
       insertSpec.run('sp_hp_' + mid, mid, 'horse_power', String(item.hp), 'HP');
       insertSpec.run('sp_comp_' + mid, mid, 'internal_compressor', item.comp, '');
@@ -283,14 +362,13 @@ export function seedRefrigerationData() {
     ];
 
     for (const item of daikinEvaps) {
-      const mid = 'mod_dk_evap_' + item.model;
-      insertModel.run(
-        mid, dkEvapProdId, daikinBrandId, item.model,
+      const mid = saveModelAndPrice(
+        'mod_dk_evap_' + item.model,
+        dkEvapProdId, daikinBrandId, item.model,
         `Daikin DX Evaporator Unit (${item.cap_kw} kW)`,
         item.cap_kw, 'kW', item.temp.includes('Low') ? -25 : 0, item.temp.includes('Low') ? 5 : 15,
         'R404A', '230V/1Ph / 415V/3Ph', 'Daikin Cold Room Catalogue 2024', '5'
       );
-      insertPrice.run('prc_' + mid, dkEvapProdId, mid, 0, 0, 0);
 
       insertSpec.run('sp_airflow_' + mid, mid, 'air_flow_m3h', String(item.airflow), 'm3/h');
       insertSpec.run('sp_fans_' + mid, mid, 'fan_specs', item.fans, '');
