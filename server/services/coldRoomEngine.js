@@ -129,53 +129,12 @@ export function recommendColdRoomEquipment({
       'Selection based on 5K evaporator TD to maintain 90% RH',
     ];
 
-    // Check bounds
     if (vol_ft3 < 200 || vol_ft3 > 25000) {
       result.requiresTechnicalReview = true;
       result.reviewReason = `Room volume (${vol_ft3} cu.ft / ${vol_m3} m³) is outside standard pre-calculated catalogue limits (480 - 16,320 cu.ft). Custom refrigeration engineering calculation recommended.`;
     }
 
-    if (brand === 'Daikin' && compressorType !== 'reciprocating') {
-      // DAIKIN SELECTION
-      result.catalogueSource = 'Daikin Cold Room Catalogue 2024';
-      result.cataloguePage = '3 & 5';
-
-      // Estimate load: approx 0.07 kW per m3 or look up based on volume
-      const estKw = Math.max(2.5, Math.min(32, Math.round(vol_m3 * 0.08 * 10) / 10));
-      result.estimatedLoadKw = estKw;
-
-      // Find matching Daikin CDU
-      const cdu = db.prepare(`
-        SELECT m.*, b.name as brand_name, p.name as product_name,
-               prc.selling_price, prc.purchase_cost
-        FROM product_models m
-        JOIN brands b ON m.brand_id = b.id
-        JOIN products p ON m.product_id = p.id
-        LEFT JOIN product_prices prc ON m.id = prc.model_id
-        WHERE b.name = 'Daikin' AND m.temp_range_min >= 0
-        ORDER BY ABS((m.capacity * 2.5) - ?) ASC
-        LIMIT 1
-      `).get(estKw);
-
-      // Find matching Daikin Evaporator
-      const evap = db.prepare(`
-        SELECT m.*, b.name as brand_name, p.name as product_name,
-               prc.selling_price, prc.purchase_cost
-        FROM product_models m
-        JOIN brands b ON m.brand_id = b.id
-        JOIN products p ON m.product_id = p.id
-        LEFT JOIN product_prices prc ON m.id = prc.model_id
-        WHERE b.name = 'Daikin' AND p.name LIKE '%Evaporator%' AND m.temp_range_min >= 0
-        ORDER BY ABS(m.capacity - ?) ASC
-        LIMIT 1
-      `).get(estKw);
-
-      result.recommendations.cdu = cdu;
-      result.recommendations.evaporator = evap;
-      result.recommendations.controller = { model: 'Dixell XR02CX' };
-    } else {
-      // EMERSON SELECTION
-    // Choose table: Reckoner 3 (Scroll R404A) if scroll/R404A, else Reckoner 1 (R22) or Reckoner 2 (R404A recip)
+    // Determine estimated cooling load from engineering reckoning
     let catRef = 'Ready Reckoner 3';
     let catPage = '3';
     if (refrigerant === 'R22') {
@@ -186,10 +145,6 @@ export function recommendColdRoomEquipment({
       catPage = '2';
     }
 
-    result.catalogueSource = `Emerson ${catRef}`;
-    result.cataloguePage = catPage;
-
-    // Fetch models for this catalogue ref
     const emModels = db.prepare(`
       SELECT m.*, b.name as brand_name, p.name as product_name,
              prc.selling_price, prc.purchase_cost
@@ -201,35 +156,88 @@ export function recommendColdRoomEquipment({
       ORDER BY m.capacity ASC
     `).all(`%${catRef}%`);
 
-    // Match closest volume specification
-    let bestModel = emModels[0];
+    let bestEmModel = emModels[0];
     let minDiff = Infinity;
-
     for (const m of emModels) {
       const volSpec = db.prepare(`
         SELECT spec_value FROM model_specifications
         WHERE model_id = ? AND spec_key = 'room_volume_ft3'
       `).get(m.id);
-
       if (volSpec) {
         const specVol = Number(volSpec.spec_value);
         const diff = Math.abs(specVol - vol_ft3);
         if (diff < minDiff) {
           minDiff = diff;
-          bestModel = m;
+          bestEmModel = m;
         }
       }
     }
 
-    if (bestModel) {
-      result.estimatedLoadKw = bestModel.capacity;
-      result.recommendations.cdu = bestModel;
+    const estKw = bestEmModel?.capacity || Math.max(2.5, Math.min(32, Math.round(vol_m3 * 0.08 * 10) / 10));
+    result.estimatedLoadKw = estKw;
 
-      // Fetch matched expansion valve, orifice, solenoid, controller from specs
+    // Preference: Daikin is primary for Daikin Authorized Dealer
+    if (brand === 'Daikin' || brand === 'any') {
+      result.catalogueSource = 'Daikin Cold Room Catalogue 2024';
+      result.cataloguePage = '3 & 5';
+
+      let techQuery = 'AND m.temp_range_min >= 0';
+      if (compressorType === 'scroll') {
+        techQuery += " AND m.model_number LIKE '%CCMS%'";
+      } else if (compressorType === 'reciprocating') {
+        techQuery += " AND m.model_number LIKE '%CCMR%'";
+      }
+
+      const dkCdu = db.prepare(`
+        SELECT m.*, b.name as brand_name, p.name as product_name,
+               prc.selling_price, prc.purchase_cost
+        FROM product_models m
+        JOIN brands b ON m.brand_id = b.id
+        JOIN products p ON m.product_id = p.id
+        LEFT JOIN product_prices prc ON m.id = prc.model_id
+        WHERE b.name = 'Daikin' AND p.name LIKE '%Condensing Unit%' ${techQuery}
+        ORDER BY ABS(m.capacity - ?) ASC
+        LIMIT 1
+      `).get(estKw) || db.prepare(`
+        SELECT m.*, b.name as brand_name, p.name as product_name,
+               prc.selling_price, prc.purchase_cost
+        FROM product_models m
+        JOIN brands b ON m.brand_id = b.id
+        JOIN products p ON m.product_id = p.id
+        LEFT JOIN product_prices prc ON m.id = prc.model_id
+        WHERE b.name = 'Daikin' AND p.name LIKE '%Condensing Unit%' AND m.temp_range_min >= 0
+        ORDER BY ABS(m.capacity - ?) ASC
+        LIMIT 1
+      `).get(estKw);
+
+      const dkEvap = db.prepare(`
+        SELECT m.*, b.name as brand_name, p.name as product_name,
+               prc.selling_price, prc.purchase_cost
+        FROM product_models m
+        JOIN brands b ON m.brand_id = b.id
+        JOIN products p ON m.product_id = p.id
+        LEFT JOIN product_prices prc ON m.id = prc.model_id
+        WHERE b.name = 'Daikin' AND p.name LIKE '%Evaporator%' AND m.temp_range_min >= 0
+        ORDER BY ABS(m.capacity - ?) ASC
+        LIMIT 1
+      `).get(estKw);
+
+      result.recommendations.cdu = dkCdu;
+      result.recommendations.evaporator = dkEvap;
+      result.recommendations.expansionValve = 'TIE-SW';
+      result.recommendations.orifice = 'TIO-002';
+      result.recommendations.solenoidValve = '200RB 2T3T';
+      result.recommendations.solenoidCoil = 'ASC3 208VAC';
+      result.recommendations.controller = { model: 'Dixell XR02CX', bms: 'XR30CX' };
+    } else {
+      // EMERSON EXPLICIT
+      result.catalogueSource = `Emerson ${catRef}`;
+      result.cataloguePage = catPage;
+      result.recommendations.cdu = bestEmModel;
+
       const specs = db.prepare(`
         SELECT spec_key, spec_value FROM model_specifications WHERE model_id = ?
-      `).all(bestModel.id);
-
+      `).all(bestEmModel.id);
       const specMap = Object.fromEntries(specs.map(s => [s.spec_key, s.spec_value]));
       result.recommendations.expansionValve = specMap.expansion_valve || 'TIE-SW';
       result.recommendations.orifice = specMap.expansion_orifice || 'TIO-002';
@@ -237,7 +245,6 @@ export function recommendColdRoomEquipment({
       result.recommendations.solenoidCoil = 'ASC3 208VAC';
       result.recommendations.controller = { model: specMap.controller || 'Dixell XR02CX', bms: 'XR30CX' };
 
-      // Match compatible Daikin Evaporator
       const evap = db.prepare(`
         SELECT m.*, b.name as brand_name, p.name as product_name,
                prc.selling_price, prc.purchase_cost
@@ -248,12 +255,10 @@ export function recommendColdRoomEquipment({
         WHERE p.name LIKE '%Evaporator%' AND m.temp_range_min >= 0
         ORDER BY ABS(m.capacity - ?) ASC
         LIMIT 1
-      `).get(bestModel.capacity);
-
+      `).get(bestEmModel.capacity);
       result.recommendations.evaporator = evap;
     }
   }
-}
 
   // -------------------------------------------------------------
   // 3. FREEZER COLD ROOM (-18°C to -25°C, default -20°C)
@@ -287,6 +292,7 @@ export function recommendColdRoomEquipment({
       ORDER BY m.capacity ASC
     `).all();
 
+    // Determine load from Emerson Reckoner 4
     let bestModel = zxlModels[0];
     let minDiff = Infinity;
 
@@ -306,8 +312,66 @@ export function recommendColdRoomEquipment({
       }
     }
 
-    if (bestModel) {
-      result.estimatedLoadKw = bestModel.capacity;
+    const estKw = bestModel?.capacity || 2.0;
+    result.estimatedLoadKw = estKw;
+
+    if (brand === 'Daikin' || brand === 'any') {
+      result.catalogueSource = 'Daikin Cold Room Catalogue 2024';
+      result.cataloguePage = '3 & 5';
+
+      let techQuery = 'AND m.temp_range_min < 0';
+      if (compressorType === 'scroll') {
+        techQuery += " AND m.model_number LIKE '%CCLS%'";
+      } else if (compressorType === 'reciprocating') {
+        techQuery += " AND m.model_number LIKE '%CCLR%'";
+      }
+
+      const dkCdu = db.prepare(`
+        SELECT m.*, b.name as brand_name, p.name as product_name,
+               prc.selling_price, prc.purchase_cost
+        FROM product_models m
+        JOIN brands b ON m.brand_id = b.id
+        JOIN products p ON m.product_id = p.id
+        LEFT JOIN product_prices prc ON m.id = prc.model_id
+        WHERE b.name = 'Daikin' AND p.name LIKE '%Condensing Unit%' ${techQuery}
+        ORDER BY ABS(m.capacity - ?) ASC
+        LIMIT 1
+      `).get(estKw) || db.prepare(`
+        SELECT m.*, b.name as brand_name, p.name as product_name,
+               prc.selling_price, prc.purchase_cost
+        FROM product_models m
+        JOIN brands b ON m.brand_id = b.id
+        JOIN products p ON m.product_id = p.id
+        LEFT JOIN product_prices prc ON m.id = prc.model_id
+        WHERE b.name = 'Daikin' AND p.name LIKE '%Condensing Unit%' AND m.temp_range_min < 0
+        ORDER BY ABS(m.capacity - ?) ASC
+        LIMIT 1
+      `).get(estKw);
+
+      // Match Low Temp Evaporator (Daikin CRE...L...)
+      const dkEvap = db.prepare(`
+        SELECT m.*, b.name as brand_name, p.name as product_name,
+               prc.selling_price, prc.purchase_cost
+        FROM product_models m
+        JOIN brands b ON m.brand_id = b.id
+        JOIN products p ON m.product_id = p.id
+        LEFT JOIN product_prices prc ON m.id = prc.model_id
+        WHERE b.name = 'Daikin' AND p.name LIKE '%Evaporator%' AND m.temp_range_min < 0
+        ORDER BY ABS(m.capacity - ?) ASC
+        LIMIT 1
+      `).get(estKw);
+
+      result.recommendations.cdu = dkCdu;
+      result.recommendations.evaporator = dkEvap;
+      result.recommendations.expansionValve = 'TIE-SW';
+      result.recommendations.orifice = 'TIO-003';
+      result.recommendations.solenoidValve = '200RB 2T3T';
+      result.recommendations.solenoidCoil = 'ASC3 208VAC';
+      result.recommendations.controller = { model: 'Dixell XR06CX', bms: 'XR70CX' };
+    } else {
+      // EMERSON EXPLICIT
+      result.catalogueSource = 'Emerson Ready Reckoner 4 (ZXL Scroll)';
+      result.cataloguePage = '4';
       result.recommendations.cdu = bestModel;
 
       const specs = db.prepare(`
@@ -321,7 +385,6 @@ export function recommendColdRoomEquipment({
       result.recommendations.solenoidCoil = 'ASC3 208VAC';
       result.recommendations.controller = { model: 'Dixell XR06CX', bms: 'XR70CX' };
 
-      // Match Low Temp Evaporator (Daikin CRE...L...)
       const evap = db.prepare(`
         SELECT m.*, b.name as brand_name, p.name as product_name,
                prc.selling_price, prc.purchase_cost
@@ -359,7 +422,9 @@ export function recommendColdRoomEquipment({
           (m.temp_range_min IS NULL AND m.temp_range_max IS NULL)
           OR (m.temp_range_min <= ? AND m.temp_range_max >= ?)
         )
-      ORDER BY ABS(COALESCE(m.capacity, 0) - ?) ASC, m.capacity ASC
+      ORDER BY
+        CASE WHEN b.name = 'Daikin' THEN 0 ELSE 1 END,
+        ABS(COALESCE(m.capacity, 0) - ?) ASC, m.capacity ASC
       LIMIT 30
     `).all(tempMax, tempMin, targetKw);
 

@@ -32,7 +32,7 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
     ambientTemp: 43,
     refrigerant: 'R404A',
     compressorType: 'scroll',
-    brand: 'any',
+    brand: 'Daikin',
     dailyMilkLiters: 1000,
   });
 
@@ -513,9 +513,9 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
                     onChange={e => setCalcForm(prev => ({ ...prev, brand: e.target.value }))}
                     style={{ width: '100%' }}
                   >
-                    <option value="any">Any (Emerson / Daikin)</option>
+                    <option value="Daikin">Daikin (Authorized Dealer)</option>
                     <option value="Emerson">Emerson Climate</option>
-                    <option value="Daikin">Daikin Commercial</option>
+                    <option value="any">Compare All (Daikin & Emerson)</option>
                   </select>
                 </div>
                 <div>

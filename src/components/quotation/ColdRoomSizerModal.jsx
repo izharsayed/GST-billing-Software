@@ -14,7 +14,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
     ambientTemp: 43,
     refrigerant: 'R404A',
     compressorType: 'scroll',
-    brand: 'any',
+    brand: 'Daikin',
     dailyMilkLiters: 1000,
   });
 
@@ -337,7 +337,31 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
           )}
 
           {/* Refrigerant & Compressor Specs */}
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem' }}>
+            <div className="form-group">
+              <label className="form-label" style={{ fontSize: '0.78rem' }}>Brand Preference</label>
+              <select
+                className="form-input"
+                value={calcForm.brand}
+                onChange={e => setCalcForm(p => ({ ...p, brand: e.target.value }))}
+              >
+                <option value="Daikin">Daikin (Authorized Dealer)</option>
+                <option value="Emerson">Emerson</option>
+                <option value="any">Compare All Brands</option>
+              </select>
+            </div>
+            <div className="form-group">
+              <label className="form-label" style={{ fontSize: '0.78rem' }}>Compressor Technology</label>
+              <select
+                className="form-input"
+                value={calcForm.compressorType}
+                onChange={e => setCalcForm(p => ({ ...p, compressorType: e.target.value }))}
+              >
+                <option value="scroll">Scroll (High Efficiency)</option>
+                <option value="reciprocating">Reciprocating</option>
+                <option value="any">Any Technology</option>
+              </select>
+            </div>
             <div className="form-group">
               <label className="form-label" style={{ fontSize: '0.78rem' }}>Refrigerant</label>
               <select
@@ -349,18 +373,6 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                 <option value="R22">R22</option>
                 <option value="R134a">R134a</option>
                 <option value="R410A">R410A</option>
-              </select>
-            </div>
-            <div className="form-group">
-              <label className="form-label" style={{ fontSize: '0.78rem' }}>Technology</label>
-              <select
-                className="form-input"
-                value={calcForm.compressorType}
-                onChange={e => setCalcForm(p => ({ ...p, compressorType: e.target.value }))}
-              >
-                <option value="scroll">Scroll (High Efficiency)</option>
-                <option value="reciprocating">Reciprocating</option>
-                <option value="any">Any Technology</option>
               </select>
             </div>
             <div className="form-group">

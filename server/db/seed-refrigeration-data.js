@@ -217,36 +217,40 @@ export function seedRefrigerationData() {
 
     // ---------------------------------------------------------------
     // 8. DAIKIN COMMERCIAL CONDENSING UNITS (Medium & Low Temp)
+    // From Daikin Cold Room Catalogue 2024 (DAIPL-2024/25-24/2/ColdRoom-1A)
     // ---------------------------------------------------------------
     const daikinCdus = [
-      // Medium Temp
-      { model: 'CCMR0200ARY16', hp: 2, cap_w: 3978, type: 'Reciprocating', temp: 'Medium (0 to 15°C)', refr: 'R404A', liquid: '3/8"', suction: '5/8"', weight: 73, sound: 62 },
-      { model: 'CCMR0300ARY16', hp: 3, cap_w: 5805, type: 'Reciprocating', temp: 'Medium (0 to 15°C)', refr: 'R404A', liquid: '3/8"', suction: '5/8"', weight: 76, sound: 67 },
-      { model: 'CCMS0400ARY16', hp: 4, cap_w: 7805, type: 'Scroll', temp: 'Medium (0 to 15°C)', refr: 'R404A', liquid: '1/2"', suction: '7/8"', weight: 94, sound: 71 },
-      { model: 'CCMS0600ARY16', hp: 6, cap_w: 10589, type: 'Scroll', temp: 'Medium (0 to 15°C)', refr: 'R404A', liquid: '1/2"', suction: '7/8"', weight: 107, sound: 71 },
-      { model: 'CCMS0800ARY16', hp: 8, cap_w: 15000, type: 'Scroll', temp: 'Medium (0 to 15°C)', refr: 'R404A', liquid: '5/8"', suction: '1-1/8"', weight: 167, sound: 73 },
-      { model: 'CCMS1000ARY16', hp: 10, cap_w: 20000, type: 'Scroll', temp: 'Medium (0 to 15°C)', refr: 'R404A', liquid: '5/8"', suction: '1-1/8"', weight: 167, sound: 72 },
-      // Low Temp
-      { model: 'CCLR0200ARY16', hp: 2, cap_w: 1914, type: 'Reciprocating', temp: 'Low (-25 to -15°C)', refr: 'R404A', liquid: '3/8"', suction: '5/8"', weight: 78, sound: 68 },
-      { model: 'CCLR0300ARY16', hp: 3, cap_w: 2510, type: 'Reciprocating', temp: 'Low (-25 to -15°C)', refr: 'R404A', liquid: '3/8"', suction: '5/8"', weight: 86, sound: 66 },
-      { model: 'CCLS0400ARY16', hp: 4, cap_w: 3816, type: 'Scroll', temp: 'Low (-25 to -15°C)', refr: 'R404A', liquid: '1/2"', suction: '7/8"', weight: 108, sound: 71 },
-      { model: 'CCLS0600ARY16', hp: 6, cap_w: 5429, type: 'Scroll', temp: 'Low (-25 to -15°C)', refr: 'R404A', liquid: '1/2"', suction: '7/8"', weight: 112, sound: 72 },
-      { model: 'CCLS0800ARY16', hp: 8, cap_w: 6525, type: 'Scroll', temp: 'Low (-25 to -15°C)', refr: 'R404A', liquid: '5/8"', suction: '1-1/8"', weight: 133, sound: 72 },
-      { model: 'CCLS1000ARY16', hp: 10, cap_w: 8546, type: 'Scroll', temp: 'Low (-25 to -15°C)', refr: 'R404A', liquid: '5/8"', suction: '1-1/8"', weight: 172, sound: 72 },
+      // Medium Temp (@ -5°C Te, 38°C Ambient)
+      { model: 'CCMR0200ARY16', hp: 2, cap_w: 3978, comp: 'KCM511-CAL', type: 'Reciprocating', temp: 'Medium (0 to 15°C)', refr: 'R404A', liquid: '3/8"', suction: '5/8"', weight: 73, sound: 62 },
+      { model: 'CCMR0300ARY16', hp: 3, cap_w: 5805, comp: 'KCM522-CAL', type: 'Reciprocating', temp: 'Medium (0 to 15°C)', refr: 'R404A', liquid: '3/8"', suction: '5/8"', weight: 76, sound: 67 },
+      { model: 'CCMS0400ARY16', hp: 4, cap_w: 7805, comp: 'ZB29KQE-TFD', type: 'Scroll', temp: 'Medium (0 to 15°C)', refr: 'R404A', liquid: '1/2"', suction: '7/8"', weight: 94, sound: 71 },
+      { model: 'CCMS0600ARY16', hp: 6, cap_w: 10589, comp: 'ZB45KQE-TFD', type: 'Scroll', temp: 'Medium (0 to 15°C)', refr: 'R404A', liquid: '1/2"', suction: '7/8"', weight: 107, sound: 71 },
+      { model: 'CCMS0800ARY16', hp: 8, cap_w: 15000, comp: 'ZB58KQE-TFD-550', type: 'Scroll', temp: 'Medium (0 to 15°C)', refr: 'R404A', liquid: '5/8"', suction: '1-1/8"', weight: 167, sound: 73 },
+      { model: 'CCMS1000ARY16', hp: 10, cap_w: 20000, comp: 'ZB76KQE-TFD-550', type: 'Scroll', temp: 'Medium (0 to 15°C)', refr: 'R404A', liquid: '5/8"', suction: '1-1/8"', weight: 167, sound: 72 },
+      // Low Temp (@ -25°C Te, 38°C Ambient)
+      { model: 'CCLR0200ARY16', hp: 2, cap_w: 1914, comp: 'KCM512-LAL', type: 'Reciprocating', temp: 'Low (-25 to -15°C)', refr: 'R404A', liquid: '3/8"', suction: '5/8"', weight: 78, sound: 68 },
+      { model: 'CCLR0300ARY16', hp: 3, cap_w: 2510, comp: 'KCM515-LAL', type: 'Reciprocating', temp: 'Low (-25 to -15°C)', refr: 'R404A', liquid: '3/8"', suction: '5/8"', weight: 86, sound: 66 },
+      { model: 'CCLS0400ARY16', hp: 4, cap_w: 3816, comp: 'ZF13K4E-TFD', type: 'Scroll', temp: 'Low (-25 to -15°C)', refr: 'R404A', liquid: '1/2"', suction: '7/8"', weight: 108, sound: 71 },
+      { model: 'CCLS0600ARY16', hp: 6, cap_w: 5429, comp: 'ZF18K4E-TFD', type: 'Scroll', temp: 'Low (-25 to -15°C)', refr: 'R404A', liquid: '1/2"', suction: '7/8"', weight: 112, sound: 72 },
+      { model: 'CCLS0800ARY16', hp: 8, cap_w: 6525, comp: 'ZF25KQE-TFD-550', type: 'Scroll', temp: 'Low (-25 to -15°C)', refr: 'R404A', liquid: '5/8"', suction: '1-1/8"', weight: 133, sound: 72 },
+      { model: 'CCLS1000ARY16', hp: 10, cap_w: 8546, comp: 'ZF34KQE-TFD-554', type: 'Scroll', temp: 'Low (-25 to -15°C)', refr: 'R404A', liquid: '5/8"', suction: '1-1/8"', weight: 172, sound: 72 },
     ];
 
     for (const item of daikinCdus) {
       const mid = 'mod_dk_cdu_' + item.model;
       const capKw = Math.round((item.cap_w / 1000) * 100) / 100;
+      const desc = `Daikin ${item.temp.includes('Low') ? 'Low-Temp' : 'Medium-Temp'} ${item.type} CDU ${item.hp} HP (${capKw} kW) with ${item.comp}`;
       insertModel.run(
         mid, dkCduProdId, daikinBrandId, item.model,
-        `Daikin ${item.type} Condensing Unit ${item.hp} HP (${capKw} kW)`,
-        item.hp, 'HP', item.temp.includes('Low') ? -25 : 0, item.temp.includes('Low') ? -15 : 15,
+        desc,
+        capKw, 'kW', item.temp.includes('Low') ? -25 : 0, item.temp.includes('Low') ? -15 : 15,
         item.refr, '415V / 3Ph / 50Hz', 'Daikin Cold Room Catalogue 2024', '3'
       );
       insertPrice.run('prc_' + mid, dkCduProdId, mid, 0, 0, 0);
 
       insertSpec.run('sp_hp_' + mid, mid, 'horse_power', String(item.hp), 'HP');
+      insertSpec.run('sp_comp_' + mid, mid, 'internal_compressor', item.comp, '');
+      insertSpec.run('sp_tech_' + mid, mid, 'compressor_type', item.type, '');
       insertSpec.run('sp_cap_w_' + mid, mid, 'cooling_capacity_watts', String(item.cap_w), 'W');
       insertSpec.run('sp_liq_' + mid, mid, 'liquid_line', item.liquid, 'inch');
       insertSpec.run('sp_suc_' + mid, mid, 'suction_line', item.suction, 'inch');
