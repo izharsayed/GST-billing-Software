@@ -132,6 +132,41 @@ export default function MastersView() {
     }
   };
 
+  const handleSaveCompressor = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const brandIdVal = fd.get('brand_id');
+    const existingBrand = brands.find(b => b.id === brandIdVal);
+    const customBrand = fd.get('brand_name_custom');
+
+    const data = {
+      id: editModal?.data?.id || undefined,
+      brand_id: existingBrand ? existingBrand.id : null,
+      brand_name: existingBrand ? existingBrand.name : (customBrand || 'Generic'),
+      model_number: fd.get('model_number'),
+      capacity: Number(fd.get('capacity')) || 0,
+      capacity_unit: fd.get('capacity_unit') || 'kW',
+      temp_range_min: fd.get('temp_range_min') !== '' ? Number(fd.get('temp_range_min')) : (fd.get('app_type') === 'freezer' ? -25 : 0),
+      temp_range_max: fd.get('temp_range_max') !== '' ? Number(fd.get('temp_range_max')) : (fd.get('app_type') === 'freezer' ? -18 : 10),
+      refrigerant: fd.get('refrigerant') || 'R404A',
+      voltage_phase: fd.get('voltage_phase') || '415V / 3Ph / 50Hz',
+      purchase_cost: Number(fd.get('purchase_cost')) || 0,
+      selling_price: Number(fd.get('selling_price')) || 0,
+      catalogue_ref: fd.get('catalogue_ref') || 'Custom Catalogue',
+      catalogue_page: fd.get('catalogue_page') || '1',
+      description: `${fd.get('compressor_type') || 'Compressor'} - ${fd.get('hp') ? fd.get('hp') + ' HP, ' : ''}${fd.get('description') || ''}`,
+    };
+
+    try {
+      await saveProductModel(data);
+      toast('Compressor / Condensing Unit saved successfully!', 'success');
+      setEditModal(null);
+      loadAll();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  };
+
   const handleSaveWarehouse = async (e) => {
     e.preventDefault();
     const fd = new FormData(e.target);
@@ -243,14 +278,27 @@ export default function MastersView() {
           />
         </div>
 
-        {tab !== 'history' && (
-          <button
-            className="btn btn-primary"
-            onClick={() => setEditModal({ type: tab, data: null })}
-            style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
-          >
-            <Plus size={16} /> Add {tab === 'models' ? 'Model' : tab === 'categories' ? 'Category' : tab === 'brands' ? 'Brand' : tab === 'warehouses' ? 'Location / Van' : 'Charge Rule'}
-          </button>
+                {tab !== 'history' && (
+          <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap' }}>
+            {tab === 'models' && (
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={() => setEditModal({ type: 'compressor', data: null })}
+                style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', background: '#1d4ed8' }}
+              >
+                <span>❄️</span> Add Compressor / CDU
+              </button>
+            )}
+            <button
+              type="button"
+              className="btn btn-secondary"
+              onClick={() => setEditModal({ type: tab, data: null })}
+              style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}
+            >
+              <Plus size={16} /> Add {tab === 'models' ? 'General Model' : tab === 'categories' ? 'Category' : tab === 'brands' ? 'Brand' : tab === 'warehouses' ? 'Location / Van' : 'Charge Rule'}
+            </button>
+          </div>
         )}
       </div>
 
@@ -639,6 +687,139 @@ export default function MastersView() {
                 <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
                   <button type="button" className="btn btn-secondary" onClick={() => setEditModal(null)}>Cancel</button>
                   <button type="submit" className="btn btn-primary">Save Brand</button>
+                </div>
+              </form>
+            )}
+
+            {/* FORM: COMPRESSOR */}
+            {editModal.type === 'compressor' && (
+              <form onSubmit={handleSaveCompressor}>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.3rem' }}>
+                      Brand / Manufacturer *
+                    </label>
+                    <select name="brand_id" className="form-input" style={{ width: '100%' }}>
+                      {brands.map(b => (
+                        <option key={b.id} value={b.id}>{b.name}</option>
+                      ))}
+                      <option value="custom">+ Other / Custom Brand</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.3rem' }}>
+                      Custom Brand Name (if not in list)
+                    </label>
+                    <input type="text" name="brand_name_custom" className="form-input" placeholder="e.g. Danfoss, Bitzer, Tecumseh" style={{ width: '100%' }} />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.3rem' }}>
+                      Compressor Model Number *
+                    </label>
+                    <input type="text" name="model_number" className="form-input" placeholder="e.g. ZX076BE-TFD-451 / 4VES-10Y / MTZ50" style={{ width: '100%' }} required />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.3rem' }}>
+                      Compressor Technology
+                    </label>
+                    <select name="compressor_type" className="form-input" style={{ width: '100%' }}>
+                      <option value="Scroll (High Efficiency)">Scroll (High Efficiency)</option>
+                      <option value="Hermetic Reciprocating">Hermetic Reciprocating</option>
+                      <option value="Semi-Hermetic Reciprocating">Semi-Hermetic Reciprocating</option>
+                      <option value="Semi-Hermetic Screw">Semi-Hermetic Screw</option>
+                      <option value="Rotary / Inverter">Rotary / Inverter</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.3rem' }}>
+                      Application
+                    </label>
+                    <select name="app_type" className="form-input" style={{ width: '100%' }}>
+                      <option value="chiller">Chiller (+2°C to +8°C)</option>
+                      <option value="freezer">Freezer (-18°C to -25°C)</option>
+                      <option value="bmc">Milk Chiller (BMC)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.3rem' }}>
+                      Cooling Capacity (kW) *
+                    </label>
+                    <input type="number" step="any" name="capacity" className="form-input" placeholder="e.g. 3.8" style={{ width: '100%' }} required />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.3rem' }}>
+                      Motor Horsepower (HP)
+                    </label>
+                    <input type="number" step="any" name="hp" className="form-input" placeholder="e.g. 3.0" style={{ width: '100%' }} />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.3rem' }}>
+                      Refrigerant
+                    </label>
+                    <select name="refrigerant" className="form-input" style={{ width: '100%' }}>
+                      <option value="R404A">R404A (Eco-blend)</option>
+                      <option value="R22">R22</option>
+                      <option value="R134a">R134a</option>
+                      <option value="R410A">R410A</option>
+                      <option value="R448A/R449A">R448A / R449A</option>
+                      <option value="R507">R507</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.3rem' }}>
+                      Electrical Power / Phase
+                    </label>
+                    <select name="voltage_phase" className="form-input" style={{ width: '100%' }}>
+                      <option value="415V / 3Ph / 50Hz">415V / 3Ph / 50Hz (3-Phase)</option>
+                      <option value="230V / 1Ph / 50Hz">230V / 1Ph / 50Hz (Single Phase)</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.3rem' }}>
+                      Purchase Cost (₹)
+                    </label>
+                    <input type="number" step="any" name="purchase_cost" defaultValue={0} className="form-input" style={{ width: '100%' }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.3rem' }}>
+                      Selling Price (₹) *
+                    </label>
+                    <input type="number" step="any" name="selling_price" defaultValue={0} className="form-input" style={{ width: '100%' }} required />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.3rem' }}>
+                      Catalogue / Source Ref
+                    </label>
+                    <input type="text" name="catalogue_ref" defaultValue="Custom Catalogue" className="form-input" style={{ width: '100%' }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.3rem' }}>
+                      Description / Notes
+                    </label>
+                    <input type="text" name="description" placeholder="Acoustic enclosure, liquid receiver, etc." className="form-input" style={{ width: '100%' }} />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', marginTop: '1.5rem' }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => setEditModal(null)}>Cancel</button>
+                  <button type="submit" className="btn btn-primary" style={{ background: '#1d4ed8' }}>
+                    Save Compressor / CDU
+                  </button>
                 </div>
               </form>
             )}

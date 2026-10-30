@@ -1,5 +1,5 @@
-import React, { useState, useEffect } from 'react';
-import { X, Calculator, CheckCircle2, AlertTriangle, Layers, Plus, Loader2 } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { X, Calculator, CheckCircle2, AlertTriangle, Layers, Plus, Loader2, Filter } from 'lucide-react';
 import { calculateColdRoom } from '../../store';
 import { formatCurrency } from '../../utils';
 import { toast } from '../Toast';
@@ -20,6 +20,9 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
 
   const [calculating, setCalculating] = useState(false);
   const [recommendation, setRecommendation] = useState(null);
+  const [selectedCduId, setSelectedCduId] = useState(null);
+  const [cduBrandFilter, setCduBrandFilter] = useState('all');
+
   const [selectedLines, setSelectedLines] = useState({
     cdu: true,
     evaporator: true,
@@ -63,8 +66,10 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
       const res = await calculateColdRoom(calcForm);
       setRecommendation(res);
 
-      // Populate pricing suggestions
-      const cduPrice = res.recommendations?.cdu?.selling_price || 0;
+      const defaultCdu = res.recommendations?.cdu || res.availableCompressors?.[0] || null;
+      setSelectedCduId(defaultCdu?.id || null);
+
+      const cduPrice = defaultCdu?.selling_price || 0;
       const evapPrice = res.recommendations?.evaporator?.selling_price || 0;
       setCustomRates(prev => ({
         ...prev,
@@ -78,6 +83,30 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
     }
   };
 
+  // Available compressors filtered by brand if user chooses
+  const allAvailableCompressors = recommendation?.availableCompressors || [];
+  const uniqueBrands = ['all', ...new Set(allAvailableCompressors.map(c => c.brand_name).filter(Boolean))];
+
+  const filteredCompressors = cduBrandFilter === 'all'
+    ? allAvailableCompressors
+    : allAvailableCompressors.filter(c => c.brand_name === cduBrandFilter);
+
+  const activeCdu = allAvailableCompressors.find(c => c.id === selectedCduId)
+    || recommendation?.recommendations?.cdu
+    || filteredCompressors[0]
+    || null;
+
+  const handleSelectCdu = (cduId) => {
+    setSelectedCduId(cduId);
+    const chosen = allAvailableCompressors.find(c => c.id === cduId);
+    if (chosen) {
+      setCustomRates(prev => ({
+        ...prev,
+        cdu: chosen.selling_price || 0,
+      }));
+    }
+  };
+
   const handleApplyToInvoice = () => {
     if (!recommendation) {
       toast('Please run "Calculate & Match Equipment" first.', 'error');
@@ -87,19 +116,18 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
     const itemsToInsert = [];
     const rec = recommendation.recommendations || {};
 
-    // 1. Condensing Unit
-    if (selectedLines.cdu && rec.cdu) {
-      const cdu = rec.cdu;
+    // 1. Condensing Unit (uses selected compressor)
+    if (selectedLines.cdu && activeCdu) {
       itemsToInsert.push({
-        name: `${cdu.brand_name || 'Emerson'} ${cdu.model_number} Condensing Unit (${cdu.capacity} kW @ ${recommendation.inputs?.targetTemp || 4}°C)`,
+        name: `${activeCdu.brand_name || 'Emerson'} ${activeCdu.model_number} Condensing Unit (${activeCdu.capacity} kW @ ${recommendation.inputs?.targetTemp || 4}°C)`,
         hsn: '84189900',
         quantity: 1,
         unit: 'Set',
-        rate: Number(customRates.cdu) || Number(cdu.selling_price) || 0,
+        rate: Number(customRates.cdu) || Number(activeCdu.selling_price) || 0,
         taxPercent: 18,
         discount: 0,
-        product_id: cdu.product_id,
-        model_id: cdu.id,
+        product_id: activeCdu.product_id,
+        model_id: activeCdu.id,
       });
     }
 
@@ -165,14 +193,14 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
       ambientTemp: calcForm.ambientTemp,
       targetTemp: recommendation.inputs?.targetTemp || (calcForm.application === 'freezer' ? -20 : calcForm.application === 'bmc' ? 4 : 4),
       estimatedLoadKw: recommendation.estimatedLoadKw,
-      cdu: rec.cdu,
+      cdu: activeCdu,
       evaporator: rec.evaporator,
       expansionValve: rec.expansionValve,
       orifice: rec.orifice,
       solenoidValve: rec.solenoidValve,
       controller: rec.controller,
-      catalogueSource: recommendation.catalogueSource,
-      cataloguePage: recommendation.cataloguePage,
+      catalogueSource: activeCdu?.catalogue_ref || recommendation.catalogueSource,
+      cataloguePage: activeCdu?.catalogue_page || recommendation.cataloguePage,
       calculatedAt: new Date().toISOString(),
     };
 
@@ -181,7 +209,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
 
   return (
     <div className="modal-overlay" style={{ zIndex: 1100 }}>
-      <div className="modal-content" style={{ maxWidth: '820px', maxHeight: '90vh', overflowY: 'auto' }}>
+      <div className="modal-content" style={{ maxWidth: '840px', maxHeight: '90vh', overflowY: 'auto' }}>
         {/* Header */}
         <div className="flex justify-between items-center mb-3 pb-2" style={{ borderBottom: '1px solid var(--border-color)' }}>
           <div className="flex items-center gap-2">
@@ -191,7 +219,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                 Cold-Room Sizing & Equipment Selection
               </h3>
               <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                Emerson Ready Reckoner & Daikin 2024 Engineering Matcher
+                Catalogue-backed engineering matcher with multiple compressor brand options
               </p>
             </div>
           </div>
@@ -308,7 +336,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
             </div>
           )}
 
-          {/* Refrigerant & Ambient */}
+          {/* Refrigerant & Compressor Specs */}
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
             <div className="form-group">
               <label className="form-label" style={{ fontSize: '0.78rem' }}>Refrigerant</label>
@@ -319,10 +347,12 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
               >
                 <option value="R404A">R404A (Eco-blend)</option>
                 <option value="R22">R22</option>
+                <option value="R134a">R134a</option>
+                <option value="R410A">R410A</option>
               </select>
             </div>
             <div className="form-group">
-              <label className="form-label" style={{ fontSize: '0.78rem' }}>Compressor</label>
+              <label className="form-label" style={{ fontSize: '0.78rem' }}>Technology</label>
               <select
                 className="form-input"
                 value={calcForm.compressorType}
@@ -330,6 +360,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
               >
                 <option value="scroll">Scroll (High Efficiency)</option>
                 <option value="reciprocating">Reciprocating</option>
+                <option value="any">Any Technology</option>
               </select>
             </div>
             <div className="form-group">
@@ -366,17 +397,72 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
           }}>
             <div className="flex justify-between items-center mb-2">
               <span style={{ fontWeight: 700, color: '#1d4ed8', fontSize: '0.95rem' }}>
-                Match: {recommendation.estimatedLoadKw} kW Cooling Load
+                Estimated Heat Load: {recommendation.estimatedLoadKw} kW
               </span>
               <span style={{ fontSize: '0.75rem', background: '#e0e7ff', color: '#3730a3', padding: '0.2rem 0.5rem', borderRadius: '4px' }}>
                 {recommendation.catalogueSource} (p.{recommendation.cataloguePage})
               </span>
             </div>
 
+            {/* MULTIPLE COMPRESSOR BRANDS / MODELS SELECTOR */}
+            {allAvailableCompressors.length > 0 && (
+              <div style={{
+                background: '#fff',
+                border: '1.5px solid #93c5fd',
+                borderRadius: '8px',
+                padding: '0.75rem',
+                marginBottom: '0.85rem',
+                boxShadow: '0 2px 4px rgba(37, 99, 235, 0.06)'
+              }}>
+                <div className="flex justify-between items-center mb-1">
+                  <div className="flex items-center gap-1">
+                    <span style={{ fontSize: '1rem' }}>⚙️</span>
+                    <label style={{ margin: 0, fontWeight: 700, fontSize: '0.85rem', color: '#1e40af' }}>
+                      Select Compressor / CDU Model ({filteredCompressors.length} options):
+                    </label>
+                  </div>
+
+                  {/* Brand Filter Pill */}
+                  {uniqueBrands.length > 2 && (
+                    <div className="flex items-center gap-1">
+                      <Filter size={12} style={{ color: '#64748b' }} />
+                      <select
+                        className="form-input"
+                        style={{ padding: '0.15rem 0.4rem', fontSize: '0.72rem', height: 'auto', width: 'auto' }}
+                        value={cduBrandFilter}
+                        onChange={e => setCduBrandFilter(e.target.value)}
+                      >
+                        {uniqueBrands.map(b => (
+                          <option key={b} value={b}>Brand: {b === 'all' ? 'All Brands' : b}</option>
+                        ))}
+                      </select>
+                    </div>
+                  )}
+                </div>
+
+                <select
+                  className="form-input"
+                  style={{ width: '100%', fontSize: '0.85rem', fontWeight: 600, color: '#1e293b', border: '1px solid #3b82f6' }}
+                  value={activeCdu?.id || ''}
+                  onChange={e => handleSelectCdu(e.target.value)}
+                >
+                  {filteredCompressors.map(c => (
+                    <option key={c.id} value={c.id}>
+                      [{c.brand_name || 'CDU'}] {c.model_number} ({c.capacity} kW) — ₹{c.selling_price || 0} {c.voltage_phase ? `[${c.voltage_phase}]` : ''} {c.catalogue_ref ? `(${c.catalogue_ref})` : ''}
+                    </option>
+                  ))}
+                </select>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.72rem', color: '#64748b', marginTop: '4px' }}>
+                  <span>Chosen: <strong>{activeCdu?.brand_name} {activeCdu?.model_number}</strong> ({activeCdu?.capacity} kW)</span>
+                  <span>Catalogue: {activeCdu?.catalogue_ref || 'Standard Catalog'}</span>
+                </div>
+              </div>
+            )}
+
             <div style={{ fontSize: '0.82rem', display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))', gap: '0.5rem', marginBottom: '0.75rem' }}>
-              <div><strong>Outdoor CDU:</strong> {recommendation.recommendations?.cdu?.brand_name || 'Emerson'} {recommendation.recommendations?.cdu?.model_number}</div>
-              <div><strong>Indoor Evaporator:</strong> {recommendation.recommendations?.evaporator?.brand_name || 'Daikin'} {recommendation.recommendations?.evaporator?.model_number}</div>
-              <div><strong>Controller:</strong> {recommendation.recommendations?.controller?.model || 'Dixell XR02CX'}</div>
+              <div><strong>Selected CDU:</strong> {activeCdu?.brand_name || 'Emerson'} {activeCdu?.model_number} ({activeCdu?.capacity} kW)</div>
+              <div><strong>Matched Evaporator:</strong> {recommendation.recommendations?.evaporator?.brand_name || 'Daikin'} {recommendation.recommendations?.evaporator?.model_number}</div>
+              <div><strong>Digital Controller:</strong> {recommendation.recommendations?.controller?.model || 'Dixell XR02CX'}</div>
               <div><strong>Expansion Valve:</strong> {recommendation.recommendations?.expansionValve || 'TIE-SW'}</div>
             </div>
 
@@ -395,7 +481,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                       checked={selectedLines.cdu}
                       onChange={e => setSelectedLines(p => ({ ...p, cdu: e.target.checked }))}
                     />
-                    <span>{recommendation.recommendations?.cdu?.brand_name || 'Emerson'} {recommendation.recommendations?.cdu?.model_number} Condensing Unit</span>
+                    <span>{activeCdu?.brand_name || 'Emerson'} {activeCdu?.model_number} Condensing Unit ({activeCdu?.capacity} kW)</span>
                   </label>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                     <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>₹</span>

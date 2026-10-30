@@ -138,16 +138,41 @@ router.get('/models', (req, res) => {
 router.post('/models', (req, res) => {
   try {
     const {
-      id, product_id, brand_id, model_number, description,
-      capacity, capacity_unit, temp_range_min, temp_range_max,
+      id, product_id, brand_id, brand_name, model_number, description,
+      capacity, capacity_unit = 'kW', temp_range_min, temp_range_max,
       refrigerant, voltage_phase, catalogue_ref, catalogue_page,
       verification_status = 'verified', is_active = 1,
       purchase_cost = 0, selling_price = 0, min_selling_price = null,
       specs = {}
     } = req.body;
 
-    if (!product_id) return res.status(400).json({ error: 'Product ID is required' });
     if (!model_number || !model_number.trim()) return res.status(400).json({ error: 'Model number is required' });
+
+    let effectiveBrandId = brand_id;
+    if (!effectiveBrandId && brand_name && brand_name.trim()) {
+      let b = db.prepare('SELECT id FROM brands WHERE name = ? COLLATE NOCASE').get(brand_name.trim());
+      if (b) {
+        effectiveBrandId = b.id;
+      } else {
+        effectiveBrandId = 'brd_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+        db.prepare('INSERT INTO brands (id, name, is_active) VALUES (?, ?, 1)').run(effectiveBrandId, brand_name.trim());
+      }
+    }
+
+    let effectiveProductId = product_id;
+    if (!effectiveProductId) {
+      let cduProd = db.prepare("SELECT id FROM products WHERE category_id = 'cat_cdu' OR name LIKE '%Condensing Unit%' OR name LIKE '%Compressor%'").get();
+      if (cduProd) {
+        effectiveProductId = cduProd.id;
+      } else {
+        effectiveProductId = 'prod_cdu_master';
+        db.prepare(`
+          INSERT INTO products (id, name, category_id, brand_id, unit, hsn_sac, tax_percent, product_type, track_inventory)
+          VALUES (?, 'Condensing Unit / Compressor', 'cat_cdu', ?, 'Set', '84189900', 18.0, 'goods', 1)
+          ON CONFLICT(id) DO NOTHING
+        `).run(effectiveProductId, effectiveBrandId || null);
+      }
+    }
 
     const modelId = id || 'mod_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
 
@@ -160,6 +185,7 @@ router.post('/models', (req, res) => {
           verification_status, is_active
         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         ON CONFLICT(id) DO UPDATE SET
+          product_id = excluded.product_id,
           brand_id = excluded.brand_id,
           model_number = excluded.model_number,
           description = excluded.description,
@@ -174,9 +200,9 @@ router.post('/models', (req, res) => {
           verification_status = excluded.verification_status,
           is_active = excluded.is_active
       `).run(
-        modelId, product_id, brand_id || null, model_number.trim(), description || '',
+        modelId, effectiveProductId, effectiveBrandId || null, model_number.trim(), description || '',
         capacity !== undefined && capacity !== '' ? Number(capacity) : null,
-        capacity_unit || null,
+        capacity_unit || 'kW',
         temp_range_min !== undefined && temp_range_min !== '' ? Number(temp_range_min) : null,
         temp_range_max !== undefined && temp_range_max !== '' ? Number(temp_range_max) : null,
         refrigerant || null, voltage_phase || null, catalogue_ref || null, catalogue_page || null,

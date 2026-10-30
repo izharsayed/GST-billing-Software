@@ -114,7 +114,6 @@ export function recommendColdRoomEquipment({
       result.recommendations.cdu = matched;
       result.recommendations.controller = { model: 'Dixell XR02CX / XR30CX' };
     }
-    return result;
   }
 
   // -------------------------------------------------------------
@@ -174,10 +173,8 @@ export function recommendColdRoomEquipment({
       result.recommendations.cdu = cdu;
       result.recommendations.evaporator = evap;
       result.recommendations.controller = { model: 'Dixell XR02CX' };
-      return result;
-    }
-
-    // EMERSON SELECTION
+    } else {
+      // EMERSON SELECTION
     // Choose table: Reckoner 3 (Scroll R404A) if scroll/R404A, else Reckoner 1 (R22) or Reckoner 2 (R404A recip)
     let catRef = 'Ready Reckoner 3';
     let catPage = '3';
@@ -255,9 +252,8 @@ export function recommendColdRoomEquipment({
 
       result.recommendations.evaporator = evap;
     }
-
-    return result;
   }
+}
 
   // -------------------------------------------------------------
   // 3. FREEZER COLD ROOM (-18°C to -25°C, default -20°C)
@@ -340,8 +336,42 @@ export function recommendColdRoomEquipment({
 
       result.recommendations.evaporator = evap;
     }
+  }
 
-    return result;
+  // -------------------------------------------------------------
+  // 4. ATTACH ALL AVAILABLE CANDIDATE COMPRESSORS ACROSS ALL BRANDS
+  // -------------------------------------------------------------
+  const targetKw = result.estimatedLoadKw || 3.5;
+  const isFreezer = application === 'freezer';
+  const tempMin = isFreezer ? -35 : -5;
+  const tempMax = isFreezer ? -15 : 15;
+
+  try {
+    const candidateCdus = db.prepare(`
+      SELECT m.*, b.name as brand_name, p.name as product_name,
+             prc.selling_price, prc.purchase_cost
+      FROM product_models m
+      JOIN brands b ON m.brand_id = b.id
+      JOIN products p ON m.product_id = p.id
+      LEFT JOIN product_prices prc ON m.id = prc.model_id
+      WHERE (p.category_id = 'cat_cdu' OR p.name LIKE '%Condensing Unit%' OR p.name LIKE '%CDU%' OR m.model_number LIKE '%ZX%' OR m.model_number LIKE '%KH%')
+        AND (
+          (m.temp_range_min IS NULL AND m.temp_range_max IS NULL)
+          OR (m.temp_range_min <= ? AND m.temp_range_max >= ?)
+        )
+      ORDER BY ABS(COALESCE(m.capacity, 0) - ?) ASC, m.capacity ASC
+      LIMIT 30
+    `).all(tempMax, tempMin, targetKw);
+
+    result.availableCompressors = candidateCdus;
+    if (result.recommendations) {
+      result.recommendations.availableCompressors = candidateCdus;
+      if (!result.recommendations.cdu && candidateCdus.length > 0) {
+        result.recommendations.cdu = candidateCdus[0];
+      }
+    }
+  } catch (err) {
+    console.error('Error fetching candidate compressors:', err.message);
   }
 
   return result;

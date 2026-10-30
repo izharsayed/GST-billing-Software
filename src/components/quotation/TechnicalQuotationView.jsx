@@ -38,6 +38,8 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
 
   // Sizing Engine Output State
   const [recommendation, setRecommendation] = useState(null);
+  const [selectedCduId, setSelectedCduId] = useState(null);
+  const [cduBrandFilter, setCduBrandFilter] = useState('all');
 
   // Quotation Form State
   const [customerId, setCustomerId] = useState('');
@@ -78,12 +80,36 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
   // -----------------------------------------------------------
   // RUN CALCULATOR
   // -----------------------------------------------------------
+  // Switch CDU model from dropdown
+  const handleSwitchCdu = (cduId) => {
+    setSelectedCduId(cduId);
+    const chosen = (recommendation?.availableCompressors || []).find(c => c.id === cduId);
+    if (!chosen) return;
+    setItems(prev => prev.map(item => {
+      if (item.item_type === 'equipment' && item.hsn_sac === '84189900' && !item.description?.includes('Evaporator')) {
+        const price = Number(chosen.selling_price) || 0;
+        const tax = price * 0.18;
+        return {
+          ...item,
+          product_id: chosen.product_id,
+          model_id: chosen.id,
+          description: `${chosen.brand_name || 'Emerson'} ${chosen.model_number} Condensing Unit (${chosen.capacity} ${chosen.capacity_unit || 'kW'} @ ${recommendation?.inputs?.targetTemp || 4}°C)`,
+          unit_price: price,
+          tax_amount: tax,
+          total_amount: price + tax,
+        };
+      }
+      return item;
+    }));
+  };
+
   const handleCalculate = async (e) => {
     if (e) e.preventDefault();
     setCalculating(true);
     try {
       const res = await calculateColdRoom(calcForm);
       setRecommendation(res);
+      setSelectedCduId(res.recommendations?.cdu?.id || res.availableCompressors?.[0]?.id || null);
 
       // Auto-populate line items from recommendation
       const newItems = [];
@@ -536,6 +562,52 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
                     <strong>{recommendation.estimatedLoadKw} kW</strong>
                   </div>
                 </div>
+
+                                {/* MULTIPLE COMPRESSOR SELECTOR */}
+                {recommendation.availableCompressors && recommendation.availableCompressors.length > 0 && (() => {
+                  const allComps = recommendation.availableCompressors || [];
+                  const brandsList = ['all', ...new Set(allComps.map(c => c.brand_name).filter(Boolean))];
+                  const filtered = cduBrandFilter === 'all' ? allComps : allComps.filter(c => c.brand_name === cduBrandFilter);
+                  return (
+                    <div style={{
+                      background: 'var(--bg-primary)',
+                      border: '1.5px solid #93c5fd',
+                      borderRadius: '6px',
+                      padding: '0.65rem 0.8rem',
+                      marginBottom: '0.8rem'
+                    }}>
+                      <div className="flex justify-between items-center mb-1">
+                        <label style={{ margin: 0, fontWeight: 700, fontSize: '0.82rem', color: '#1d4ed8' }}>
+                          ⚙️ Choose Compressor / CDU Model ({filtered.length} options):
+                        </label>
+                        {brandsList.length > 2 && (
+                          <select
+                            className="form-input"
+                            style={{ padding: '0.15rem 0.35rem', fontSize: '0.72rem', height: 'auto', width: 'auto' }}
+                            value={cduBrandFilter}
+                            onChange={e => setCduBrandFilter(e.target.value)}
+                          >
+                            {brandsList.map(b => (
+                              <option key={b} value={b}>{b === 'all' ? 'All Brands' : b}</option>
+                            ))}
+                          </select>
+                        )}
+                      </div>
+                      <select
+                        className="form-input"
+                        style={{ width: '100%', fontSize: '0.82rem', fontWeight: 600, border: '1px solid #3b82f6' }}
+                        value={selectedCduId || recommendation.recommendations?.cdu?.id || ''}
+                        onChange={e => handleSwitchCdu(e.target.value)}
+                      >
+                        {filtered.map(c => (
+                          <option key={c.id} value={c.id}>
+                            [{c.brand_name || 'CDU'}] {c.model_number} ({c.capacity} kW) — ₹{c.selling_price || 0} {c.catalogue_ref ? `(${c.catalogue_ref})` : ''}
+                          </option>
+                        ))}
+                      </select>
+                    </div>
+                  );
+                })()}
 
                 <div style={{ borderTop: '1px solid var(--border)', paddingTop: '0.6rem', fontSize: '0.82rem', lineHeight: 1.6 }}>
                   <div><strong>Outdoor CDU:</strong> {recommendation.recommendations.cdu ? `${recommendation.recommendations.cdu.brand_name} ${recommendation.recommendations.cdu.model_number}` : 'Custom sizing required'}</div>
