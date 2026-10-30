@@ -13,6 +13,10 @@ import { fileURLToPath } from 'url';
 // re-implemented totals inline and silently reintroduced every bug the
 // v1.10.1 extraction fixed. Same source of truth now.
 import { templateTotals, clientYearToDate, nextCounterValue, startFor, numberSeriesFor, counterKeyFor, formatDocNumber, businessKeyOf, getFinancialYearLabel, INVOICE_TYPES } from './src/utils.js';
+import { migrateJsonToSqlite } from './server/db/migrate-json-to-sqlite.js';
+import { seedRefrigerationData } from './server/db/seed-refrigeration-data.js';
+import mastersRouter from './server/routes/masters.js';
+import quotationsRouter from './server/routes/quotations.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = path.join(__dirname, 'data');
@@ -90,6 +94,18 @@ app.use((req, res, next) => {
 });
 
 // Ensure data directory and sub-directories exist
+// Auto-migrate legacy JSON into SQLite if not already migrated
+try {
+  migrateJsonToSqlite();
+  seedRefrigerationData();
+} catch (e) {
+  console.error('[Migration] Auto-migration error:', e.message);
+}
+
+// Mount Master routes
+app.use('/api/masters', mastersRouter);
+app.use('/api/quotations', quotationsRouter);
+
 const DIRS = ['bills', 'clients', 'templates', 'products', 'expenses', 'recurring', 'receipts', 'profiles', 'purchases'];
 for (const dir of DIRS) {
   const dirPath = path.join(DATA_DIR, dir);

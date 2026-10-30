@@ -99,6 +99,7 @@
     "verify:release": "node scripts/verify-release.mjs"
   },
   "dependencies": {
+    "better-sqlite3": "^13.0.3",
     "cors": "^2.8.6",
     "dompurify": "^3.4.17",
     "express": "^5.2.1",

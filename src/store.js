@@ -547,3 +547,33 @@ export const importData = async (jsonString, selection) => {
 
   return result;
 };
+
+
+// ---- Refrigeration Masters & Settings ----
+export const getCategories = () => apiFetch(`${API}/masters/categories`);
+export const saveCategory = (cat) => apiFetch(`${API}/masters/categories`, { method: 'POST', body: JSON.stringify(cat) });
+export const deleteCategory = (id) => apiFetch(`${API}/masters/categories/${encodeURIComponent(id)}`, { method: 'DELETE' });
+
+export const getBrands = () => apiFetch(`${API}/masters/brands`);
+export const saveBrand = (brand) => apiFetch(`${API}/masters/brands`, { method: 'POST', body: JSON.stringify(brand) });
+export const deleteBrand = (id) => apiFetch(`${API}/masters/brands/${encodeURIComponent(id)}`, { method: 'DELETE' });
+
+export const getProductModels = (productId) => apiFetch(`${API}/masters/models${productId ? `?product_id=${encodeURIComponent(productId)}` : ''}`);
+export const saveProductModel = (model) => apiFetch(`${API}/masters/models`, { method: 'POST', body: JSON.stringify(model) });
+export const deleteProductModel = (id) => apiFetch(`${API}/masters/models/${encodeURIComponent(id)}`, { method: 'DELETE' });
+
+export const getWarehouses = () => apiFetch(`${API}/masters/warehouses`);
+export const saveWarehouse = (wh) => apiFetch(`${API}/masters/warehouses`, { method: 'POST', body: JSON.stringify(wh) });
+
+export const getChargeItems = () => apiFetch(`${API}/masters/charges`);
+export const saveChargeItem = (chg) => apiFetch(`${API}/masters/charges`, { method: 'POST', body: JSON.stringify(chg) });
+
+export const getPriceHistory = () => apiFetch(`${API}/masters/price-history`);
+
+
+// ---- Technical Quotations & Sizing Engine ----
+export const calculateColdRoom = (params) => apiFetch(`${API}/quotations/calculate`, { method: 'POST', body: JSON.stringify(params) });
+export const getQuotations = () => apiFetch(`${API}/quotations`);
+export const getQuotationById = (id) => apiFetch(`${API}/quotations/${encodeURIComponent(id)}`);
+export const saveQuotation = (quotation) => apiFetch(`${API}/quotations`, { method: 'POST', body: JSON.stringify(quotation) });
+export const convertQuotationToInvoice = (id) => apiFetch(`${API}/quotations/${encodeURIComponent(id)}/convert-to-invoice`, { method: 'POST', body: JSON.stringify({}) });
