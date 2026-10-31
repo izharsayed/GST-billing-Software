@@ -47,7 +47,7 @@ export default function HelpButton({ title, body, children, doc, size = 18 }) {
                 <div style={{ whiteSpace: 'pre-wrap' }}>{body}</div>
               )}
             </div>
-            {doc && (
+            {false && doc && (
               <a href={docsLink(doc)} target="_blank" rel="noopener noreferrer" className="btn btn-secondary"
                 style={{ marginTop: '1rem', display: 'inline-flex', alignItems: 'center', gap: 6, textDecoration: 'none' }}>
                 <BookOpen size={16} /> Read the full guide

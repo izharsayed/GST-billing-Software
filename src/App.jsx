@@ -114,7 +114,8 @@ function App() {
   // after that dismissal will re-show the banner.
   const [updateInfo, setUpdateInfo] = useState(null);
   const [showUpdateModal, setShowUpdateModal] = useState(false);
-  const updateBannerVisible = updateInfo?.updateAvailable
+  const updateBannerVisible = false; // commented out update banner
+  const _unusedUpdateBanner = updateInfo?.updateAvailable
     && localStorage.getItem('freegstbill_dismissedUpdate') !== updateInfo.latest;
 
   useEffect(() => {
@@ -543,7 +544,7 @@ function App() {
     { id: 'incometax', icon: Calculator, label: 'Income Tax', module: 'incomeTax' },
     // v1.10.75 - opens the online documentation, which covers every screen
     // and stays current; the old built-in guide had fallen far behind.
-    { id: 'guide', icon: HelpCircle, label: 'User Guide', module: 'dashboard', onClick: openDocs }, // gated by dashboard so it's always available
+    // { id: 'guide', icon: HelpCircle, label: 'User Guide', module: 'dashboard', onClick: openDocs }, // commented out for demo // gated by dashboard so it's always available
   ].filter(item => showIfModule(item.module));
 
   // Command palette actions — declared here (not earlier) because the deps
@@ -561,10 +562,10 @@ function App() {
     acts.push({ label: 'Go to Settings', hint: '', category: 'nav', run: () => setCurrentView('settings') });
     // v1.10.74 - Control Panel has its own sidebar button but was missing here.
     acts.push({ label: 'Go to Control Panel', hint: '', category: 'nav', run: () => setCurrentView('controlpanel') });
-    acts.push({ label: 'Go to Support & About', hint: '', category: 'nav', run: () => setCurrentView('support') });
+    // acts.push({ label: 'Go to Support & About', hint: '', category: 'nav', run: () => setCurrentView('support') });
     acts.push({ label: 'Toggle dark mode', hint: '', category: 'action', run: () => setDarkMode(d => !d) });
     acts.push({ label: 'Show keyboard shortcuts', hint: 'Ctrl+/', category: 'help', run: () => setShowShortcutsHelp(true) });
-    if (updateInfo?.updateAvailable) {
+    if (false && updateInfo?.updateAvailable) {
       acts.push({ label: `View update — v${updateInfo.latest}`, hint: '', category: 'update', run: () => setShowUpdateModal(true) });
     }
     // v1.9.4 — cross-app search: invoices, clients, products
@@ -948,13 +949,14 @@ function App() {
               {darkMode ? <Sun size={18} /> : <Moon size={18} />}
               {darkMode ? 'Light Mode' : 'Dark Mode'}
             </button>
-            <button
+            {/* Support & About button commented out */}
+            {/* <button
               className={`nav-btn nav-btn-support${currentView === 'support' ? ' nav-btn-support-active' : ''}`}
               onClick={() => setCurrentView('support')}
               title="Who makes this app, and how to help"
             >
               <Heart size={18} /> Support &amp; About
-            </button>
+            </button> */}
             <button
               className={`nav-btn ${currentView === 'controlpanel' ? 'nav-btn-active' : ''}`}
               onClick={() => setCurrentView('controlpanel')}
@@ -995,9 +997,10 @@ function App() {
         </div>
       )}
       <div className="main-content">
-        {currentView !== 'new' && <StarBanner />}
+        {/* StarBanner commented out */}
+        {/* {currentView !== 'new' && <StarBanner />} */}
         {currentView === 'dashboard' && (
-          <Dashboard onNew={handleNewInvoice} onEdit={handleEditInvoice} onPrint={handlePrintInvoice} onDuplicate={handleDuplicateInvoice} onConvert={handleConvertToInvoice} onOpenProducts={() => setCurrentView('inventory')} onOpenSettings={() => setCurrentView('settings')} onOpenGuide={openDocs} onOpenSupport={() => setCurrentView('support')} activeProfile={profile} />
+          <Dashboard onNew={handleNewInvoice} onEdit={handleEditInvoice} onPrint={handlePrintInvoice} onDuplicate={handleDuplicateInvoice} onConvert={handleConvertToInvoice} onOpenProducts={() => setCurrentView('inventory')} onOpenSettings={() => setCurrentView('settings')} onOpenGuide={null} onOpenSupport={null} activeProfile={profile} />
         )}
         {currentView === 'new' && (
           <InvoiceGenerator
@@ -1053,12 +1056,14 @@ function App() {
         {currentView === 'controlpanel' && (
           <ControlPanel />
         )}
-        {currentView === 'support' && (
+        {/* SupportView commented out */}
+        {/* {currentView === 'support' && (
           <SupportView />
-        )}
+        )} */}
         </Suspense>
         {/* Version + DiceCodes line: Dashboard only, so it never takes space on working screens. */}
-        {currentView === 'dashboard' && <AppFooter onOpenSupport={() => setCurrentView('support')} />}
+        {/* AppFooter commented out */}
+        {/* {currentView === 'dashboard' && <AppFooter onOpenSupport={() => setCurrentView('support')} />} */}
       </div>
 
       {/* Update modal — release notes + Export-backup-first nudge + Update Now */}
@@ -1224,7 +1229,7 @@ function App() {
         </div>
       )}
 
-      {showUpdateModal && updateInfo && (
+      {false && showUpdateModal && updateInfo && (
         <div className="modal-overlay" onClick={() => setShowUpdateModal(false)}>
           <div className="modal-content" style={{ maxWidth: '640px' }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', gap: '0.5rem', marginBottom: '0.5rem' }}>

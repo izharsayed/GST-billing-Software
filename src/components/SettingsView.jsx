@@ -35,7 +35,7 @@ const JUMP_NAV_SECTIONS = [
   ['section-backups',  'Backups'],
   ['section-cloud',    'Google Drive'],
   ['section-data',     'Import/Export'],
-  ['section-updates',  'Updates'],
+  // ['section-updates',  'Updates'], // commented out for demo
 ];
 
 export default function SettingsView({ onSaved }) {
@@ -1724,47 +1724,7 @@ export default function SettingsView({ onSaved }) {
            kept as a comment so a code search for "Multi-Business
            Profiles" still lands somewhere sensible. */}
 
-      {/* ---- App Updates ---- */}
-      <div id="section-updates" className="glass-panel p-6 mb-6" style={{ order: 11 }}>
-        <h3 className="section-title">App Updates</h3>
-        <p className="page-subtitle mb-4">Check if a newer version is available.</p>
-        <div className="flex gap-4 items-center">
-          <button type="button" className="btn btn-secondary" disabled={checkingUpdate} onClick={async () => {
-            setCheckingUpdate(true);
-            try {
-              const res = await fetch('/api/check-update');
-              const data = await res.json();
-              setUpdateInfo(data);
-              if (data.updateAvailable) {
-                toast(`Update available: v${data.latest}`, 'info');
-              } else if (data.error) {
-                toast('Could not check for updates. Check internet connection.', 'warning');
-              } else {
-                toast('You are on the latest version!', 'success');
-              }
-            } catch {
-              toast('Could not check for updates.', 'error');
-            }
-            setCheckingUpdate(false);
-          }}>
-            <RefreshCw size={18} className={checkingUpdate ? 'spin' : ''} /> {checkingUpdate ? 'Checking...' : 'Check for Updates'}
-          </button>
-          {updateInfo && (
-            <span style={{ fontSize: '0.85rem', color: 'var(--text-muted)' }}>
-              Current: v{updateInfo.current}{updateInfo.latest ? ` | Latest: v${updateInfo.latest}` : ''}
-            </span>
-          )}
-        </div>
-        {updateInfo?.updateAvailable && (
-          <div className="update-available-box">
-            <p><strong>New version v{updateInfo.latest} is available!</strong></p>
-            <p>Your data is backed up first and is not affected. Click below to update:</p>
-            <button type="button" className="btn btn-primary" disabled={updatingNow} onClick={handleSettingsUpdateNow} style={{ marginTop: '0.5rem', display: 'inline-flex' }}>
-              <Download size={18} /> {updatingNow ? 'Updating…' : 'Update Now'}
-            </button>
-          </div>
-        )}
-      </div>
+      {/* App Updates section commented out for demo */}
 
       <div id="section-data" className="glass-panel p-6 mb-6" style={{ order: 10 }}>
         <h3 className="section-title">Data Management</h3>

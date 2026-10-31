@@ -130,6 +130,7 @@ export default function ControlPanel() {
       )}
 
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: '1rem' }}>
+        {false && (
         <ActionCard
           icon={<RefreshCw size={22} />}
           title="Update Software"
@@ -139,6 +140,7 @@ export default function ControlPanel() {
           onClick={() => launchScript('update')}
           variant="primary"
         />
+        )}
         <ActionCard
           icon={<Download size={22} />}
           title="Backup Data"

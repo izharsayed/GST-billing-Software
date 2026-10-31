@@ -1255,7 +1255,8 @@ export default function Dashboard({ onNew, onEdit, onPrint, onDuplicate, onConve
           two. This stays until the work is actually done, ticks itself off
           from real data rather than from "have you seen this screen", and
           removes itself for good once everything is set up. */}
-      {onOpenSupport && <WelcomeCard invoiceCount={bills.length} onOpenSupport={onOpenSupport} />}
+      {/* WelcomeCard commented out */}
+      {/* {onOpenSupport && <WelcomeCard invoiceCount={bills.length} onOpenSupport={onOpenSupport} />} */}
 
       {startedSteps && (
         <div className="glass-panel p-6 mb-6">
@@ -1287,17 +1288,12 @@ export default function Dashboard({ onNew, onEdit, onPrint, onDuplicate, onConve
               )}
             </div>
           ))}
-          <div style={{ marginTop: '0.9rem', fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-            New to this?{' '}
-            <button type="button" onClick={onOpenGuide}
-              style={{ background: 'none', border: 0, padding: 0, font: 'inherit', color: 'var(--primary)', textDecoration: 'underline', cursor: 'pointer' }}>
-              Read the 5-minute guide
-            </button>
-          </div>
+          {/* User guide link commented out */}
         </div>
       )}
 
-      {!startedSteps && onOpenSupport && <SupportNudge invoiceCount={bills.length} onOpen={onOpenSupport} />}
+      {/* SupportNudge commented out */}
+      {/* {!startedSteps && onOpenSupport && <SupportNudge invoiceCount={bills.length} onOpen={onOpenSupport} />} */}
 
       {overdueBills.length > 0 && (
         <div className="overdue-banner" onClick={() => { setStatusFilter('overdue'); }}
