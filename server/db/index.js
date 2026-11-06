@@ -26,6 +26,11 @@ const schemaPath = path.join(__dirname, 'schema.sql');
 const schemaSql = fs.readFileSync(schemaPath, 'utf-8');
 db.exec(schemaSql);
 
+// Ensure optional/new columns exist on existing databases
+try {
+  db.exec('ALTER TABLE quotations ADD COLUMN proposal_data TEXT');
+} catch (_) {}
+
 // Seed basic system roles and default warehouse if not present
 const seedDefaults = () => {
   const roleCount = db.prepare('SELECT COUNT(*) as count FROM roles').get().count;

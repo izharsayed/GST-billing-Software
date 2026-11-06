@@ -576,4 +576,5 @@ export const calculateColdRoom = (params) => apiFetch(`${API}/quotations/calcula
 export const getQuotations = () => apiFetch(`${API}/quotations`);
 export const getQuotationById = (id) => apiFetch(`${API}/quotations/${encodeURIComponent(id)}`);
 export const saveQuotation = (quotation) => apiFetch(`${API}/quotations`, { method: 'POST', body: JSON.stringify(quotation) });
+export const updateQuotationProposal = (id, proposalData) => apiFetch(`${API}/quotations/${encodeURIComponent(id)}/proposal`, { method: 'PUT', body: JSON.stringify({ proposal_data: proposalData }) });
 export const convertQuotationToInvoice = (id) => apiFetch(`${API}/quotations/${encodeURIComponent(id)}/convert-to-invoice`, { method: 'POST', body: JSON.stringify({}) });

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback, useMemo, memo } from 'react';
-import { ArrowLeft, Plus, Trash2, Download, UserPlus, Pencil, Settings, ChevronUp, ChevronDown, MessageCircle, Check, Loader, Truck, Printer, Eye, EyeOff } from 'lucide-react';
+import { ArrowLeft, Plus, Trash2, Download, UserPlus, Pencil, Settings, ChevronUp, ChevronDown, MessageCircle, Check, Loader, Truck, Printer, Eye, EyeOff, FileText } from 'lucide-react';
 import { jsPDF } from 'jspdf';
 import html2canvas from 'html2canvas';
 import { saveBill, deleteBill, applyStockChanges, getNextInvoiceNumber, getTermsTemplates, getAllClients, saveClient, getProfile, getAllProducts, getInvoiceDisplayOptions, saveInvoiceDisplayOptions, getAllProfiles, getRegionMode, saveRecurring, getAllRecurring, getAllBills } from '../store';
@@ -16,6 +16,7 @@ import HelpButton from './HelpButton';
 import { getClientCredit, planCreditApplication } from '../utils/clientCredit';
 import ClientModal from './ClientModal';
 import ColdRoomSizerModal from './quotation/ColdRoomSizerModal';
+import TechnoCommercialProposalModal from './quotation/TechnoCommercialProposalModal';
 import { toast } from './Toast';
 
 // Rich text editor component that works with contentEditable properly
@@ -655,15 +656,28 @@ export default function InvoiceGenerator({ onBack, profile: profileProp, editing
   const [productSearch, setProductSearch] = useState({ itemId: null, query: '' });
   const [invoiceOptions, setInvoiceOptions] = useState(() => {
     try {
+      const ps = getPrintSettings();
       const saved = localStorage.getItem('freegstbill_invoiceOptions');
       const persisted = saved ? JSON.parse(saved) : {};
-      // v1.10.20 — paymentAccountSnapshot is per-bill data (frozen bank
-      // details at time of save). It must NEVER be inherited via the
-      // user-preference stores (localStorage / server). Strip on read so
-      // opening Invoice B doesn't pick up Invoice A's snapshot.
       delete persisted.paymentAccountSnapshot;
-      // Persisted options are the user's defaults, draft can override for in-progress work
-      return { ...DEFAULT_OPTIONS, ...persisted, ...(draft?.invoiceOptions || {}) };
+      const styleFromPrintSettings = {
+        pdfStyle: ps.pdfTemplate || 'classic',
+        accentColor: ps.userColorsEnabled ? (ps.pdfAccent || '') : '',
+      };
+      const baseOpts = {
+        ...DEFAULT_OPTIONS,
+        ...persisted,
+        ...styleFromPrintSettings,
+      };
+      if (editingBill && !editingBill._isDuplicate) {
+        return { ...baseOpts, ...(editingBill.data?.invoiceOptions || {}) };
+      }
+      return {
+        ...baseOpts,
+        ...(draft?.invoiceOptions || {}),
+        pdfStyle: ps.pdfTemplate || draft?.invoiceOptions?.pdfStyle || persisted.pdfStyle || 'classic',
+        accentColor: ps.userColorsEnabled ? (ps.pdfAccent || '') : (draft?.invoiceOptions?.accentColor || persisted.accentColor || ''),
+      };
     } catch { return draft?.invoiceOptions || { ...DEFAULT_OPTIONS }; }
   });
   const [showOptions, setShowOptions] = useState(false);
@@ -672,7 +686,9 @@ export default function InvoiceGenerator({ onBack, profile: profileProp, editing
   // OS dialog already shows a preview. See directPrint + executePrint.
   const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [showSizerModal, setShowSizerModal] = useState(false);
+  const [showProposalModal, setShowProposalModal] = useState(false);
   const [technicalSpecs, setTechnicalSpecs] = useState(draft?.technicalSpecs || null);
+  const [proposalData, setProposalData] = useState(() => editingBill?.data?.proposalData || editingBill?.proposal_data || draft?.proposalData || null);
   const printRef = useRef(null);
   // v1.10.48 — reported: "live preview show full when browser zoom on 50%".
   // `transform: scale()` shrinks what is PAINTED but never the element's
@@ -840,6 +856,21 @@ export default function InvoiceGenerator({ onBack, profile: profileProp, editing
     return () => clearTimeout(optionsPersistTimer.current);
   }, [invoiceOptions, editingSaved]);
 
+  // Listen for visual style changes from Print Settings and sync to live preview
+  useEffect(() => {
+    if (editingSaved) return undefined;
+    const handleSettingsChange = (e) => {
+      const ps = e?.detail || getPrintSettings();
+      setInvoiceOptions(prev => ({
+        ...prev,
+        pdfStyle: ps.pdfTemplate || 'classic',
+        accentColor: ps.userColorsEnabled ? (ps.pdfAccent || '') : '',
+      }));
+    };
+    window.addEventListener('print-settings-changed', handleSettingsChange);
+    return () => window.removeEventListener('print-settings-changed', handleSettingsChange);
+  }, [editingSaved]);
+
   // Load saved display options from server on mount (overrides localStorage if available)
   useEffect(() => {
     if (editingSaved) return; // the bill's own options win (see above)
@@ -878,11 +909,11 @@ export default function InvoiceGenerator({ onBack, profile: profileProp, editing
   // during a typing burst.
   useEffect(() => {
     const t = setTimeout(() => {
-      const draftData = { invoiceType, client, details, items, customTerms, customNotes, internalNote, extraSections, selectedTermsId, invoiceOptions, taxInclusive, technicalSpecs };
+      const draftData = { invoiceType, client, details, items, customTerms, customNotes, internalNote, extraSections, selectedTermsId, invoiceOptions, taxInclusive, technicalSpecs, proposalData };
       try { sessionStorage.setItem('gst_invoiceDraft', JSON.stringify(draftData)); } catch { /* private mode / quota exceeded — skip */ }
     }, 400);
     return () => clearTimeout(t);
-  }, [invoiceType, client, details, items, customTerms, customNotes, internalNote, extraSections, selectedTermsId, invoiceOptions, taxInclusive, technicalSpecs]);
+  }, [invoiceType, client, details, items, customTerms, customNotes, internalNote, extraSections, selectedTermsId, invoiceOptions, taxInclusive, technicalSpecs, proposalData]);
 
   // Mark initialized after first render cycle so auto-save doesn't trigger on load
   useEffect(() => {
@@ -1100,6 +1131,7 @@ export default function InvoiceGenerator({ onBack, profile: profileProp, editing
       if (d.extraSections) setExtraSections(d.extraSections);
       if (d.taxInclusive !== undefined) setTaxInclusive(d.taxInclusive);
       if (d.technicalSpecs) setTechnicalSpecs(d.technicalSpecs);
+      if (d.proposalData) setProposalData(d.proposalData);
       if (d.invoiceOptions) {
         // User's persisted defaults as base, bill options overlay
         // v1.10.19 — Backfill paymentAccountSnapshot for pre-v1.10.18 bills.
@@ -1356,6 +1388,49 @@ export default function InvoiceGenerator({ onBack, profile: profileProp, editing
       : allBillsForCredit;
     return getClientCredit(client.name, otherBills);
   }, [client?.name, allBillsForCredit, editingBill]);
+
+  // Construct standard quotation payload for 5-Page Techno-Commercial Proposal modal
+  const proposalQuotationData = useMemo(() => {
+    const mappedItems = (items || []).map(it => ({
+      description: it.name || it.description || '',
+      quantity: Number(it.quantity) || 1,
+      unit: it.unit || 'Nos',
+      unit_price: Number(it.rate) || 0,
+      total_amount: it.total != null ? Number(it.total) : ((Number(it.quantity) || 1) * (Number(it.rate) || 0)),
+    }));
+
+    return {
+      id: editingBill?.id || details?.invoiceNumber || 'draft_proposal',
+      quotation_number: details?.invoiceNumber || 'CER/CR-DRAFT',
+      quotation_date: details?.invoiceDate || new Date().toISOString().split('T')[0],
+      customer_name: client?.name || 'Valued Customer',
+      company_name: client?.companyName || '',
+      customer_phone: client?.phone || '',
+      customer_gstin: client?.gstin || '',
+      site_name: details?.shippingAddress || details?.placeOfSupply || 'Site Facility',
+      site_address: details?.shippingAddress || client?.address || '',
+      site_contact: client?.name || '',
+      equipment_subtotal: Number(totals?.subtotal) || 0,
+      charges_subtotal: 0,
+      tax_amount: Number(totals?.taxAmount) || 0,
+      total_amount: Number(totals?.total) || 0,
+      items: mappedItems,
+      technicalInputs: technicalSpecs ? {
+        application_type: technicalSpecs.application,
+        application: technicalSpecs.application,
+        target_temp_c: technicalSpecs.targetTemp,
+        ambient_temp_c: technicalSpecs.ambientTemp,
+        length_ft: technicalSpecs.unit === 'm' ? Math.round(Number(technicalSpecs.length) * 3.28084) : Number(technicalSpecs.length),
+        width_ft: technicalSpecs.unit === 'm' ? Math.round(Number(technicalSpecs.width) * 3.28084) : Number(technicalSpecs.width),
+        height_ft: technicalSpecs.unit === 'm' ? Math.round(Number(technicalSpecs.height) * 3.28084) : Number(technicalSpecs.height),
+        calculated_load_kw: technicalSpecs.estimatedLoadKw,
+      } : null,
+      modelRecommendation: technicalSpecs ? {
+        catalogue_ref: technicalSpecs.cdu?.model_number || (typeof technicalSpecs.cdu === 'string' ? technicalSpecs.cdu : ''),
+      } : null,
+      proposal_data: proposalData,
+    };
+  }, [editingBill, details, client, totals, items, technicalSpecs, proposalData]);
 
   // Auto-apply once per client change when the setting is on. Uses a
   // ref-tracked "last seen client" so subsequent item edits (which move
@@ -1829,7 +1904,7 @@ export default function InvoiceGenerator({ onBack, profile: profileProp, editing
       // Kept from the saved bill: rebuilt from scratch, they used to be lost.
       ...(keepCancelled ? { cancelledAt: serverCopy?.cancelledAt || editingBill.cancelledAt || null } : {}),
       ...(isIssued && (serverCopy?.convertedTo || editingBill.convertedTo) ? { convertedTo: serverCopy?.convertedTo || editingBill.convertedTo } : {}),
-      data: { profile, client, details: { ...details, invoiceNumber: finalInvoiceNumber }, items, totals, invoiceType, customTerms, customNotes, internalNote, extraSections, invoiceOptions: invoiceOptionsWithSnapshot, taxInclusive, technicalSpecs,
+      data: { profile, client, details: { ...details, invoiceNumber: finalInvoiceNumber }, items, totals, invoiceType, customTerms, customNotes, internalNote, extraSections, invoiceOptions: invoiceOptionsWithSnapshot, taxInclusive, technicalSpecs, proposalData,
         // A converted quotation/proforma/challan's stock moved to its invoice:
         // its own record stays empty, or a save would take the stock twice.
         stockApplied: isIssued && (serverCopy?.convertedTo || editingBill.convertedTo) ? {} : stockEffect(items, invoiceType, seedStatus) }
@@ -3457,6 +3532,9 @@ export default function InvoiceGenerator({ onBack, profile: profileProp, editing
             title={showOptions ? 'Hide the layout and column options' : 'Choose columns, sections, paper size and PDF style'}>
             <Settings size={18} /> {showOptions ? 'Hide Options' : 'Customize'}
           </button>
+          <button className="btn btn-secondary" type="button" onClick={() => setShowProposalModal(true)} title="Open 5-Page Techno-Commercial Cold Room Proposal (Cool Era CER/CR-6856 Template)" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: '#0284c7', borderColor: '#bae6fd', background: '#f0f9ff', fontWeight: 600 }}>
+            <FileText size={16} /> 5-Page Proposal
+          </button>
           <button className="btn btn-secondary" type="button"
             onClick={() => setPreviewCollapsed(v => !v)}
             title={previewCollapsed ? 'Show the live preview' : 'Hide the preview and use the full width for entry'}>
@@ -4408,6 +4486,15 @@ export default function InvoiceGenerator({ onBack, profile: profileProp, editing
               >
                 <span>❄️</span> Cold-Room Sizer
               </button>
+              <button
+                type="button"
+                className="btn btn-secondary mt-2"
+                style={{ borderColor: '#0284c7', color: '#0284c7', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                onClick={() => setShowProposalModal(true)}
+                title="Open 5-Page Techno-Commercial Cold Room Proposal"
+              >
+                <FileText size={16} /> 5-Page Proposal
+              </button>
               {!hasDeliveryCharge && (
                 <button type="button" className="btn btn-secondary mt-2" onClick={addDeliveryCharge}
                   title="Adds a 'Delivery charges' line, taxed at the goods' GST rate (composite supply)">
@@ -4665,6 +4752,31 @@ export default function InvoiceGenerator({ onBack, profile: profileProp, editing
               Live preview
             </span>
             <span style={{ display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+              <button
+                type="button"
+                onClick={() => setShowProposalModal(true)}
+                title="View / Print 5-Page Techno-Commercial Project Proposal (Cool Era CER/CR-6856 Template)"
+                style={{
+                  display: 'inline-flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  padding: '0.24rem 0.7rem',
+                  borderRadius: 999,
+                  fontSize: '0.72rem',
+                  fontWeight: 700,
+                  background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+                  color: '#ffffff',
+                  border: 'none',
+                  cursor: 'pointer',
+                  boxShadow: '0 2px 6px rgba(2, 132, 199, 0.25)',
+                  letterSpacing: '0.02em',
+                  whiteSpace: 'nowrap',
+                  marginRight: '0.25rem',
+                }}
+              >
+                <FileText size={13} style={{ strokeWidth: 2.2 }} />
+                <span>5-Page Proposal</span>
+              </button>
               {/* Segmented zoom cluster — three cells welded into one pill */}
               <div style={{
                 display: 'inline-flex', alignItems: 'center',
@@ -4759,6 +4871,18 @@ export default function InvoiceGenerator({ onBack, profile: profileProp, editing
 
       {/* P2 #32 — 3-option leave modal. Replaces the previous confusing
           browser confirm() where OK=save was counterintuitive. */}
+      {showProposalModal && (
+        <TechnoCommercialProposalModal
+          isOpen={showProposalModal}
+          onClose={() => setShowProposalModal(false)}
+          quotation={proposalQuotationData}
+          profile={profile}
+          onProposalSaved={(updatedProposalData) => {
+            setProposalData(updatedProposalData);
+          }}
+        />
+      )}
+
       {leaveModal && (
         <div className="modal-overlay" onClick={leaveActions.cancel}>
           <div className="modal-content" onClick={e => e.stopPropagation()} style={{ maxWidth: '460px' }}>

@@ -10,6 +10,7 @@ import {
 import { formatCurrency } from '../../utils';
 import { toast } from '../Toast';
 import { confirmAction } from '../ConfirmModal';
+import TechnoCommercialProposalModal from './TechnoCommercialProposalModal';
 
 export default function TechnicalQuotationView({ onNavigateToInvoice }) {
   const [tab, setTab] = useState('new'); // 'new' | 'list'
@@ -51,6 +52,7 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
 
   // Preview Modal
   const [viewQuotation, setViewQuotation] = useState(null);
+  const [proposalQuotation, setProposalQuotation] = useState(null);
 
   const loadInitialData = async () => {
     setLoading(true);
@@ -772,7 +774,59 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
             </div>
 
             {/* Action Buttons */}
-            <div style={{ display: 'flex', gap: '0.6rem', justifyContent: 'flex-end' }}>
+            <div style={{ display: 'flex', gap: '0.6rem', justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+              {items.length > 0 && (
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => {
+                    const selectedCust = clients.find(c => c.id === customerId);
+                    const mockQuotation = {
+                      id: 'draft_preview',
+                      quotation_number: 'CER/CR-DRAFT',
+                      quotation_date: new Date().toISOString().split('T')[0],
+                      customer_name: selectedCust?.name || 'Valued Customer',
+                      company_name: selectedCust?.company_name || '',
+                      customer_phone: selectedCust?.phone || '',
+                      customer_gstin: selectedCust?.gstin || '',
+                      site_name: siteName || 'Main Facility',
+                      site_address: selectedCust?.address || siteName || '',
+                      site_contact: selectedCust?.name || '',
+                      equipment_subtotal: subtotal,
+                      charges_subtotal: 0,
+                      tax_amount: taxAmount,
+                      total_amount: grandTotal,
+                      items,
+                      technicalInputs: recommendation?.inputs ? {
+                        application: calcForm.application,
+                        length_ft: calcForm.length,
+                        width_ft: calcForm.width,
+                        height_ft: calcForm.height,
+                        target_temp_c: recommendation.inputs.targetTemp,
+                        ambient_temp_c: calcForm.ambientTemp,
+                        refrigerant_preference: calcForm.refrigerant,
+                        compressor_type: calcForm.compressorType,
+                        calculated_load_kw: recommendation.estimatedLoadKw,
+                      } : {
+                        application: calcForm.application,
+                        length_ft: calcForm.length,
+                        width_ft: calcForm.width,
+                        height_ft: calcForm.height,
+                        ambient_temp_c: calcForm.ambientTemp,
+                        refrigerant_preference: calcForm.refrigerant,
+                      },
+                      modelRecommendation: recommendation?.recommendations ? {
+                        catalogue_ref: recommendation.recommendations.cdu ? `${recommendation.recommendations.cdu.brand_name || 'Daikin'} ${recommendation.recommendations.cdu.model_number}` : '',
+                      } : null
+                    };
+                    setProposalQuotation(mockQuotation);
+                  }}
+                  style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#0284c7', borderColor: '#bae6fd', background: '#f0f9ff', fontWeight: 600 }}
+                  title="Preview 5-Page Techno-Commercial Project Proposal (Cool Era Style)"
+                >
+                  <FileText size={15} /> Preview 5-Page Proposal
+                </button>
+              )}
               <button
                 type="button"
                 className="btn btn-secondary"
@@ -844,8 +898,24 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
                           setViewQuotation(full);
                         }}
                         style={{ padding: '4px 8px', fontSize: '0.8rem', marginRight: '0.4rem' }}
+                        title="Quick 1-Page Quotation"
                       >
                         <Eye size={13} /> View
+                      </button>
+
+                      <button
+                        className="btn btn-secondary"
+                        onClick={async () => {
+                          const full = await getQuotationById(q.id);
+                          setProposalQuotation(full);
+                        }}
+                        style={{
+                          padding: '4px 8px', fontSize: '0.8rem', marginRight: '0.4rem',
+                          color: '#0284c7', borderColor: '#bae6fd', background: '#f0f9ff', fontWeight: 600
+                        }}
+                        title="Detailed 5-Page Techno-Commercial Project Proposal (Cool Era Style)"
+                      >
+                        <FileText size={13} /> 5-Page Proposal
                       </button>
 
                       {q.status !== 'converted' && (
@@ -883,7 +953,22 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
               <div style={{ fontWeight: 700, fontSize: '1.1rem', color: '#0f172a' }}>
                 Quotation Preview — #{viewQuotation.quotation_number}
               </div>
-              <div style={{ display: 'flex', gap: '0.5rem' }}>
+              <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+                <button
+                  className="btn btn-primary"
+                  onClick={() => {
+                    const q = viewQuotation;
+                    setViewQuotation(null);
+                    setProposalQuotation(q);
+                  }}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '0.3rem',
+                    background: '#0284c7', borderColor: '#0284c7', fontSize: '0.82rem', padding: '6px 12px'
+                  }}
+                  title="Switch to Full 5-Page Proposal with all 4 Annexures"
+                >
+                  <FileText size={14} /> 5-Page Proposal (Cool Era Style)
+                </button>
                 <button className="btn btn-secondary" onClick={() => window.print()} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                   <Printer size={15} /> Print
                 </button>
@@ -1008,6 +1093,25 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
             </div>
           </div>
         </div>
+      )}
+
+      {/* ------------------------------------------------------------- */}
+      {/* MODAL: 5-PAGE TECHNO-COMMERCIAL PROPOSAL (COOL ERA STYLE) */}
+      {/* ------------------------------------------------------------- */}
+      {proposalQuotation && (
+        <TechnoCommercialProposalModal
+          isOpen={!!proposalQuotation}
+          onClose={() => setProposalQuotation(null)}
+          quotation={proposalQuotation}
+          profile={profile}
+          onProposalSaved={(updatedProposalData) => {
+            setProposalQuotation(prev => ({
+              ...prev,
+              proposal_data: updatedProposalData
+            }));
+            loadInitialData();
+          }}
+        />
       )}
     </div>
   );

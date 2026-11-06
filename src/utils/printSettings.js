@@ -309,9 +309,56 @@ export function getPrintSettings() {
   }
 }
 
+export function syncPrintSettingsToInvoiceOptions(settings) {
+  try {
+    if (typeof window === 'undefined' || !window.localStorage) return;
+    const raw = localStorage.getItem('freegstbill_invoiceOptions');
+    const current = raw ? JSON.parse(raw) : {};
+    const updated = {
+      ...current,
+      pdfStyle: settings.pdfTemplate || current.pdfStyle || 'classic',
+      accentColor: settings.userColorsEnabled ? (settings.pdfAccent || '') : '',
+      showHSN: settings.showHSN ?? current.showHSN,
+      showBankDetails: settings.showBankDetails ?? current.showBankDetails,
+      showUPI: settings.showUPI ?? current.showUPI,
+      showLogo: settings.showLogo ?? current.showLogo,
+      showSignature: settings.signatureShow ?? current.showSignature,
+      showAmountWords: settings.showAmountWords ?? current.showAmountWords,
+    };
+    localStorage.setItem('freegstbill_invoiceOptions', JSON.stringify(updated));
+
+    // Also update draft in sessionStorage so New Invoice live preview reflects it immediately
+    try {
+      const draftRaw = sessionStorage.getItem('gst_invoiceDraft');
+      if (draftRaw) {
+        const draftObj = JSON.parse(draftRaw);
+        if (draftObj.invoiceOptions) {
+          draftObj.invoiceOptions.pdfStyle = updated.pdfStyle;
+          draftObj.invoiceOptions.accentColor = updated.accentColor;
+          sessionStorage.setItem('gst_invoiceDraft', JSON.stringify(draftObj));
+        }
+      }
+    } catch (_) {}
+
+    // Async save to server
+    try {
+      fetch('/api/meta/invoiceDisplayOptions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ value: updated }),
+      }).catch(() => {});
+    } catch (_) {}
+
+    window.dispatchEvent(new CustomEvent('print-settings-changed', { detail: settings }));
+  } catch (err) {
+    console.error('Failed to sync print settings to invoice options:', err);
+  }
+}
+
 export function savePrintSettings(settings) {
   try {
     localStorage.setItem('gst_printSettings', JSON.stringify(settings));
+    syncPrintSettingsToInvoiceOptions(settings);
     return true;
   } catch { return false; }
 }

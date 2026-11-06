@@ -921,6 +921,7 @@ function App() {
             {/* Notification bell — opens a popover listing overdue / due-soon
                 invoices, GST filing deadlines, and low-stock items. Each row
                 is a single click away from the page that fixes it. */}
+            {false /* Notification bell commented out */ && (
             <button
               className="nav-btn"
               onClick={() => setShowNotifs(s => !s)}
@@ -939,6 +940,7 @@ function App() {
                 }}>{notifTotal > 99 ? '99+' : notifTotal}</span>
               )}
             </button>
+            )}
             {/* v1.10.80 (#98) - only when a PIN is set. */}
             <LockButton className="nav-btn" label="Lock app" />
             <button
@@ -1069,7 +1071,7 @@ function App() {
       {/* Update modal — release notes + Export-backup-first nudge + Update Now */}
       {/* Notification popover — rendered as a click-out modal so it works on
           tablets too. Grouped by category with a navigate-to button per group. */}
-      {showNotifs && (
+      {false /* Notification popover commented out */ && showNotifs && (
         <div className="modal-overlay" onClick={() => setShowNotifs(false)}>
           <div className="modal-content" style={{ maxWidth: '480px' }} onClick={e => e.stopPropagation()}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.5rem' }}>

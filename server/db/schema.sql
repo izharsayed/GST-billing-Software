@@ -356,6 +356,7 @@ CREATE TABLE IF NOT EXISTS quotations (
   tax_amount REAL DEFAULT 0,
   total_amount REAL DEFAULT 0,
   terms TEXT,
+  proposal_data TEXT,
   created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
 );

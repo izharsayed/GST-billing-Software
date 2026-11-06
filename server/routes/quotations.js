@@ -70,6 +70,12 @@ router.get('/:id', (req, res) => {
       return res.status(404).json({ error: 'Quotation not found' });
     }
 
+    if (quotation.proposal_data && typeof quotation.proposal_data === 'string') {
+      try {
+        quotation.proposal_data = JSON.parse(quotation.proposal_data);
+      } catch (_) {}
+    }
+
     const items = db.prepare('SELECT * FROM quotation_items WHERE quotation_id = ? ORDER BY id ASC').all(id);
     const techInputs = db.prepare('SELECT * FROM quotation_technical_inputs WHERE quotation_id = ?').get(id);
     const modelRec = db.prepare('SELECT * FROM quotation_model_recommendations WHERE quotation_id = ?').get(id);
@@ -94,7 +100,8 @@ router.post('/', (req, res) => {
       id, quotation_number, customer_id, site_id, quotation_date, valid_until,
       status = 'draft', currency = 'INR', equipment_subtotal = 0, charges_subtotal = 0,
       discount_amount = 0, tax_amount = 0, total_amount = 0, terms,
-      items = [], technicalInputs = null, modelRecommendation = null
+      items = [], technicalInputs = null, modelRecommendation = null,
+      proposal_data = null
     } = req.body;
 
     const qDate = quotation_date || new Date().toISOString().split('T')[0];
@@ -138,13 +145,17 @@ router.post('/', (req, res) => {
         }
       }
 
+      const proposalDataStr = typeof proposal_data === 'object' && proposal_data !== null
+        ? JSON.stringify(proposal_data)
+        : (proposal_data || null);
+
       // 1. Insert/Update Quotation
       db.prepare(`
         INSERT INTO quotations (
           id, quotation_number, customer_id, site_id, quotation_date, valid_until,
           status, currency, equipment_subtotal, charges_subtotal, discount_amount,
-          tax_amount, total_amount, terms, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
+          tax_amount, total_amount, terms, proposal_data, updated_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP)
         ON CONFLICT(id) DO UPDATE SET
           customer_id = excluded.customer_id,
           site_id = excluded.site_id,
@@ -158,12 +169,13 @@ router.post('/', (req, res) => {
           tax_amount = excluded.tax_amount,
           total_amount = excluded.total_amount,
           terms = excluded.terms,
+          proposal_data = excluded.proposal_data,
           updated_at = CURRENT_TIMESTAMP
       `).run(
         qId, qNumber, resolvedCustomerId, resolvedSiteId, qDate, valid_until || null,
         status, currency, Number(equipment_subtotal) || 0, Number(charges_subtotal) || 0,
         Number(discount_amount) || 0, Number(tax_amount) || 0, Number(total_amount) || 0,
-        terms || ''
+        terms || '', proposalDataStr
       );
 
       // 2. Delete and re-insert line items
@@ -241,6 +253,34 @@ router.post('/', (req, res) => {
 
     logAudit('admin', 'save', 'quotation', qId, { quotation_number: qNumber, total_amount });
     res.json({ success: true, id: qId, quotation_number: qNumber });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// 4B. UPDATE PROPOSAL DATA ONLY
+// ==========================================
+router.put('/:id/proposal', (req, res) => {
+  try {
+    const { id } = req.params;
+    const { proposal_data } = req.body;
+    const proposalDataStr = typeof proposal_data === 'object' && proposal_data !== null
+      ? JSON.stringify(proposal_data)
+      : (proposal_data || null);
+
+    const result = db.prepare(`
+      UPDATE quotations
+      SET proposal_data = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(proposalDataStr, id);
+
+    if (result.changes === 0) {
+      return res.status(404).json({ error: 'Quotation not found' });
+    }
+
+    logAudit('admin', 'update', 'quotation_proposal', id, {});
+    res.json({ success: true, message: 'Proposal data updated successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
