@@ -63,8 +63,8 @@ router.get('/:id', (req, res) => {
       FROM quotations q
       LEFT JOIN customers c ON q.customer_id = c.id
       LEFT JOIN customer_sites s ON q.site_id = s.id
-      WHERE q.id = ?
-    `).get(id);
+      WHERE q.id = ? OR q.quotation_number = ?
+    `).get(id, id);
 
     if (!quotation) {
       return res.status(404).json({ error: 'Quotation not found' });
@@ -76,9 +76,9 @@ router.get('/:id', (req, res) => {
       } catch (_) {}
     }
 
-    const items = db.prepare('SELECT * FROM quotation_items WHERE quotation_id = ? ORDER BY id ASC').all(id);
-    const techInputs = db.prepare('SELECT * FROM quotation_technical_inputs WHERE quotation_id = ?').get(id);
-    const modelRec = db.prepare('SELECT * FROM quotation_model_recommendations WHERE quotation_id = ?').get(id);
+    const items = db.prepare('SELECT * FROM quotation_items WHERE quotation_id = ? ORDER BY id ASC').all(quotation.id);
+    const techInputs = db.prepare('SELECT * FROM quotation_technical_inputs WHERE quotation_id = ?').get(quotation.id);
+    const modelRec = db.prepare('SELECT * FROM quotation_model_recommendations WHERE quotation_id = ?').get(quotation.id);
 
     res.json({
       ...quotation,
@@ -269,17 +269,18 @@ router.put('/:id/proposal', (req, res) => {
       ? JSON.stringify(proposal_data)
       : (proposal_data || null);
 
-    const result = db.prepare(`
-      UPDATE quotations
-      SET proposal_data = ?, updated_at = CURRENT_TIMESTAMP
-      WHERE id = ?
-    `).run(proposalDataStr, id);
-
-    if (result.changes === 0) {
+    const quotation = db.prepare('SELECT id FROM quotations WHERE id = ? OR quotation_number = ?').get(id, id);
+    if (!quotation) {
       return res.status(404).json({ error: 'Quotation not found' });
     }
 
-    logAudit('admin', 'update', 'quotation_proposal', id, {});
+    db.prepare(`
+      UPDATE quotations
+      SET proposal_data = ?, updated_at = CURRENT_TIMESTAMP
+      WHERE id = ?
+    `).run(proposalDataStr, quotation.id);
+
+    logAudit('admin', 'update', 'quotation_proposal', quotation.id, {});
     res.json({ success: true, message: 'Proposal data updated successfully' });
   } catch (err) {
     res.status(500).json({ error: err.message });
@@ -292,13 +293,13 @@ router.put('/:id/proposal', (req, res) => {
 router.post('/:id/convert-to-invoice', (req, res) => {
   try {
     const { id } = req.params;
-    const quotation = db.prepare('SELECT * FROM quotations WHERE id = ?').get(id);
+    const quotation = db.prepare('SELECT * FROM quotations WHERE id = ? OR quotation_number = ?').get(id, id);
     if (!quotation) return res.status(404).json({ error: 'Quotation not found' });
     if (quotation.status === 'converted') {
       return res.status(400).json({ error: 'Quotation has already been converted to an invoice.' });
     }
 
-    const items = db.prepare('SELECT * FROM quotation_items WHERE quotation_id = ?').all(id);
+    const items = db.prepare('SELECT * FROM quotation_items WHERE quotation_id = ?').all(quotation.id);
     const customer = quotation.customer_id
       ? db.prepare('SELECT * FROM customers WHERE id = ?').get(quotation.customer_id)
       : null;
@@ -381,14 +382,14 @@ router.post('/:id/convert-to-invoice', (req, res) => {
         UPDATE quotations
         SET status = 'converted', converted_sale_id = ?, updated_at = CURRENT_TIMESTAMP
         WHERE id = ?
-      `).run(saleId, id);
+      `).run(saleId, quotation.id);
 
       // 4. Write bill to data/bills/ for instant backwards-compatibility
       const billFilePath = path.join(BILLS_DIR, safeFileName(saleId) + '.json');
       fs.writeFileSync(billFilePath, JSON.stringify(billData, null, 2), 'utf8');
     });
 
-    logAudit('admin', 'convert', 'quotation', id, { converted_to: saleId });
+    logAudit('admin', 'convert', 'quotation', quotation.id, { converted_to: saleId });
     res.json({ success: true, saleId, invoiceNumber: saleId, billId: saleId });
   } catch (err) {
     res.status(500).json({ error: err.message });
