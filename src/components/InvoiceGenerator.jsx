@@ -217,69 +217,330 @@ const currencySymbolFor = (code) =>
 // dropdown, with keyboard navigation. Extracted so LineItem stays lean
 // and the local `activeIdx` state doesn't cause other row fields to
 // re-render on every arrow-key press.
-function SuggestingInput({ item, suggestions, onFieldChange, onSelectProduct, onSetProductSearch, currency }) {
+function SuggestingInput({ item, allProducts = [], suggestions = [], onFieldChange, onSelectProduct, onSetProductSearch, currency }) {
+  const [isOpen, setIsOpen] = useState(false);
   const [activeIdx, setActiveIdx] = useState(-1);
-  // Reset the highlighted suggestion when the query changes so ArrowDown
-  // starts from the top rather than continuing a stale index.
-  useEffect(() => { setActiveIdx(-1); }, [item.name, suggestions.length]);
+  const containerRef = useRef(null);
+  const listRef = useRef(null);
+
+  const query = (item.name || '').trim().toLowerCase();
+  const filteredProducts = useMemo(() => {
+    const list = allProducts && allProducts.length > 0 ? allProducts : (suggestions || []);
+    if (!query) return list;
+    return list.filter(p =>
+      (p.name || '').toLowerCase().includes(query) ||
+      (p.hsn || '').toLowerCase().includes(query) ||
+      (p.description || '').toLowerCase().includes(query)
+    );
+  }, [allProducts, suggestions, query]);
+
+  // Close dropdown on outside click
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleClickOutside = (e) => {
+      if (containerRef.current && !containerRef.current.contains(e.target)) {
+        setIsOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [isOpen]);
+
+  // Reset activeIdx when query or open state changes
+  useEffect(() => {
+    setActiveIdx(-1);
+  }, [item.name, isOpen]);
+
+  // Scroll active item into view
+  useEffect(() => {
+    if (activeIdx >= 0 && listRef.current) {
+      const activeEl = listRef.current.querySelector(`[data-idx="${activeIdx}"]`);
+      if (activeEl) {
+        activeEl.scrollIntoView({ block: 'nearest' });
+      }
+    }
+  }, [activeIdx]);
+
   const commit = (idx) => {
-    const pick = suggestions[idx] ?? suggestions[0];
-    if (pick) onSelectProduct(item.id, pick);
+    const pick = filteredProducts[idx];
+    if (pick) {
+      onSelectProduct(item.id, pick);
+      setIsOpen(false);
+    }
   };
+
   const handleKey = (e) => {
-    if (!suggestions.length) return;
+    if (!isOpen) {
+      if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+        e.preventDefault();
+        setIsOpen(true);
+      }
+      return;
+    }
+    if (filteredProducts.length === 0) {
+      if (e.key === 'Escape') {
+        setIsOpen(false);
+      }
+      return;
+    }
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setActiveIdx(i => (i + 1) % suggestions.length);
+      setActiveIdx(i => (i + 1 >= filteredProducts.length ? 0 : i + 1));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
-      setActiveIdx(i => (i <= 0 ? suggestions.length - 1 : i - 1));
+      setActiveIdx(i => (i <= 0 ? filteredProducts.length - 1 : i - 1));
     } else if (e.key === 'Enter') {
-      // Only intercept Enter if the user has actively navigated to a
-      // suggestion. Otherwise fall through so the row's "last-row add"
-      // shortcut can fire. Prevents double-fire on the last row.
-      if (activeIdx >= 0) {
+      if (activeIdx >= 0 && filteredProducts[activeIdx]) {
         e.preventDefault();
         e.stopPropagation();
         commit(activeIdx);
+      } else {
+        setIsOpen(false);
       }
     } else if (e.key === 'Escape') {
-      onSetProductSearch({ itemId: null, query: '' });
+      e.preventDefault();
+      setIsOpen(false);
+      onSetProductSearch?.({ itemId: null, query: '' });
     }
   };
+
   return (
-    <>
-      <input type="text" className="form-input" value={item.name}
-        placeholder="Item"
-        onChange={(e) => onFieldChange(item.id, 'name', e.target.value)}
-        onBlur={() => setTimeout(() => onSetProductSearch({ itemId: null, query: '' }), 200)}
-        onKeyDown={handleKey}
-        autoComplete="off" />
-      {suggestions.length > 0 && (
-        <div className="product-suggestions" role="listbox">
-          {suggestions.map((p, i) => (
-            <div key={p.id} className="product-suggestion-item"
-              role="option"
-              aria-selected={i === activeIdx}
-              onMouseEnter={() => setActiveIdx(i)}
-              onMouseDown={() => onSelectProduct(item.id, p)}
-              style={i === activeIdx ? { background: 'var(--primary-light, rgba(30,64,175,0.12))' } : undefined}>
-              <span className="product-suggestion-name">{p.name}</span>
-              <span className="product-suggestion-meta">
-                {p.hsn && `HSN: ${p.hsn}`}{p.hsn && p.rate ? ' · ' : ''}{p.rate ? formatCurrency(p.rate, currency || 'INR') : ''}
-              </span>
+    <div ref={containerRef} style={{ position: 'relative', width: '100%' }}>
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+        <input
+          type="text"
+          className="form-input"
+          value={item.name}
+          placeholder="Item or select product"
+          style={{ paddingRight: '2rem' }}
+          onChange={(e) => {
+            onFieldChange(item.id, 'name', e.target.value);
+            onSetProductSearch?.({ itemId: item.id, query: e.target.value });
+            setIsOpen(true);
+          }}
+          onFocus={() => {
+            if ((allProducts && allProducts.length > 0) || (suggestions && suggestions.length > 0)) {
+              setIsOpen(true);
+            }
+          }}
+          onKeyDown={handleKey}
+          autoComplete="off"
+        />
+        <button
+          type="button"
+          onClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+            setIsOpen(prev => !prev);
+          }}
+          tabIndex={-1}
+          title={isOpen ? 'Close inventory dropdown' : 'Browse inventory products'}
+          style={{
+            position: 'absolute',
+            right: 4,
+            top: '50%',
+            transform: 'translateY(-50%)',
+            background: 'none',
+            border: 'none',
+            color: 'var(--text-muted, #64748b)',
+            cursor: 'pointer',
+            padding: '4px 6px',
+            borderRadius: '4px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            transition: 'color 0.15s ease',
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.color = 'var(--primary-color, #2563eb)'}
+          onMouseLeave={(e) => e.currentTarget.style.color = 'var(--text-muted, #64748b)'}
+        >
+          <ChevronDown
+            size={15}
+            style={{
+              transform: isOpen ? 'rotate(180deg)' : 'none',
+              transition: 'transform 0.2s ease',
+            }}
+          />
+        </button>
+      </div>
+
+      {isOpen && (
+        <div
+          ref={listRef}
+          className="product-suggestions"
+          role="listbox"
+          style={{
+            position: 'absolute',
+            top: 'calc(100% + 4px)',
+            left: 0,
+            width: 'max(100%, 360px)',
+            maxWidth: 'min(460px, calc(100vw - 32px))',
+            maxHeight: '280px',
+            overflowY: 'auto',
+            background: 'var(--bg-surface, #ffffff)',
+            border: '1px solid var(--border, #cbd5e1)',
+            borderRadius: '8px',
+            boxShadow: '0 12px 28px -4px rgba(0, 0, 0, 0.18), 0 4px 10px -2px rgba(0, 0, 0, 0.08)',
+            zIndex: 9999,
+          }}
+        >
+          <div style={{
+            padding: '6px 10px',
+            fontSize: '0.7rem',
+            fontWeight: 700,
+            letterSpacing: '0.04em',
+            textTransform: 'uppercase',
+            color: 'var(--text-muted, #64748b)',
+            borderBottom: '1px solid var(--border, #e2e8f0)',
+            background: 'var(--bg-secondary, rgba(0,0,0,0.03))',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            position: 'sticky',
+            top: 0,
+            zIndex: 1,
+          }}>
+            <span>{query ? `Matches for "${item.name}"` : 'Inventory Products'}</span>
+            <span style={{ fontWeight: 500, fontSize: '0.68rem' }}>{filteredProducts.length} items</span>
+          </div>
+
+          {filteredProducts.length === 0 ? (
+            <div style={{ padding: '14px 12px', textAlign: 'center', fontSize: '0.82rem', color: 'var(--text-muted, #64748b)' }}>
+              {(!allProducts || allProducts.length === 0) ? (
+                <div>
+                  <div style={{ fontWeight: 600, marginBottom: 4 }}>No products in inventory yet</div>
+                  <div style={{ fontSize: '0.72rem' }}>Add products in the Products tab or type a custom item here.</div>
+                </div>
+              ) : (
+                <div>
+                  <div style={{ fontWeight: 600, marginBottom: 4 }}>No products matching "{item.name}"</div>
+                  <div style={{ fontSize: '0.72rem' }}>Press Tab or Enter to use this as a custom item name.</div>
+                </div>
+              )}
             </div>
-          ))}
+          ) : (
+            filteredProducts.map((p, i) => {
+              const stockNum = Number(p.stock ?? 0);
+              const price = Number(p.sellingPrice ?? p.rate ?? 0);
+              const isSelected = i === activeIdx;
+
+              return (
+                <div
+                  key={p.id || i}
+                  data-idx={i}
+                  className="product-suggestion-item"
+                  role="option"
+                  aria-selected={isSelected}
+                  onMouseEnter={() => setActiveIdx(i)}
+                  onMouseDown={(e) => {
+                    e.preventDefault();
+                    onSelectProduct(item.id, p);
+                    setIsOpen(false);
+                  }}
+                  style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '8px 10px',
+                    cursor: 'pointer',
+                    borderBottom: '1px solid var(--border, #e2e8f0)',
+                    background: isSelected ? 'var(--primary-light, rgba(30,64,175,0.12))' : undefined,
+                    gap: '10px',
+                    transition: 'background 0.1s ease',
+                  }}
+                >
+                  <div style={{ flex: 1, minWidth: 0 }}>
+                    <div style={{
+                      fontWeight: 600,
+                      fontSize: '0.84rem',
+                      color: 'var(--text, #1e293b)',
+                      whiteSpace: 'nowrap',
+                      overflow: 'hidden',
+                      textOverflow: 'ellipsis',
+                    }}>
+                      {p.name}
+                    </div>
+                    <div style={{
+                      fontSize: '0.72rem',
+                      color: 'var(--text-muted, #64748b)',
+                      display: 'flex',
+                      gap: '8px',
+                      flexWrap: 'wrap',
+                      marginTop: '2px',
+                    }}>
+                      {p.hsn && <span>HSN: <b>{p.hsn}</b></span>}
+                      {p.unit && <span>Unit: <b>{p.unit}</b></span>}
+                      {p.taxPercent != null && p.taxPercent !== '' && <span>GST: <b>{p.taxPercent}%</b></span>}
+                      {p.description && (
+                        <span style={{ fontStyle: 'italic', maxWidth: '140px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                          · {p.description}
+                        </span>
+                      )}
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: '3px', flexShrink: 0 }}>
+                    <span style={{ fontWeight: 700, fontSize: '0.86rem', color: 'var(--text, #0f172a)' }}>
+                      {formatCurrency(price, currency || 'INR')}
+                    </span>
+                    {p.stock === undefined || p.stock === null || p.stock === '' ? null : stockNum <= 0 ? (
+                      <span style={{
+                        fontSize: '0.67rem',
+                        fontWeight: 600,
+                        color: '#ef4444',
+                        background: 'rgba(239, 68, 68, 0.12)',
+                        padding: '1px 6px',
+                        borderRadius: '999px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '3px',
+                      }}>
+                        <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#ef4444' }} /> Out of stock
+                      </span>
+                    ) : stockNum <= 5 ? (
+                      <span style={{
+                        fontSize: '0.67rem',
+                        fontWeight: 600,
+                        color: '#d97706',
+                        background: 'rgba(245, 158, 11, 0.14)',
+                        padding: '1px 6px',
+                        borderRadius: '999px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '3px',
+                      }}>
+                        <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#f59e0b' }} /> Low: {stockNum} {p.unit || ''}
+                      </span>
+                    ) : (
+                      <span style={{
+                        fontSize: '0.67rem',
+                        fontWeight: 600,
+                        color: '#15803d',
+                        background: 'rgba(34, 197, 94, 0.14)',
+                        padding: '1px 6px',
+                        borderRadius: '999px',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '3px',
+                      }}>
+                        <span style={{ width: 5, height: 5, borderRadius: '50%', background: '#22c55e' }} /> {stockNum} {p.unit || ''}
+                      </span>
+                    )}
+                  </div>
+                </div>
+              );
+            })
+          )}
         </div>
       )}
-    </>
+    </div>
   );
 }
 
 const LineItem = memo(function LineItem({
   item, invoiceOptions, showGST, taxLabel,
   units, countryTaxRates, filterUnitsByMode, invoiceMode,
-  currency, profileCountry, suggestions,
+  currency, profileCountry, allProducts, suggestions,
   onFieldChange, onSelectProduct, onSetProductSearch,
   onAddCustomUnit, onRemoveCustomUnit, onRemove, clampNonNeg,
   isLastRow, onAddRow, isOnlyRow,
@@ -313,6 +574,7 @@ const LineItem = memo(function LineItem({
             resets when the query changes. */}
         <SuggestingInput
           item={item}
+          allProducts={allProducts}
           suggestions={suggestions}
           onFieldChange={onFieldChange}
           onSelectProduct={onSelectProduct}
@@ -1477,19 +1739,24 @@ export default function InvoiceGenerator({ onBack, profile: profileProp, editing
   const selectProduct = useCallback((itemId, product) => {
     // v1.10.29 — Prefer sellingPrice for sales invoices (falls back to
     // legacy `rate` for pre-v1.10.29 products).
-    const salePrice = product.sellingPrice ?? product.rate ?? 0;
+    const salePrice = Number(product.sellingPrice ?? product.rate ?? 0);
+    const itemTax = (product.taxPercent !== undefined && product.taxPercent !== null && product.taxPercent !== '')
+      ? Number(product.taxPercent)
+      : defaultTaxRate;
     setItems(prev => prev.map(item => item.id === itemId ? {
       ...item,
       name: product.name,
       hsn: product.hsn || '',
       rate: salePrice,
       unit: product.unit || item.unit || 'Nos',
-      taxPercent: product.taxPercent ?? defaultTaxRate,
+      taxPercent: itemTax,
       productId: product.id,
+      description: product.description || item.description || '',
+      _descOpen: !!(product.description || item.description || item._descOpen),
       isCharge: false, // a product picked on the delivery line makes it a product line
     } : item));
     setProductSearch({ itemId: null, query: '' });
-  }, [countryTaxRates]);
+  }, [countryTaxRates, defaultTaxRate]);
 
   const getProductSuggestions = useCallback((itemId) => {
     if (productSearch.itemId !== itemId || !productSearch.query.trim()) return [];
@@ -4462,6 +4729,7 @@ export default function InvoiceGenerator({ onBack, profile: profileProp, editing
                 invoiceMode={invoiceOptions.invoiceMode}
                 currency={invoiceOptions.currency}
                 profileCountry={profile?.country}
+                allProducts={products}
                 suggestions={getProductSuggestions(item.id)}
                 onFieldChange={handleItemChange}
                 onSelectProduct={selectProduct}
