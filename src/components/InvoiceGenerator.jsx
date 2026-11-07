@@ -4855,19 +4855,20 @@ export default function InvoiceGenerator({ onBack, profile: profileProp, editing
                                 (eq.siteName ? ` [Site: ${eq.siteName}]` : '');
                               const newLine = {
                                 id: Date.now().toString(),
-                                item: itemName,
+                                name: itemName,
                                 hsn: eq.partNumber || '',
-                                qty: 1,
+                                quantity: 1,
                                 unit: 'Set',
                                 rate: 0,
                                 discount: 0,
                                 discountType: 'fixed',
                                 discountBase: 'net',
-                                taxRate: 18,
+                                taxPercent: showGST ? defaultTaxRate : 0,
+                                cessPercent: 0,
                                 description: eq.capacity ? `Capacity: ${eq.capacity}` : '',
                               };
                               setItems(prev => {
-                                if (prev.length === 1 && !prev[0].item && !prev[0].rate) {
+                                if (prev.length === 1 && !prev[0].name && !prev[0].rate) {
                                   return [newLine];
                                 }
                                 return [...prev, newLine];
