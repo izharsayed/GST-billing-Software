@@ -928,6 +928,33 @@ export default function ClientsView({ onEdit, onDuplicate, onNew }) {
                         </div>
                       </div>
                     )}
+                    {/* Installed Equipment & Models list */}
+                    {savedClient?.equipment?.length > 0 && (
+                      <div style={{ padding: '0.6rem 1.5rem', borderBottom: '1px solid var(--border)', fontSize: '0.78rem' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.4rem' }}>
+                          <span style={{ fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: '0.68rem', color: 'var(--text-muted)' }}>
+                            ⚙️ Installed Equipment & Models ({savedClient.equipment.length}):
+                          </span>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: '0.5rem' }}>
+                          {savedClient.equipment.map(eq => (
+                            <div key={eq.id} style={{ background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 6, padding: '0.5rem 0.75rem' }}>
+                              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 2 }}>
+                                <span style={{ fontWeight: 600, color: 'var(--primary)' }}>{eq.modelNumber}</span>
+                                {eq.capacity && <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)', background: 'var(--bg-secondary)', padding: '1px 5px', borderRadius: 3 }}>{eq.capacity}</span>}
+                              </div>
+                              {eq.description && <div style={{ fontSize: '0.75rem', marginBottom: 2 }}>{eq.description}</div>}
+                              <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'flex', gap: '0.6rem', flexWrap: 'wrap' }}>
+                                {eq.partNumber && <span>Part: {eq.partNumber}</span>}
+                                {eq.serialNumber && <span>S/N: {eq.serialNumber}</span>}
+                                {eq.siteName && <span>📍 {eq.siteName}</span>}
+                                {eq.warrantyUntil && <span>AMC/Warr: {eq.warrantyUntil}</span>}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </div>
+                    )}
                     {clientBills.length === 0 ? (
                       <div style={{ padding: '1.5rem', textAlign: 'center' }}>
                         <p className="text-muted" style={{ fontSize: '0.85rem', marginBottom: '0.75rem' }}>No invoices for this client yet.</p>

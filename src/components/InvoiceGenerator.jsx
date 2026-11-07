@@ -912,6 +912,7 @@ export default function InvoiceGenerator({ onBack, profile: profileProp, editing
   const [showClientModal, setShowClientModal] = useState(false);
   const [modalClient, setModalClient] = useState(null);
   const [isEditingClient, setIsEditingClient] = useState(false);
+  const [showEquipmentDropdown, setShowEquipmentDropdown] = useState(false);
   const clientNameRef = useRef(null);
   const clientSuggestionsRef = useRef(null);
   const [products, setProducts] = useState([]);
@@ -4795,6 +4796,99 @@ export default function InvoiceGenerator({ onBack, profile: profileProp, editing
               >
                 <FileText size={16} /> 5-Page Proposal
               </button>
+              {/* v1.11 — 1-Click quick insert for Client Installed Equipment / Models */}
+              {(() => {
+                const cli = selectedClientId ? savedClients.find(c => c.id === selectedClientId) : null;
+                const eqList = Array.isArray(cli?.equipment) ? cli.equipment : [];
+                if (eqList.length === 0) return null;
+                return (
+                  <div style={{ position: 'relative', display: 'inline-block' }}>
+                    <button
+                      type="button"
+                      className="btn btn-secondary mt-2"
+                      style={{ borderColor: '#8b5cf6', color: '#8b5cf6', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+                      onClick={() => setShowEquipmentDropdown(prev => !prev)}
+                      title="Insert installed client equipment/model into this invoice"
+                    >
+                      <span>⚙️</span> Client Equipment ({eqList.length}) <ChevronDown size={14} />
+                    </button>
+                    {showEquipmentDropdown && (
+                      <div style={{
+                        position: 'absolute',
+                        top: '100%',
+                        left: 0,
+                        zIndex: 50,
+                        background: 'var(--bg-primary)',
+                        border: '1px solid var(--border)',
+                        borderRadius: 6,
+                        boxShadow: '0 8px 24px rgba(0,0,0,0.15)',
+                        minWidth: '280px',
+                        maxWidth: '380px',
+                        maxHeight: '260px',
+                        overflowY: 'auto',
+                        marginTop: 4,
+                        padding: '4px 0'
+                      }}>
+                        <div style={{ padding: '6px 12px', fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', borderBottom: '1px solid var(--border)', textTransform: 'uppercase' }}>
+                          Select equipment to insert
+                        </div>
+                        {eqList.map(eq => (
+                          <button
+                            key={eq.id}
+                            type="button"
+                            style={{
+                              width: '100%',
+                              textAlign: 'left',
+                              padding: '8px 12px',
+                              border: 'none',
+                              background: 'transparent',
+                              cursor: 'pointer',
+                              display: 'block',
+                              borderBottom: '1px solid var(--border)',
+                              fontSize: '0.8rem'
+                            }}
+                            onMouseEnter={e => e.currentTarget.style.background = 'var(--bg-secondary)'}
+                            onMouseLeave={e => e.currentTarget.style.background = 'transparent'}
+                            onClick={() => {
+                              const itemName = [eq.modelNumber, eq.description].filter(Boolean).join(' - ') +
+                                (eq.serialNumber ? ` (S/N: ${eq.serialNumber})` : '') +
+                                (eq.siteName ? ` [Site: ${eq.siteName}]` : '');
+                              const newLine = {
+                                id: Date.now().toString(),
+                                item: itemName,
+                                hsn: eq.partNumber || '',
+                                qty: 1,
+                                unit: 'Set',
+                                rate: 0,
+                                discount: 0,
+                                discountType: 'fixed',
+                                discountBase: 'net',
+                                taxRate: 18,
+                                description: eq.capacity ? `Capacity: ${eq.capacity}` : '',
+                              };
+                              setItems(prev => {
+                                if (prev.length === 1 && !prev[0].item && !prev[0].rate) {
+                                  return [newLine];
+                                }
+                                return [...prev, newLine];
+                              });
+                              setShowEquipmentDropdown(false);
+                            }}
+                          >
+                            <div style={{ fontWeight: 600, color: 'var(--primary)' }}>{eq.modelNumber}</div>
+                            {eq.description && <div style={{ fontSize: '0.75rem', color: 'var(--text-color)' }}>{eq.description}</div>}
+                            <div style={{ fontSize: '0.7rem', color: 'var(--text-muted)', display: 'flex', gap: '8px', marginTop: 2 }}>
+                              {eq.capacity && <span>{eq.capacity}</span>}
+                              {eq.siteName && <span>📍 {eq.siteName}</span>}
+                              {eq.serialNumber && <span>S/N: {eq.serialNumber}</span>}
+                            </div>
+                          </button>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })()}
               {!hasDeliveryCharge && (
                 <button type="button" className="btn btn-secondary mt-2" onClick={addDeliveryCharge}
                   title="Adds a 'Delivery charges' line, taxed at the goods' GST rate (composite supply)">

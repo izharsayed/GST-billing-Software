@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X, Plus, Trash2, MapPin, ChevronDown, ChevronUp } from 'lucide-react';
+import { X, Plus, Trash2, MapPin, ChevronDown, ChevronUp, Wrench } from 'lucide-react';
 import { getCountryConfig, getStatesForCountry, validateTaxId, detectCountryFromBrowser, getCountriesForRegion, PAPER_SIZES, decodeGstin } from '../utils';
 import { getRegionMode } from '../store';
 
@@ -16,6 +16,7 @@ export default function ClientModal({ show, onClose, onSave, client, isEditing, 
     preferredCurrency: '',    // '' | 'INR' | 'USD' | ...
     autoPrint: false,          // per-client auto-print override
     sites: [],                   // project sites / delivery addresses
+    equipment: [],               // installed equipment, models, parts
   };
   const [form, setForm] = useState({ ...emptyForm });
   const [taxIdWarning, setTaxIdWarning] = useState('');
@@ -31,6 +32,7 @@ export default function ClientModal({ show, onClose, onSave, client, isEditing, 
         preferredCurrency: client.preferredCurrency || '',
         autoPrint: !!client.autoPrint,
         sites: Array.isArray(client.sites) ? client.sites : [],
+        equipment: Array.isArray(client.equipment) ? client.equipment : [],
       });
     } else if (show) {
       setForm({ ...emptyForm });
@@ -198,6 +200,79 @@ export default function ClientModal({ show, onClose, onSave, client, isEditing, 
                     onChange={e => { const v = e.target.value; setForm(prev => ({ ...prev, sites: (prev.sites || []).map(s => s.id === site.id ? { ...s, contactPerson: v } : s) })); }} />
                   <input type="tel" className="form-input" style={{ fontSize: '0.8rem' }} placeholder="Site Phone" value={site.phone}
                     onChange={e => { const v = e.target.value; setForm(prev => ({ ...prev, sites: (prev.sites || []).map(s => s.id === site.id ? { ...s, phone: v } : s) })); }} />
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {/* Installed Equipment & Models / Parts Registry */}
+          <div className="form-group" style={{ gridColumn: 'span 2', paddingTop: '0.5rem', borderTop: '1px solid var(--border)', marginTop: '0.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                <Wrench size={12} style={{ display: 'inline', marginRight: 4 }} />
+                Installed Equipment & Models / Parts
+              </div>
+              <button type="button" className="btn btn-secondary" style={{ fontSize: '0.72rem', padding: '0.2rem 0.5rem' }}
+                onClick={() => setForm(prev => ({
+                  ...prev,
+                  equipment: [...(Array.isArray(prev.equipment) ? prev.equipment : []), {
+                    id: Date.now().toString(),
+                    modelNumber: '',
+                    partNumber: '',
+                    serialNumber: '',
+                    description: '',
+                    capacity: '',
+                    siteName: '',
+                    warrantyUntil: ''
+                  }]
+                }))}>
+                <Plus size={12} /> Add Equipment / Model
+              </button>
+            </div>
+            {(form.equipment || []).length === 0 && (
+              <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '0.25rem 0', fontStyle: 'italic' }}>
+                No equipment or models registered yet. Add machines, models, or part numbers to track assets and 1-click bill them in invoices.
+              </p>
+            )}
+            {(form.equipment || []).map((eq, idx) => (
+              <div key={eq.id} style={{ border: '1px solid var(--border)', borderRadius: 6, padding: '0.6rem', marginBottom: '0.5rem', background: 'var(--bg-secondary)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                  <span style={{ fontSize: '0.78rem', fontWeight: 600 }}>Equipment / Model #{idx + 1}</span>
+                  <button type="button" className="icon-btn icon-btn-red" style={{ padding: 2 }}
+                    onClick={() => setForm(prev => ({ ...prev, equipment: (prev.equipment || []).filter(e => e.id !== eq.id) }))}
+                    title="Remove this equipment"><Trash2 size={14} /></button>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr 1fr', gap: '0.4rem' }}>
+                  <input type="text" className="form-input" style={{ fontSize: '0.8rem' }} placeholder="Model Number * (e.g. ZX050BE-TFD)" value={eq.modelNumber}
+                    onChange={e => { const v = e.target.value; setForm(prev => ({ ...prev, equipment: (prev.equipment || []).map(item => item.id === eq.id ? { ...item, modelNumber: v } : item) })); }} />
+                  <input type="text" className="form-input" style={{ fontSize: '0.8rem' }} placeholder="Part No. / SKU" value={eq.partNumber}
+                    onChange={e => { const v = e.target.value; setForm(prev => ({ ...prev, equipment: (prev.equipment || []).map(item => item.id === eq.id ? { ...item, partNumber: v } : item) })); }} />
+                  <input type="text" className="form-input" style={{ fontSize: '0.8rem' }} placeholder="Serial Number" value={eq.serialNumber}
+                    onChange={e => { const v = e.target.value; setForm(prev => ({ ...prev, equipment: (prev.equipment || []).map(item => item.id === eq.id ? { ...item, serialNumber: v } : item) })); }} />
+
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <input type="text" className="form-input" style={{ fontSize: '0.8rem' }} placeholder="Description / Machine Name (e.g. Emerson 5HP Scroll Chiller Unit)" value={eq.description}
+                      onChange={e => { const v = e.target.value; setForm(prev => ({ ...prev, equipment: (prev.equipment || []).map(item => item.id === eq.id ? { ...item, description: v } : item) })); }} />
+                  </div>
+                  <input type="text" className="form-input" style={{ fontSize: '0.8rem' }} placeholder="Capacity (e.g. 5 HP / 4.2 kW)" value={eq.capacity}
+                    onChange={e => { const v = e.target.value; setForm(prev => ({ ...prev, equipment: (prev.equipment || []).map(item => item.id === eq.id ? { ...item, capacity: v } : item) })); }} />
+
+                  <div style={{ gridColumn: 'span 2' }}>
+                    {sitesList.length > 0 ? (
+                      <select className="form-input" style={{ fontSize: '0.8rem' }} value={eq.siteName}
+                        onChange={e => { const v = e.target.value; setForm(prev => ({ ...prev, equipment: (prev.equipment || []).map(item => item.id === eq.id ? { ...item, siteName: v } : item) })); }}>
+                        <option value="">— Select Site Location (optional) —</option>
+                        {sitesList.map(s => <option key={s.id} value={s.siteName}>{s.siteName}{s.city ? ` (${s.city})` : ''}</option>)}
+                      </select>
+                    ) : (
+                      <input type="text" className="form-input" style={{ fontSize: '0.8rem' }} placeholder="Site Location / Plant Name" value={eq.siteName}
+                        onChange={e => { const v = e.target.value; setForm(prev => ({ ...prev, equipment: (prev.equipment || []).map(item => item.id === eq.id ? { ...item, siteName: v } : item) })); }} />
+                    )}
+                  </div>
+                  <div>
+                    <input type="text" className="form-input" style={{ fontSize: '0.8rem' }} placeholder="Warranty / AMC Expiry" value={eq.warrantyUntil}
+                      onChange={e => { const v = e.target.value; setForm(prev => ({ ...prev, equipment: (prev.equipment || []).map(item => item.id === eq.id ? { ...item, warrantyUntil: v } : item) })); }} />
+                  </div>
                 </div>
               </div>
             ))}
