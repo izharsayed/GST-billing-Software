@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Users, Search, FileText, ChevronDown, ChevronUp, Trash2, X, MessageCircle, Mail, Plus, Edit3, Copy, Upload, Download } from 'lucide-react';
+import { Users, Search, FileText, ChevronDown, ChevronUp, Trash2, X, MessageCircle, Mail, Plus, Edit3, Copy, Upload, Download, Wrench, MapPin, Zap } from 'lucide-react';
 import HelpButton from './HelpButton';
 import { getAllClients, getAllBills, deleteClient, saveClient, deleteBill, saveBill, getProfile, deleteReceipt, applyStockChanges, trashSavedPdf } from '../store';
 import { formatCurrency, INVOICE_TYPES, markPaidPatch, markUnpaidPatch, salesSign, countsAsSales, isCancelledBill, amountDue, localToday, parseLocalDate, appliedStock, stockDelta } from '../utils';
@@ -39,6 +39,7 @@ export default function ClientsView({ onEdit, onDuplicate, onNew }) {
   const [clients, setClients] = useState([]);
   const [bills, setBills] = useState([]);
   const [search, setSearch] = useState('');
+  const [viewMode, setViewMode] = useState('clients'); // 'clients' | 'equipment'
   const [expandedClient, setExpandedClient] = useState(null);
   const [showForm, setShowForm] = useState(false);
   const [modalClient, setModalClient] = useState(null);
@@ -588,6 +589,52 @@ export default function ClientsView({ onEdit, onDuplicate, onNew }) {
     }
   };
 
+  // Flatten all equipment across all saved clients for Asset Register & Universal Search
+  const allAssets = useMemo(() => {
+    return clients.flatMap(c => (c.equipment || []).map(eq => {
+      const site = (c.sites || []).find(s => s.siteName === eq.siteName);
+      return {
+        ...eq,
+        clientId: c.id,
+        clientName: c.name,
+        clientContactPerson: c.contactPerson,
+        clientPhone: c.phone,
+        clientEmail: c.email,
+        siteDetails: site || null,
+        fullClient: c,
+      };
+    }));
+  }, [clients]);
+
+  // Deep search across clients: checks name, contact person, GSTIN, city, state, address,
+  // sites (siteName, city, address), and equipment (modelNumber, partNumber, serialNumber, description, capacity)
+  const clientMatchesSearch = (clientName, q) => {
+    if (!q) return true;
+    if (clientName.toLowerCase().includes(q)) return true;
+    const c = clients.find(cli => cli.name === clientName);
+    if (!c) return false;
+    if (c.contactPerson?.toLowerCase().includes(q)) return true;
+    if (c.gstin?.toLowerCase().includes(q)) return true;
+    if (c.city?.toLowerCase().includes(q)) return true;
+    if (c.state?.toLowerCase().includes(q)) return true;
+    if (c.address?.toLowerCase().includes(q)) return true;
+    if ((c.sites || []).some(s =>
+      s.siteName?.toLowerCase().includes(q) ||
+      s.city?.toLowerCase().includes(q) ||
+      s.address?.toLowerCase().includes(q) ||
+      s.contactPerson?.toLowerCase().includes(q)
+    )) return true;
+    if ((c.equipment || []).some(eq =>
+      eq.modelNumber?.toLowerCase().includes(q) ||
+      eq.partNumber?.toLowerCase().includes(q) ||
+      eq.serialNumber?.toLowerCase().includes(q) ||
+      eq.description?.toLowerCase().includes(q) ||
+      eq.capacity?.toLowerCase().includes(q) ||
+      eq.siteName?.toLowerCase().includes(q)
+    )) return true;
+    return false;
+  };
+
   // Get all unique client names from bills (includes unsaved clients)
   const allClientNames = [...new Set([
     ...clients.map(c => c.name),
@@ -595,8 +642,84 @@ export default function ClientsView({ onEdit, onDuplicate, onNew }) {
   ])];
 
   const filteredClients = search.trim()
-    ? allClientNames.filter(name => name.toLowerCase().includes(search.toLowerCase()))
+    ? allClientNames.filter(name => clientMatchesSearch(name, search.trim().toLowerCase()))
     : allClientNames;
+
+  // Filter allAssets for the Equipment Register view
+  const filteredAssets = useMemo(() => {
+    const q = search.trim().toLowerCase();
+    if (!q) return allAssets;
+    return allAssets.filter(a =>
+      a.modelNumber?.toLowerCase().includes(q) ||
+      a.partNumber?.toLowerCase().includes(q) ||
+      a.serialNumber?.toLowerCase().includes(q) ||
+      a.description?.toLowerCase().includes(q) ||
+      a.capacity?.toLowerCase().includes(q) ||
+      a.siteName?.toLowerCase().includes(q) ||
+      a.clientName?.toLowerCase().includes(q) ||
+      a.clientContactPerson?.toLowerCase().includes(q) ||
+      a.siteDetails?.city?.toLowerCase().includes(q) ||
+      a.siteDetails?.address?.toLowerCase().includes(q) ||
+      a.warrantyUntil?.toLowerCase().includes(q)
+    );
+  }, [allAssets, search]);
+
+  const handleBillAsset = (asset) => {
+    const clientData = asset.fullClient;
+    const site = asset.siteDetails;
+    const itemName = [asset.modelNumber, asset.description].filter(Boolean).join(' - ') +
+      (asset.serialNumber ? ` (S/N: ${asset.serialNumber})` : '') +
+      (asset.siteName ? ` [Site: ${asset.siteName}]` : '');
+
+    const draft = {
+      client: {
+        name: clientData.name || '',
+        contactPerson: clientData.contactPerson || '',
+        address: clientData.address || '',
+        city: clientData.city || '',
+        state: clientData.state || '',
+        pin: clientData.pin || '',
+        gstin: clientData.gstin || '',
+        email: clientData.email || '',
+        phone: clientData.phone || '',
+        country: clientData.country || 'India',
+        isSEZ: !!clientData.isSEZ
+      },
+      details: {
+        shipToSameAsBilling: !site,
+        shippingAddress: site?.address || '',
+        shippingCity: site?.city || '',
+        shippingPin: site?.pin || '',
+        shippingState: site?.state || '',
+        placeOfSupply: site?.state || clientData.state || ''
+      },
+      items: [{
+        id: Date.now().toString(),
+        name: itemName,
+        hsn: asset.partNumber || '',
+        quantity: 1,
+        unit: 'Set',
+        rate: 0,
+        discount: 0,
+        discountType: 'fixed',
+        discountBase: 'net',
+        taxPercent: 18,
+        cessPercent: 0,
+        description: asset.capacity ? `Capacity: ${asset.capacity}` : ''
+      }]
+    };
+
+    try {
+      sessionStorage.setItem('gst_invoiceDraft', JSON.stringify(draft));
+    } catch {}
+
+    onNew();
+  };
+
+  const handleViewClientLedger = (clientName) => {
+    setViewMode('clients');
+    setExpandedClient(clientName);
+  };
 
   // Sort by outstanding amount
   const sortedClients = [...filteredClients].sort((a, b) => {
@@ -788,18 +911,180 @@ export default function ClientsView({ onEdit, onDuplicate, onNew }) {
       {/* Add/Edit Client Modal */}
       <ClientModal show={showForm} onClose={closeForm} onSave={handleModalSave} client={modalClient} isEditing={!!editingClientId} defaultCountry={profileCountry} />
 
-      {/* Search */}
+      {/* View Mode Toggle: Clients vs. Equipment Register */}
+      <div style={{ display: 'flex', gap: '0.5rem', marginBottom: '1rem', flexWrap: 'wrap', alignItems: 'center' }}>
+        <button
+          type="button"
+          className={`btn ${viewMode === 'clients' ? 'btn-primary' : 'btn-secondary'}`}
+          style={{ fontSize: '0.84rem', padding: '0.45rem 0.9rem', display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600 }}
+          onClick={() => setViewMode('clients')}
+        >
+          <Users size={16} /> Clients & Ledgers ({allClientNames.length})
+        </button>
+        <button
+          type="button"
+          className={`btn ${viewMode === 'equipment' ? 'btn-primary' : 'btn-secondary'}`}
+          style={{ fontSize: '0.84rem', padding: '0.45rem 0.9rem', display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600 }}
+          onClick={() => setViewMode('equipment')}
+        >
+          <Wrench size={16} /> Equipment & Asset Register ({allAssets.length})
+        </button>
+      </div>
+
+      {/* Universal Search */}
       <div className="glass-panel p-4 mb-6">
-        <div className="search-box" style={{ maxWidth: '400px' }}>
+        <div className="search-box" style={{ maxWidth: '540px' }}>
           <Search size={16} className="search-icon" />
-          <input type="text" placeholder="Search clients..." value={search}
-            onChange={e => setSearch(e.target.value)} className="search-input" />
+          <input type="text"
+            placeholder={viewMode === 'equipment'
+              ? "Search by Model No, Part/SKU, Serial No, Site Location, or Client..."
+              : "Search clients, contact person, site location, model no, part SKU..."}
+            value={search}
+            onChange={e => setSearch(e.target.value)}
+            className="search-input" />
           {search && <button className="icon-btn" onClick={() => setSearch('')}><X size={14} /></button>}
         </div>
       </div>
 
+      {/* Equipment & Asset Register View */}
+      {viewMode === 'equipment' && (
+        <>
+          {filteredAssets.length === 0 ? (
+            <div className="glass-panel p-6">
+              <div className="empty-state">
+                <Wrench size={48} />
+                <p>{allAssets.length === 0
+                  ? "No installed equipment or models registered yet. Go to Clients, edit a client, and add machines to their registry."
+                  : `No equipment or parts found matching "${search}".`}</p>
+                {allAssets.length === 0 && (
+                  <button className="btn btn-secondary" onClick={() => setViewMode('clients')} style={{ marginTop: '0.5rem' }}>
+                    <Users size={16} /> View Clients List
+                  </button>
+                )}
+              </div>
+            </div>
+          ) : (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(340px, 1fr))', gap: '1rem', marginBottom: '1.5rem' }}>
+              {filteredAssets.map(asset => (
+                <div key={asset.id} className="glass-panel p-4" style={{ display: 'flex', flexDirection: 'column', justifyContent: 'space-between', borderRadius: 8, border: '1px solid var(--border)' }}>
+                  <div>
+                    {/* Header: Model No + Capacity + AMC/Warranty */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', gap: '0.5rem', marginBottom: '0.4rem' }}>
+                      <div>
+                        <div style={{ fontSize: '1.02rem', fontWeight: 700, color: 'var(--primary)' }}>
+                          {asset.modelNumber || 'Unnamed Model'}
+                        </div>
+                        {asset.description && (
+                          <div style={{ fontSize: '0.82rem', color: 'var(--text-color)', marginTop: 2, fontWeight: 500 }}>
+                            {asset.description}
+                          </div>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 4 }}>
+                        {asset.capacity && (
+                          <span style={{ fontSize: '0.72rem', fontWeight: 600, background: 'var(--bg-secondary)', border: '1px solid var(--border)', padding: '2px 6px', borderRadius: 4 }}>
+                            {asset.capacity}
+                          </span>
+                        )}
+                        {asset.warrantyUntil && (
+                          <span style={{ fontSize: '0.68rem', fontWeight: 600, padding: '2px 6px', borderRadius: 4, background: '#ecfdf5', color: '#059669', border: '1px solid #a7f3d0' }}>
+                            🛡️ {asset.warrantyUntil}
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    {/* Part SKU & Serial Number */}
+                    <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', margin: '0.4rem 0 0.75rem', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                      {asset.partNumber && (
+                        <span style={{ background: 'var(--bg-secondary)', padding: '2px 6px', borderRadius: 4 }}>
+                          <strong>Part SKU:</strong> {asset.partNumber}
+                        </span>
+                      )}
+                      {asset.serialNumber && (
+                        <span style={{ background: 'var(--bg-secondary)', padding: '2px 6px', borderRadius: 4 }}>
+                          <strong>S/N:</strong> {asset.serialNumber}
+                        </span>
+                      )}
+                    </div>
+
+                    {/* Installed Location & Client Box */}
+                    <div style={{ background: 'var(--bg-secondary)', borderRadius: 6, padding: '0.65rem 0.75rem', marginBottom: '0.75rem', fontSize: '0.78rem' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', fontWeight: 600, marginBottom: 3 }}>
+                        <span style={{ fontSize: '0.85rem' }}>🏢</span>
+                        <span>{asset.clientName}</span>
+                        {asset.clientContactPerson && (
+                          <span style={{ color: 'var(--text-muted)', fontWeight: 400, fontSize: '0.74rem' }}>
+                            ({asset.clientContactPerson})
+                          </span>
+                        )}
+                      </div>
+                      <div style={{ display: 'flex', alignItems: 'flex-start', gap: '0.4rem', color: 'var(--text-muted)', marginTop: 4 }}>
+                        <MapPin size={13} style={{ flexShrink: 0, marginTop: 2, color: '#0284c7' }} />
+                        <div>
+                          <strong style={{ color: 'var(--text-color)' }}>{asset.siteName || 'Main Office / Billing Address'}</strong>
+                          {asset.siteDetails ? (
+                            <div style={{ fontSize: '0.72rem', marginTop: 1 }}>
+                              {[asset.siteDetails.address, asset.siteDetails.city, asset.siteDetails.state, asset.siteDetails.pin].filter(Boolean).join(', ')}
+                            </div>
+                          ) : (
+                            asset.fullClient?.address && (
+                              <div style={{ fontSize: '0.72rem', marginTop: 1 }}>
+                                {[asset.fullClient.address, asset.fullClient.city, asset.fullClient.state, asset.fullClient.pin].filter(Boolean).join(', ')}
+                              </div>
+                            )
+                          )}
+                        </div>
+                      </div>
+                      {asset.siteDetails?.contactPerson && (
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: 4, paddingLeft: 18 }}>
+                          Site Contact: {asset.siteDetails.contactPerson}{asset.siteDetails.phone ? ` • ${asset.siteDetails.phone}` : ''}
+                        </div>
+                      )}
+                    </div>
+                  </div>
+
+                  {/* Card Actions */}
+                  <div style={{ display: 'flex', gap: '0.4rem', borderTop: '1px solid var(--border)', paddingTop: '0.6rem', marginTop: '0.25rem', flexWrap: 'wrap' }}>
+                    <button
+                      type="button"
+                      className="btn btn-primary"
+                      style={{ fontSize: '0.75rem', padding: '0.35rem 0.65rem', display: 'flex', alignItems: 'center', gap: '0.3rem', flex: 1, justifyContent: 'center', fontWeight: 600 }}
+                      onClick={() => handleBillAsset(asset)}
+                      title="Create new invoice with this client and machine pre-filled"
+                    >
+                      <Zap size={13} /> Bill This Asset
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      style={{ fontSize: '0.75rem', padding: '0.35rem 0.6rem' }}
+                      onClick={() => handleViewClientLedger(asset.clientName)}
+                      title="Open client ledger and invoices"
+                    >
+                      Ledger
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      style={{ fontSize: '0.75rem', padding: '0.35rem 0.6rem' }}
+                      onClick={() => openEditClient(asset.fullClient)}
+                      title="Edit client or equipment details"
+                    >
+                      Edit
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+        </>
+      )}
+
       {/* Client cards */}
-      {sortedClients.length === 0 ? (
+      {viewMode === 'clients' && (
+        <>
+          {sortedClients.length === 0 ? (
         <div className="glass-panel p-6">
           <div className="empty-state">
             <Users size={48} />
@@ -833,6 +1118,34 @@ export default function ClientsView({ onEdit, onDuplicate, onNew }) {
                         {savedClient?.state ? ` | ${savedClient.state}` : ''}
                         {savedClient?.gstin ? ` | ${savedClient.gstin}` : ''}
                       </p>
+                      {search.trim() && (() => {
+                        const q = search.trim().toLowerCase();
+                        const matchedEq = (savedClient?.equipment || []).filter(eq =>
+                          eq.modelNumber?.toLowerCase().includes(q) ||
+                          eq.partNumber?.toLowerCase().includes(q) ||
+                          eq.serialNumber?.toLowerCase().includes(q) ||
+                          eq.description?.toLowerCase().includes(q)
+                        );
+                        const matchedSites = (savedClient?.sites || []).filter(s =>
+                          s.siteName?.toLowerCase().includes(q) ||
+                          s.city?.toLowerCase().includes(q)
+                        );
+                        if (matchedEq.length === 0 && matchedSites.length === 0) return null;
+                        return (
+                          <div style={{ marginTop: '0.25rem', display: 'flex', gap: '0.4rem', flexWrap: 'wrap', fontSize: '0.7rem' }}>
+                            {matchedEq.map(eq => (
+                              <span key={eq.id} style={{ background: '#ede9fe', color: '#6d28d9', padding: '1px 6px', borderRadius: 4, fontWeight: 500 }}>
+                                ⚙️ {eq.modelNumber}{eq.partNumber ? ` (${eq.partNumber})` : ''}
+                              </span>
+                            ))}
+                            {matchedSites.map(s => (
+                              <span key={s.id} style={{ background: '#e0f2fe', color: '#0369a1', padding: '1px 6px', borderRadius: 4, fontWeight: 500 }}>
+                                📍 {s.siteName}{s.city ? ` (${s.city})` : ''}
+                              </span>
+                            ))}
+                          </div>
+                        );
+                      })()}
                     </div>
                   </div>
                   <div className="client-card-stats">
@@ -1050,6 +1363,8 @@ export default function ClientsView({ onEdit, onDuplicate, onNew }) {
             );
           })}
         </div>
+      )}
+        </>
       )}
     </div>
   );
