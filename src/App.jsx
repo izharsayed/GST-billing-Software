@@ -450,10 +450,16 @@ function App() {
     setSidebarAutoHide(on);
     try { localStorage.setItem('freegstbill_sidebarAutoHide', on ? '1' : '0'); } catch { /* private mode */ }
   };
-  const handleNewInvoice = () => {
+  const handleNewInvoice = (initialDraft) => {
     setEditorKey((k) => k + 1);
-    sessionStorage.removeItem('gst_invoiceDraft');
-    setEditingBill(null);
+    const isExplicitDraft = initialDraft && typeof initialDraft === 'object' && !initialDraft.nativeEvent;
+    if (isExplicitDraft) {
+      try { sessionStorage.setItem('gst_invoiceDraft', JSON.stringify(initialDraft)); } catch { /* private mode */ }
+      setEditingBill(null);
+    } else {
+      sessionStorage.removeItem('gst_invoiceDraft');
+      setEditingBill(null);
+    }
     setCurrentView('new');
   };
 

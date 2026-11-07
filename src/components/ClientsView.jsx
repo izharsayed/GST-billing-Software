@@ -713,7 +713,7 @@ export default function ClientsView({ onEdit, onDuplicate, onNew }) {
       sessionStorage.setItem('gst_invoiceDraft', JSON.stringify(draft));
     } catch {}
 
-    onNew();
+    onNew(draft);
   };
 
   const handleViewClientLedger = (clientName) => {
