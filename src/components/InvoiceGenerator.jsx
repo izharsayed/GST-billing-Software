@@ -4632,6 +4632,38 @@ export default function InvoiceGenerator({ onBack, profile: profileProp, editing
                 </label>
                 {details.shipToSameAsBilling === false && (
                   <div className="grid grid-cols-2 gap-3" style={{ marginTop: '0.6rem' }}>
+                    {/* Site picker — auto-fill from saved project sites */}
+                    {(() => {
+                      const cli = selectedClientId ? savedClients.find(c => c.id === selectedClientId) : null;
+                      const sites = cli?.sites?.length ? cli.sites : null;
+                      if (!sites) return null;
+                      return (
+                        <div className="form-group full-width">
+                          <label className="form-label" style={{ fontSize: '0.78rem' }}>📍 Select Project Site</label>
+                          <select className="form-input" style={{ fontSize: '0.82rem', fontWeight: 500 }}
+                            value=""
+                            onChange={e => {
+                              const site = sites.find(s => s.id === e.target.value);
+                              if (site) {
+                                setDetails(prev => ({
+                                  ...prev,
+                                  shippingAddress: site.address || '',
+                                  shippingCity: site.city || '',
+                                  shippingPin: site.pin || '',
+                                  shippingState: site.state || '',
+                                }));
+                              }
+                            }}>
+                            <option value="">— Choose a saved site to auto-fill —</option>
+                            {sites.map(s => (
+                              <option key={s.id} value={s.id}>
+                                {s.siteName}{s.city ? ` — ${s.city}` : ''}{s.state ? `, ${s.state}` : ''}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+                      );
+                    })()}
                     <div className="form-group full-width">
                       <label className="form-label" style={{ fontSize: '0.78rem' }}>Shipping Address</label>
                       <textarea className="form-input" rows={2} value={details.shippingAddress || ''}

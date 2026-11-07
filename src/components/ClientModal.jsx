@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { X } from 'lucide-react';
+import { X, Plus, Trash2, MapPin, ChevronDown, ChevronUp } from 'lucide-react';
 import { getCountryConfig, getStatesForCountry, validateTaxId, detectCountryFromBrowser, getCountriesForRegion, PAPER_SIZES, decodeGstin } from '../utils';
 import { getRegionMode } from '../store';
 
@@ -7,7 +7,7 @@ export default function ClientModal({ show, onClose, onSave, client, isEditing, 
   // Country defaults: explicit prop (active business profile) → browser locale → 'India'.
   const fallbackCountry = defaultCountry || detectCountryFromBrowser();
   const emptyForm = {
-    name: '', address: '', city: '', pin: '', state: '', gstin: '', email: '', phone: '',
+    name: '', contactPerson: '', address: '', city: '', pin: '', state: '', gstin: '', email: '', phone: '',
     country: fallbackCountry, isSEZ: false,
     // v1.9.1 — per-client print preferences. When set, they auto-populate
     // invoiceOptions when the user creates a new invoice for this client.
@@ -15,6 +15,7 @@ export default function ClientModal({ show, onClose, onSave, client, isEditing, 
     preferredPaperSize: '',   // '' | 'a4' | 'a5' | 'thermal80' | ...
     preferredCurrency: '',    // '' | 'INR' | 'USD' | ...
     autoPrint: false,          // per-client auto-print override
+    sites: [],                   // project sites / delivery addresses
   };
   const [form, setForm] = useState({ ...emptyForm });
   const [taxIdWarning, setTaxIdWarning] = useState('');
@@ -22,13 +23,14 @@ export default function ClientModal({ show, onClose, onSave, client, isEditing, 
   useEffect(() => {
     if (show && client) {
       setForm({
-        name: client.name || '', address: client.address || '', city: client.city || '',
+        name: client.name || '', contactPerson: client.contactPerson || '', address: client.address || '', city: client.city || '',
         pin: client.pin || '', state: client.state || '', gstin: client.gstin || '',
         email: client.email || '', phone: client.phone || '', country: client.country || fallbackCountry,
         isSEZ: !!client.isSEZ,
         preferredPaperSize: client.preferredPaperSize || '',
         preferredCurrency: client.preferredCurrency || '',
         autoPrint: !!client.autoPrint,
+        sites: Array.isArray(client.sites) ? client.sites : [],
       });
     } else if (show) {
       setForm({ ...emptyForm });
@@ -71,7 +73,7 @@ export default function ClientModal({ show, onClose, onSave, client, isEditing, 
 
   return (
     <div className="modal-overlay">
-      <div className="modal-content" style={{ maxWidth: '520px' }}>
+      <div className="modal-content" style={{ maxWidth: '680px' }}>
         <div className="flex justify-between items-center mb-4">
           <h3 className="section-title" style={{ margin: 0 }}>{isEditing ? 'Edit Client' : 'Add New Client'}</h3>
           <button type="button" className="icon-btn" onClick={onClose} title="Close"><X size={18} /></button>
@@ -80,6 +82,10 @@ export default function ClientModal({ show, onClose, onSave, client, isEditing, 
           <div className="form-group" style={{ gridColumn: 'span 2' }}>
             <label className="form-label">Client / Business Name *</label>
             <input type="text" className="form-input" value={form.name} onChange={e => setForm(prev => ({ ...prev, name: e.target.value }))} placeholder="e.g. Acme Corp" />
+          </div>
+          <div className="form-group" style={{ gridColumn: 'span 2' }}>
+            <label className="form-label">Contact Person</label>
+            <input type="text" className="form-input" value={form.contactPerson} onChange={e => setForm(prev => ({ ...prev, contactPerson: e.target.value }))} placeholder="e.g. Mr. Rajesh Sharma — Purchase Manager" />
           </div>
           <div className="form-group" style={{ gridColumn: 'span 2' }}>
             <label className="form-label">Address</label>
@@ -145,6 +151,55 @@ export default function ClientModal({ show, onClose, onSave, client, isEditing, 
               </label>
             </div>
           )}
+
+          {/* Project Sites / Delivery Addresses */}
+          <div className="form-group" style={{ gridColumn: 'span 2', paddingTop: '0.5rem', borderTop: '1px solid var(--border)', marginTop: '0.5rem' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+              <div style={{ fontSize: '0.72rem', fontWeight: 700, color: 'var(--text-muted)', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                <MapPin size={12} style={{ display: 'inline', marginRight: 4 }} />
+                Project Sites / Delivery Addresses
+              </div>
+              <button type="button" className="btn btn-secondary" style={{ fontSize: '0.72rem', padding: '0.2rem 0.5rem' }}
+                onClick={() => setForm(prev => ({ ...prev, sites: [...prev.sites, { id: Date.now().toString(), siteName: '', address: '', city: '', state: '', pin: '', contactPerson: '', phone: '' }] }))}>
+                <Plus size={12} /> Add Site
+              </button>
+            </div>
+            {form.sites.length === 0 && (
+              <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '0.25rem 0', fontStyle: 'italic' }}>
+                No project sites yet. Add sites to quickly fill Ship-To address on invoices.
+              </p>
+            )}
+            {form.sites.map((site, idx) => (
+              <div key={site.id} style={{ border: '1px solid var(--border)', borderRadius: 6, padding: '0.6rem', marginBottom: '0.5rem', background: 'var(--bg-secondary)' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                  <span style={{ fontSize: '0.78rem', fontWeight: 600 }}>Site #{idx + 1}</span>
+                  <button type="button" className="icon-btn icon-btn-red" style={{ padding: 2 }}
+                    onClick={() => setForm(prev => ({ ...prev, sites: prev.sites.filter(s => s.id !== site.id) }))}
+                    title="Remove this site"><Trash2 size={14} /></button>
+                </div>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem' }}>
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <input type="text" className="form-input" style={{ fontSize: '0.8rem' }} placeholder="Site / Project Name *" value={site.siteName}
+                      onChange={e => { const v = e.target.value; setForm(prev => ({ ...prev, sites: prev.sites.map(s => s.id === site.id ? { ...s, siteName: v } : s) })); }} />
+                  </div>
+                  <div style={{ gridColumn: 'span 2' }}>
+                    <input type="text" className="form-input" style={{ fontSize: '0.8rem' }} placeholder="Address" value={site.address}
+                      onChange={e => { const v = e.target.value; setForm(prev => ({ ...prev, sites: prev.sites.map(s => s.id === site.id ? { ...s, address: v } : s) })); }} />
+                  </div>
+                  <input type="text" className="form-input" style={{ fontSize: '0.8rem' }} placeholder="City" value={site.city}
+                    onChange={e => { const v = e.target.value; setForm(prev => ({ ...prev, sites: prev.sites.map(s => s.id === site.id ? { ...s, city: v } : s) })); }} />
+                  <input type="text" className="form-input" style={{ fontSize: '0.8rem' }} placeholder="State" value={site.state}
+                    onChange={e => { const v = e.target.value; setForm(prev => ({ ...prev, sites: prev.sites.map(s => s.id === site.id ? { ...s, state: v } : s) })); }} />
+                  <input type="text" className="form-input" style={{ fontSize: '0.8rem' }} placeholder="PIN Code" value={site.pin} maxLength={6}
+                    onChange={e => { const v = e.target.value; setForm(prev => ({ ...prev, sites: prev.sites.map(s => s.id === site.id ? { ...s, pin: v } : s) })); }} />
+                  <input type="text" className="form-input" style={{ fontSize: '0.8rem' }} placeholder="Site Contact Person" value={site.contactPerson}
+                    onChange={e => { const v = e.target.value; setForm(prev => ({ ...prev, sites: prev.sites.map(s => s.id === site.id ? { ...s, contactPerson: v } : s) })); }} />
+                  <input type="tel" className="form-input" style={{ fontSize: '0.8rem' }} placeholder="Site Phone" value={site.phone}
+                    onChange={e => { const v = e.target.value; setForm(prev => ({ ...prev, sites: prev.sites.map(s => s.id === site.id ? { ...s, phone: v } : s) })); }} />
+                </div>
+              </div>
+            ))}
+          </div>
 
           {/* v1.9.1 — per-client print preferences. All optional; leave blank
               to use the app-wide defaults from Settings. When set, they

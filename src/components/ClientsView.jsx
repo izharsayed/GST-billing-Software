@@ -135,6 +135,7 @@ export default function ClientsView({ onEdit, onDuplicate, onNew }) {
         profileForStatement?.phone ? `Ph: ${profileForStatement.phone}` : null,
       ].filter(Boolean);
       const clientLines = [
+        savedClient.contactPerson || null,
         savedClient.address,
         [savedClient.city, savedClient.state, savedClient.pin].filter(Boolean).join(', '),
         savedClient.gstin ? `GSTIN: ${savedClient.gstin}` : null,
@@ -828,6 +829,7 @@ export default function ClientsView({ onEdit, onDuplicate, onNew }) {
                       <h3 className="client-card-name">{clientName}</h3>
                       <p className="client-card-meta">
                         {stats.count} invoice{stats.count !== 1 ? 's' : ''}
+                        {savedClient?.contactPerson ? ` | ${savedClient.contactPerson}` : ''}
                         {savedClient?.state ? ` | ${savedClient.state}` : ''}
                         {savedClient?.gstin ? ` | ${savedClient.gstin}` : ''}
                       </p>
@@ -903,13 +905,27 @@ export default function ClientsView({ onEdit, onDuplicate, onNew }) {
                     })()}
 
                     {/* Client details */}
-                    {savedClient && (savedClient.address || savedClient.city || savedClient.email || savedClient.phone) && (
+                    {savedClient && (savedClient.address || savedClient.city || savedClient.email || savedClient.phone || savedClient.contactPerson) && (
                       <div style={{ padding: '0.75rem 1.5rem', borderBottom: '1px solid var(--border)', display: 'flex', gap: '1.5rem', flexWrap: 'wrap', fontSize: '0.8rem', color: 'var(--text-muted)' }}>
+                        {savedClient.contactPerson && <span style={{ fontWeight: 600 }}>{savedClient.contactPerson}</span>}
                         {(savedClient.address || savedClient.city || savedClient.pin) && (
                           <span>{[savedClient.address, savedClient.city, savedClient.pin].filter(Boolean).join(', ')}</span>
                         )}
                         {savedClient.email && <span>{savedClient.email}</span>}
                         {savedClient.phone && <span>{savedClient.phone}</span>}
+                      </div>
+                    )}
+                    {/* Project Sites list */}
+                    {savedClient?.sites?.length > 0 && (
+                      <div style={{ padding: '0.5rem 1.5rem', borderBottom: '1px solid var(--border)', fontSize: '0.75rem', color: 'var(--text-muted)' }}>
+                        <span style={{ fontWeight: 600, textTransform: 'uppercase', letterSpacing: '0.04em', fontSize: '0.68rem' }}>📍 Project Sites:</span>
+                        <div style={{ display: 'flex', gap: '0.75rem', flexWrap: 'wrap', marginTop: '0.25rem' }}>
+                          {savedClient.sites.map(site => (
+                            <span key={site.id} style={{ background: 'var(--bg-primary)', border: '1px solid var(--border)', borderRadius: 4, padding: '0.2rem 0.5rem' }}>
+                              <strong>{site.siteName}</strong>{site.city ? ` — ${site.city}` : ''}{site.state ? `, ${site.state}` : ''}
+                            </span>
+                          ))}
+                        </div>
                       </div>
                     )}
                     {clientBills.length === 0 ? (
