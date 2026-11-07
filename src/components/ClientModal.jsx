@@ -71,6 +71,8 @@ export default function ClientModal({ show, onClose, onSave, client, isEditing, 
     onSave(form);
   };
 
+  const sitesList = Array.isArray(form.sites) ? form.sites : [];
+
   return (
     <div className="modal-overlay">
       <div className="modal-content" style={{ maxWidth: '680px' }}>
@@ -160,42 +162,42 @@ export default function ClientModal({ show, onClose, onSave, client, isEditing, 
                 Project Sites / Delivery Addresses
               </div>
               <button type="button" className="btn btn-secondary" style={{ fontSize: '0.72rem', padding: '0.2rem 0.5rem' }}
-                onClick={() => setForm(prev => ({ ...prev, sites: [...prev.sites, { id: Date.now().toString(), siteName: '', address: '', city: '', state: '', pin: '', contactPerson: '', phone: '' }] }))}>
+                onClick={() => setForm(prev => ({ ...prev, sites: [...(Array.isArray(prev.sites) ? prev.sites : []),  { id: Date.now().toString(), siteName: '', address: '', city: '', state: '', pin: '', contactPerson: '', phone: '' }] }))}>
                 <Plus size={12} /> Add Site
               </button>
             </div>
-            {form.sites.length === 0 && (
+            {(form.sites || []).length === 0 && (
               <p style={{ fontSize: '0.72rem', color: 'var(--text-muted)', margin: '0.25rem 0', fontStyle: 'italic' }}>
                 No project sites yet. Add sites to quickly fill Ship-To address on invoices.
               </p>
             )}
-            {form.sites.map((site, idx) => (
+            {(form.sites || []).map((site, idx) => (
               <div key={site.id} style={{ border: '1px solid var(--border)', borderRadius: 6, padding: '0.6rem', marginBottom: '0.5rem', background: 'var(--bg-secondary)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
                   <span style={{ fontSize: '0.78rem', fontWeight: 600 }}>Site #{idx + 1}</span>
                   <button type="button" className="icon-btn icon-btn-red" style={{ padding: 2 }}
-                    onClick={() => setForm(prev => ({ ...prev, sites: prev.sites.filter(s => s.id !== site.id) }))}
+                    onClick={() => setForm(prev => ({ ...prev, sites: (prev.sites || []).filter(s => s.id !== site.id) }))}
                     title="Remove this site"><Trash2 size={14} /></button>
                 </div>
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem' }}>
                   <div style={{ gridColumn: 'span 2' }}>
                     <input type="text" className="form-input" style={{ fontSize: '0.8rem' }} placeholder="Site / Project Name *" value={site.siteName}
-                      onChange={e => { const v = e.target.value; setForm(prev => ({ ...prev, sites: prev.sites.map(s => s.id === site.id ? { ...s, siteName: v } : s) })); }} />
+                      onChange={e => { const v = e.target.value; setForm(prev => ({ ...prev, sites: (prev.sites || []).map(s => s.id === site.id ? { ...s, siteName: v } : s) })); }} />
                   </div>
                   <div style={{ gridColumn: 'span 2' }}>
                     <input type="text" className="form-input" style={{ fontSize: '0.8rem' }} placeholder="Address" value={site.address}
-                      onChange={e => { const v = e.target.value; setForm(prev => ({ ...prev, sites: prev.sites.map(s => s.id === site.id ? { ...s, address: v } : s) })); }} />
+                      onChange={e => { const v = e.target.value; setForm(prev => ({ ...prev, sites: (prev.sites || []).map(s => s.id === site.id ? { ...s, address: v } : s) })); }} />
                   </div>
                   <input type="text" className="form-input" style={{ fontSize: '0.8rem' }} placeholder="City" value={site.city}
-                    onChange={e => { const v = e.target.value; setForm(prev => ({ ...prev, sites: prev.sites.map(s => s.id === site.id ? { ...s, city: v } : s) })); }} />
+                    onChange={e => { const v = e.target.value; setForm(prev => ({ ...prev, sites: (prev.sites || []).map(s => s.id === site.id ? { ...s, city: v } : s) })); }} />
                   <input type="text" className="form-input" style={{ fontSize: '0.8rem' }} placeholder="State" value={site.state}
-                    onChange={e => { const v = e.target.value; setForm(prev => ({ ...prev, sites: prev.sites.map(s => s.id === site.id ? { ...s, state: v } : s) })); }} />
+                    onChange={e => { const v = e.target.value; setForm(prev => ({ ...prev, sites: (prev.sites || []).map(s => s.id === site.id ? { ...s, state: v } : s) })); }} />
                   <input type="text" className="form-input" style={{ fontSize: '0.8rem' }} placeholder="PIN Code" value={site.pin} maxLength={6}
-                    onChange={e => { const v = e.target.value; setForm(prev => ({ ...prev, sites: prev.sites.map(s => s.id === site.id ? { ...s, pin: v } : s) })); }} />
+                    onChange={e => { const v = e.target.value; setForm(prev => ({ ...prev, sites: (prev.sites || []).map(s => s.id === site.id ? { ...s, pin: v } : s) })); }} />
                   <input type="text" className="form-input" style={{ fontSize: '0.8rem' }} placeholder="Site Contact Person" value={site.contactPerson}
-                    onChange={e => { const v = e.target.value; setForm(prev => ({ ...prev, sites: prev.sites.map(s => s.id === site.id ? { ...s, contactPerson: v } : s) })); }} />
+                    onChange={e => { const v = e.target.value; setForm(prev => ({ ...prev, sites: (prev.sites || []).map(s => s.id === site.id ? { ...s, contactPerson: v } : s) })); }} />
                   <input type="tel" className="form-input" style={{ fontSize: '0.8rem' }} placeholder="Site Phone" value={site.phone}
-                    onChange={e => { const v = e.target.value; setForm(prev => ({ ...prev, sites: prev.sites.map(s => s.id === site.id ? { ...s, phone: v } : s) })); }} />
+                    onChange={e => { const v = e.target.value; setForm(prev => ({ ...prev, sites: (prev.sites || []).map(s => s.id === site.id ? { ...s, phone: v } : s) })); }} />
                 </div>
               </div>
             ))}
