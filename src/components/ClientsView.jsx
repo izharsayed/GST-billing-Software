@@ -1118,6 +1118,53 @@ export default function ClientsView({ onEdit, onDuplicate, onNew }) {
                         {savedClient?.state ? ` | ${savedClient.state}` : ''}
                         {savedClient?.gstin ? ` | ${savedClient.gstin}` : ''}
                       </p>
+                      {/* Always-visible AMC & Warranty Badges on Front of Card */}
+                      {savedClient && (savedClient.amcExpiry || (savedClient.equipment || []).some(eq => eq.warrantyUntil)) && (
+                        <div style={{ marginTop: '0.35rem', display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                          {savedClient.amcExpiry && (
+                            <span style={{
+                              fontSize: '0.74rem',
+                              fontWeight: 600,
+                              padding: '2px 8px',
+                              borderRadius: 4,
+                              background: '#eff6ff',
+                              color: '#1d4ed8',
+                              border: '1px solid #bfdbfe',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '4px'
+                            }}>
+                              <span>🛡️</span>
+                              <span>AMC Contract: <strong>{savedClient.amcExpiry}</strong></span>
+                            </span>
+                          )}
+                          {(savedClient.equipment || []).filter(eq => eq.warrantyUntil).map(eq => {
+                            const val = (eq.warrantyUntil || '').toLowerCase();
+                            const isExpired = val.includes('expire') && !val.includes('active');
+                            return (
+                              <span
+                                key={eq.id}
+                                style={{
+                                  fontSize: '0.74rem',
+                                  fontWeight: 600,
+                                  padding: '2px 8px',
+                                  borderRadius: 4,
+                                  background: isExpired ? '#fef2f2' : '#ecfdf5',
+                                  color: isExpired ? '#dc2626' : '#059669',
+                                  border: `1px solid ${isExpired ? '#fecaca' : '#a7f3d0'}`,
+                                  display: 'inline-flex',
+                                  alignItems: 'center',
+                                  gap: '4px'
+                                }}
+                                title={`Model: ${eq.modelNumber || 'Machine'} • S/N: ${eq.serialNumber || 'N/A'} • Site: ${eq.siteName || 'N/A'}`}
+                              >
+                                <span>🛡️</span>
+                                <span>{eq.modelNumber ? `${eq.modelNumber}: ` : 'Warranty: '}<strong>{eq.warrantyUntil}</strong></span>
+                              </span>
+                            );
+                          })}
+                        </div>
+                      )}
                       {search.trim() && (() => {
                         const q = search.trim().toLowerCase();
                         const matchedEq = (savedClient?.equipment || []).filter(eq =>

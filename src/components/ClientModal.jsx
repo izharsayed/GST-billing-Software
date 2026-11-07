@@ -7,7 +7,7 @@ export default function ClientModal({ show, onClose, onSave, client, isEditing, 
   // Country defaults: explicit prop (active business profile) → browser locale → 'India'.
   const fallbackCountry = defaultCountry || detectCountryFromBrowser();
   const emptyForm = {
-    name: '', contactPerson: '', address: '', city: '', pin: '', state: '', gstin: '', email: '', phone: '',
+    name: '', contactPerson: '', amcExpiry: '', address: '', city: '', pin: '', state: '', gstin: '', email: '', phone: '',
     country: fallbackCountry, isSEZ: false,
     // v1.9.1 — per-client print preferences. When set, they auto-populate
     // invoiceOptions when the user creates a new invoice for this client.
@@ -24,7 +24,7 @@ export default function ClientModal({ show, onClose, onSave, client, isEditing, 
   useEffect(() => {
     if (show && client) {
       setForm({
-        name: client.name || '', contactPerson: client.contactPerson || '', address: client.address || '', city: client.city || '',
+        name: client.name || '', contactPerson: client.contactPerson || '', amcExpiry: client.amcExpiry || '', address: client.address || '', city: client.city || '',
         pin: client.pin || '', state: client.state || '', gstin: client.gstin || '',
         email: client.email || '', phone: client.phone || '', country: client.country || fallbackCountry,
         isSEZ: !!client.isSEZ,
@@ -144,6 +144,10 @@ export default function ClientModal({ show, onClose, onSave, client, isEditing, 
           <div className="form-group">
             <label className="form-label">Phone</label>
             <input type="tel" className="form-input" value={form.phone} onChange={e => setForm(prev => ({ ...prev, phone: e.target.value }))} placeholder="+91 98765 43210" />
+          </div>
+          <div className="form-group" style={{ gridColumn: 'span 2' }}>
+            <label className="form-label">AMC / Warranty Contract Expiry (Overall)</label>
+            <input type="text" className="form-input" value={form.amcExpiry || ''} onChange={e => setForm(prev => ({ ...prev, amcExpiry: e.target.value }))} placeholder="e.g. 31-Dec-2027 (AMC Active)" />
           </div>
           {form.country === 'India' && (
             <div className="form-group" style={{ gridColumn: 'span 2' }}>
