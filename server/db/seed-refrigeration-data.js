@@ -296,83 +296,118 @@ export function seedRefrigerationData() {
     }
 
     // ---------------------------------------------------------------
-    // 8. DAIKIN COMMERCIAL CONDENSING UNITS (Medium & Low Temp)
-    // From Daikin Cold Room Catalogue 2024 (DAIPL-2024/25-24/2/ColdRoom-1A)
+    // 8. DAIKIN COMMERCIAL OUTDOOR CONDENSING UNITS (CCU)
+    // From Daikin Commercial Refrigeration Specification (R404A / 38°C Ambient)
     // ---------------------------------------------------------------
     const daikinCdus = [
-      // Medium Temp (@ -5°C Te, 38°C Ambient)
-      { model: 'CCMR0200ARY16', hp: 2, cap_w: 3978, comp: 'KCM511-CAL', type: 'Reciprocating', temp: 'Medium (0 to 15°C)', refr: 'R404A', liquid: '3/8"', suction: '5/8"', weight: 73, sound: 62 },
-      { model: 'CCMR0300ARY16', hp: 3, cap_w: 5805, comp: 'KCM522-CAL', type: 'Reciprocating', temp: 'Medium (0 to 15°C)', refr: 'R404A', liquid: '3/8"', suction: '5/8"', weight: 76, sound: 67 },
-      { model: 'CCMS0400ARY16', hp: 4, cap_w: 7805, comp: 'ZB29KQE-TFD', type: 'Scroll', temp: 'Medium (0 to 15°C)', refr: 'R404A', liquid: '1/2"', suction: '7/8"', weight: 94, sound: 71 },
-      { model: 'CCMS0600ARY16', hp: 6, cap_w: 10589, comp: 'ZB45KQE-TFD', type: 'Scroll', temp: 'Medium (0 to 15°C)', refr: 'R404A', liquid: '1/2"', suction: '7/8"', weight: 107, sound: 71 },
-      { model: 'CCMS0800ARY16', hp: 8, cap_w: 15000, comp: 'ZB58KQE-TFD-550', type: 'Scroll', temp: 'Medium (0 to 15°C)', refr: 'R404A', liquid: '5/8"', suction: '1-1/8"', weight: 167, sound: 73 },
-      { model: 'CCMS1000ARY16', hp: 10, cap_w: 20000, comp: 'ZB76KQE-TFD-550', type: 'Scroll', temp: 'Medium (0 to 15°C)', refr: 'R404A', liquid: '5/8"', suction: '1-1/8"', weight: 167, sound: 72 },
-      // Low Temp (@ -25°C Te, 38°C Ambient)
-      { model: 'CCLR0200ARY16', hp: 2, cap_w: 1914, comp: 'KCM512-LAL', type: 'Reciprocating', temp: 'Low (-25 to -15°C)', refr: 'R404A', liquid: '3/8"', suction: '5/8"', weight: 78, sound: 68 },
-      { model: 'CCLR0300ARY16', hp: 3, cap_w: 2510, comp: 'KCM515-LAL', type: 'Reciprocating', temp: 'Low (-25 to -15°C)', refr: 'R404A', liquid: '3/8"', suction: '5/8"', weight: 86, sound: 66 },
-      { model: 'CCLS0400ARY16', hp: 4, cap_w: 3816, comp: 'ZF13K4E-TFD', type: 'Scroll', temp: 'Low (-25 to -15°C)', refr: 'R404A', liquid: '1/2"', suction: '7/8"', weight: 108, sound: 71 },
-      { model: 'CCLS0600ARY16', hp: 6, cap_w: 5429, comp: 'ZF18K4E-TFD', type: 'Scroll', temp: 'Low (-25 to -15°C)', refr: 'R404A', liquid: '1/2"', suction: '7/8"', weight: 112, sound: 72 },
-      { model: 'CCLS0800ARY16', hp: 8, cap_w: 6525, comp: 'ZF25KQE-TFD-550', type: 'Scroll', temp: 'Low (-25 to -15°C)', refr: 'R404A', liquid: '5/8"', suction: '1-1/8"', weight: 133, sound: 72 },
-      { model: 'CCLS1000ARY16', hp: 10, cap_w: 8546, comp: 'ZF34KQE-TFD-554', type: 'Scroll', temp: 'Low (-25 to -15°C)', refr: 'R404A', liquid: '5/8"', suction: '1-1/8"', weight: 172, sound: 72 },
+      // Medium Temp (@ 0°C SST, 38°C Ambient)
+      { model: 'CCMR020GARY16', hp: 2.0, cap_w: 4730, nominal_tr: 1.34, power_w: 1940, airflow: 4050, comp: 'KCM511-CAL', type: 'Reciprocating', temp: 'Medium (0 to 15°C)', refr: 'R404A', liquid: '3/8"', suction: '5/8"', weight: 73, sound: 62 },
+      { model: 'CCMR030GARY16', hp: 3.0, cap_w: 7005, nominal_tr: 1.99, power_w: 3020, airflow: 4050, comp: 'KCM522-CAL', type: 'Reciprocating', temp: 'Medium (0 to 15°C)', refr: 'R404A', liquid: '3/8"', suction: '5/8"', weight: 76, sound: 67 },
+      { model: 'CCMS040GARY16', hp: 4.0, cap_w: 9342, nominal_tr: 2.65, power_w: 3880, airflow: 7450, comp: 'ZB29KQE-TFD', type: 'Scroll', temp: 'Medium (0 to 15°C)', refr: 'R404A', liquid: '1/2"', suction: '7/8"', weight: 94, sound: 71 },
+      { model: 'CCMS060GARY16', hp: 6.0, cap_w: 12524, nominal_tr: 3.56, power_w: 5950, airflow: 7450, comp: 'ZB45KQE-TFD', type: 'Scroll', temp: 'Medium (0 to 15°C)', refr: 'R404A', liquid: '1/2"', suction: '7/8"', weight: 107, sound: 71 },
+      { model: 'CCMS080GARY16', hp: 8.0, cap_w: 18300, nominal_tr: 5.20, power_w: 7120, airflow: 17698, comp: 'ZB58KQE-TFD', type: 'Scroll', temp: 'Medium (0 to 15°C)', refr: 'R404A', liquid: '5/8"', suction: '1-1/8"', weight: 167, sound: 73 },
+      { model: 'CCMS1000ARY16', hp: 10.0, cap_w: 24300, nominal_tr: 6.90, power_w: 9100, airflow: 17698, comp: 'ZB76KQE-TFD', type: 'Scroll', temp: 'Medium (0 to 15°C)', refr: 'R404A', liquid: '5/8"', suction: '1-1/8"', weight: 167, sound: 72 },
+      // Low Temp (@ -25°C SST, 38°C Ambient)
+      { model: 'CCLR020GARY16', hp: 2.0, cap_w: 1853, nominal_tr: 0.53, power_w: 1880, airflow: 4050, comp: 'KCM512-LAL', type: 'Reciprocating', temp: 'Low (-25 to -15°C)', refr: 'R404A', liquid: '3/8"', suction: '5/8"', weight: 78, sound: 68 },
+      { model: 'CCLS040GARY16', hp: 4.0, cap_w: 3816, nominal_tr: 1.08, power_w: 2920, airflow: 7450, comp: 'ZF13K4E-TFD', type: 'Scroll', temp: 'Low (-25 to -15°C)', refr: 'R404A', liquid: '1/2"', suction: '7/8"', weight: 108, sound: 71 },
+      { model: 'CCLS060GARY16', hp: 6.0, cap_w: 5429, nominal_tr: 1.54, power_w: 4080, airflow: 7450, comp: 'ZF18K4E-TFD', type: 'Scroll', temp: 'Low (-25 to -15°C)', refr: 'R404A', liquid: '1/2"', suction: '7/8"', weight: 112, sound: 72 },
+      { model: 'CCLS1000ARY16', hp: 10.0, cap_w: 8546, nominal_tr: 2.43, power_w: 7640, airflow: 17698, comp: 'ZF34KQE-TFD', type: 'Scroll', temp: 'Low (-25 to -15°C)', refr: 'R404A', liquid: '5/8"', suction: '1-1/8"', weight: 172, sound: 72 },
     ];
 
     for (const item of daikinCdus) {
       const capKw = Math.round((item.cap_w / 1000) * 100) / 100;
-      const desc = `Daikin ${item.temp.includes('Low') ? 'Low-Temp' : 'Medium-Temp'} ${item.type} CDU ${item.hp} HP (${capKw} kW) with ${item.comp}`;
+      const desc = `Daikin ${item.temp.includes('Low') ? 'Low-Temp' : 'Medium-Temp'} ${item.type} CDU ${item.hp} HP (${capKw} kW / ${item.nominal_tr} TR) with ${item.comp}`;
       const mid = saveModelAndPrice(
         'mod_dk_cdu_' + item.model,
         dkCduProdId, daikinBrandId, item.model,
         desc,
         capKw, 'kW', item.temp.includes('Low') ? -25 : 0, item.temp.includes('Low') ? -15 : 15,
-        item.refr, '415V / 3Ph / 50Hz', 'Daikin Cold Room Catalogue 2024', '3'
+        item.refr, '415V / 3Ph / 50Hz', 'Daikin Commercial Refrigeration Engine', '4'
       );
 
       insertSpec.run('sp_hp_' + mid, mid, 'horse_power', String(item.hp), 'HP');
       insertSpec.run('sp_comp_' + mid, mid, 'internal_compressor', item.comp, '');
       insertSpec.run('sp_tech_' + mid, mid, 'compressor_type', item.type, '');
       insertSpec.run('sp_cap_w_' + mid, mid, 'cooling_capacity_watts', String(item.cap_w), 'W');
-      insertSpec.run('sp_liq_' + mid, mid, 'liquid_line', item.liquid, 'inch');
-      insertSpec.run('sp_suc_' + mid, mid, 'suction_line', item.suction, 'inch');
-      insertSpec.run('sp_snd_' + mid, mid, 'sound_level', String(item.sound), 'dBA');
-      insertSpec.run('sp_wt_' + mid, mid, 'weight', String(item.weight), 'kg');
+      insertSpec.run('sp_nom_tr_' + mid, mid, 'nominal_tr', String(item.nominal_tr), 'TR');
+      insertSpec.run('sp_pwr_w_' + mid, mid, 'power_input_watts', String(item.power_w), 'W');
+      insertSpec.run('sp_airflow_' + mid, mid, 'air_flow_m3h', String(item.airflow), 'm3/h');
+      insertSpec.run('sp_liq_' + mid, mid, 'liquid_line', item.liquid || '1/2"', 'inch');
+      insertSpec.run('sp_suc_' + mid, mid, 'suction_line', item.suction || '7/8"', 'inch');
+      insertSpec.run('sp_snd_' + mid, mid, 'sound_level', String(item.sound || 70), 'dBA');
+      insertSpec.run('sp_wt_' + mid, mid, 'weight', String(item.weight || 100), 'kg');
     }
 
     // ---------------------------------------------------------------
-    // 9. DAIKIN AIR COOLING UNITS (Evaporators)
+    // 9. DAIKIN AIR COOLING UNITS (Evaporators / ACU)
     // ---------------------------------------------------------------
     const daikinEvaps = [
-      // Medium Temp
-      { model: 'CRE1M400ASV16', cap_kw: 4.31, temp: 'Medium (0 to 15°C)', airflow: 2350, fans: '350mm x 1', weight: 35 },
-      { model: 'CRE2M600ASV16', cap_kw: 6.55, temp: 'Medium (0 to 15°C)', airflow: 4700, fans: '350mm x 2', weight: 52 },
-      { model: 'CRE2M800ASV16', cap_kw: 8.94, temp: 'Medium (0 to 15°C)', airflow: 4700, fans: '350mm x 2', weight: 61 },
-      { model: 'CRE3M980ASV16', cap_kw: 10.92, temp: 'Medium (0 to 15°C)', airflow: 7050, fans: '350mm x 3', weight: 67 },
-      { model: 'CRE3M1400ASV16', cap_kw: 15.75, temp: 'Medium (0 to 15°C)', airflow: 7050, fans: '350mm x 3', weight: 78 },
-      { model: 'CRE2M1700ASY16', cap_kw: 18.70, temp: 'Medium (0 to 15°C)', airflow: 17150, fans: '550mm x 2', weight: 119 },
-      { model: 'CRE2M2200ASY16', cap_kw: 25.10, temp: 'Medium (0 to 15°C)', airflow: 16700, fans: '550mm x 2', weight: 140 },
-      { model: 'CRE2M2800ASY16', cap_kw: 31.20, temp: 'Medium (0 to 15°C)', airflow: 16200, fans: '550mm x 2', weight: 155 },
-      // Low Temp
-      { model: 'CRE1L200ASV16', cap_kw: 1.99, temp: 'Low (-25 to 5°C)', airflow: 2350, fans: '350mm x 1', weight: 35 },
-      { model: 'CRE2L320ASV16', cap_kw: 3.12, temp: 'Low (-25 to 5°C)', airflow: 4700, fans: '350mm x 2', weight: 52 },
-      { model: 'CRE2L400ASV16', cap_kw: 3.90, temp: 'Low (-25 to 5°C)', airflow: 4700, fans: '350mm x 2', weight: 61 },
-      { model: 'CRE3L480ASV16', cap_kw: 4.67, temp: 'Low (-25 to 5°C)', airflow: 7050, fans: '350mm x 3', weight: 67 },
-      { model: 'CRE3L600ASV16', cap_kw: 5.83, temp: 'Low (-25 to 5°C)', airflow: 7050, fans: '350mm x 3', weight: 78 },
-      { model: 'CRE2L0900ASY16', cap_kw: 9.00, temp: 'Low (-25 to 5°C)', airflow: 17375, fans: '550mm x 2', weight: 119 },
-      { model: 'CRE2L1400ASY16', cap_kw: 13.50, temp: 'Low (-25 to 5°C)', airflow: 16975, fans: '550mm x 2', weight: 140 },
-      { model: 'CRE2L1800ASY16', cap_kw: 18.00, temp: 'Low (-25 to 5°C)', airflow: 16550, fans: '550mm x 2', weight: 155 },
+      // High / Medium Temp
+      { model: 'CREHM150ASV16', cap_kw: 4.30, temp: 'High / Med (+2°C to +15°C)', t_min: 2, t_max: 15, airflow: 2350, fans: '350mm × 1 Fan', defrost: 'Air Defrost / Slotted Heater Option', weight: 35 },
+      { model: 'CREHM300ASV16', cap_kw: 8.94, temp: 'High / Med (0°C to +10°C)', t_min: 0, t_max: 10, airflow: 4700, fans: '350mm × 2 Fans', defrost: 'Electric / Air Defrost', weight: 61 },
+      { model: 'CREHM1200ASY16', cap_kw: 13.00, temp: 'Medium Temp (-5°C to +5°C)', t_min: -5, t_max: 5, airflow: 14200, fans: '500mm × 2 Fans', defrost: 'Electric Defrost Standard', weight: 119 },
+      // Low Temp Freezer
+      { model: 'CREZM200ASV16', cap_kw: 3.12, temp: 'Low Temp Freezer (-18°C to -25°C)', t_min: -25, t_max: -18, airflow: 2800, fans: '350mm × 1 Fan', defrost: 'Electric Defrost Elements Built-in', weight: 52 },
+      { model: 'CREZM500ASV16', cap_kw: 5.83, temp: 'Low Temp Freezer (-18°C to -25°C)', t_min: -25, t_max: -18, airflow: 6800, fans: '450mm × 2 Fans', defrost: 'Electric Defrost Elements Built-in', weight: 78 },
+      { model: 'CREZM1100ASY16', cap_kw: 11.00, temp: 'Deep Freeze (-20°C to -30°C)', t_min: -30, t_max: -20, airflow: 14500, fans: '500mm × 3 Fans', defrost: 'Heavy-Duty Electric Defrost', weight: 155 },
     ];
 
     for (const item of daikinEvaps) {
       const mid = saveModelAndPrice(
         'mod_dk_evap_' + item.model,
         dkEvapProdId, daikinBrandId, item.model,
-        `Daikin DX Evaporator Unit (${item.cap_kw} kW)`,
-        item.cap_kw, 'kW', item.temp.includes('Low') ? -25 : 0, item.temp.includes('Low') ? 5 : 15,
-        'R404A', '230V/1Ph / 415V/3Ph', 'Daikin Cold Room Catalogue 2024', '5'
+        `Daikin Indoor DX Air Cooling Unit (${item.cap_kw} kW) - ${item.defrost}`,
+        item.cap_kw, 'kW', item.t_min, item.t_max,
+        'R404A', '230V/1Ph / 415V/3Ph', 'Daikin Commercial Refrigeration Engine', '5'
       );
 
       insertSpec.run('sp_airflow_' + mid, mid, 'air_flow_m3h', String(item.airflow), 'm3/h');
       insertSpec.run('sp_fans_' + mid, mid, 'fan_specs', item.fans, '');
+      insertSpec.run('sp_defrost_' + mid, mid, 'defrost_type', item.defrost, '');
       insertSpec.run('sp_wt_' + mid, mid, 'weight', String(item.weight), 'kg');
+    }
+
+    // ---------------------------------------------------------------
+    // 9.5 ASHRAE / USDA THERMAL PROPERTIES DATABASE (16 COMMODITIES)
+    // ---------------------------------------------------------------
+    const thermalCommodities = [
+      { id: 'com_apple', name: 'Apple (Seb)', category: 'Fruits', min_t: 0, max_t: 2, freeze_t: -1.5, cp_above: 3.64, latent: 280, cp_below: 1.90, resp_rate: 12.0 },
+      { id: 'com_banana_green', name: 'Banana (Green/Raw)', category: 'Fruits', min_t: 13, max_t: 14, freeze_t: -0.8, cp_above: 3.35, latent: 250, cp_below: 1.76, resp_rate: 40.0 },
+      { id: 'com_banana_ripe', name: 'Banana (Ripe)', category: 'Fruits', min_t: 13, max_t: 15, freeze_t: -1.5, cp_above: 3.35, latent: 250, cp_below: 1.76, resp_rate: 75.0 },
+      { id: 'com_grapes', name: 'Grapes (Angoor)', category: 'Fruits', min_t: -1, max_t: 0, freeze_t: -2.0, cp_above: 3.60, latent: 275, cp_below: 1.88, resp_rate: 10.0 },
+      { id: 'com_mango', name: 'Mango (Aam)', category: 'Fruits', min_t: 10, max_t: 13, freeze_t: -1.4, cp_above: 3.56, latent: 275, cp_below: 1.86, resp_rate: 50.0 },
+      { id: 'com_orange', name: 'Orange / Citrus', category: 'Fruits', min_t: 4, max_t: 7, freeze_t: -1.4, cp_above: 3.77, latent: 290, cp_below: 1.95, resp_rate: 15.0 },
+      { id: 'com_potato_table', name: 'Potato (Table Use)', category: 'Vegetables', min_t: 8, max_t: 10, freeze_t: -0.8, cp_above: 3.43, latent: 260, cp_below: 1.80, resp_rate: 16.0 },
+      { id: 'com_potato_seed', name: 'Potato (Processing/Seed)', category: 'Vegetables', min_t: 4, max_t: 8, freeze_t: -0.8, cp_above: 3.43, latent: 260, cp_below: 1.80, resp_rate: 20.0 },
+      { id: 'com_onion', name: 'Onion (Pyaz)', category: 'Vegetables', min_t: 0, max_t: 2, freeze_t: -1.2, cp_above: 3.77, latent: 295, cp_below: 1.95, resp_rate: 8.5 },
+      { id: 'com_tomato', name: 'Tomato (Ripe)', category: 'Vegetables', min_t: 8, max_t: 10, freeze_t: -0.6, cp_above: 3.98, latent: 315, cp_below: 2.05, resp_rate: 28.0 },
+      { id: 'com_green_peas', name: 'Green Peas (Matar)', category: 'Vegetables', min_t: 0, max_t: 1, freeze_t: -1.1, cp_above: 3.31, latent: 245, cp_below: 1.76, resp_rate: 65.0 },
+      { id: 'com_fresh_milk', name: 'Whole Fresh Milk', category: 'Dairy', min_t: 2, max_t: 4, freeze_t: -0.5, cp_above: 3.93, latent: 290, cp_below: 2.00, resp_rate: 0.0 },
+      { id: 'com_butter_ghee', name: 'Butter / Ghee Block', category: 'Dairy', min_t: -18, max_t: 4, freeze_t: -1.0, cp_above: 2.05, latent: 50, cp_below: 1.42, resp_rate: 0.0 },
+      { id: 'com_ice_cream', name: 'Ice Cream (Hardened)', category: 'Ice Cream', min_t: -25, max_t: -23, freeze_t: -2.8, cp_above: 3.20, latent: 210, cp_below: 1.85, resp_rate: 0.0 },
+      { id: 'com_frozen_chicken', name: 'Frozen Chicken', category: 'Meat & Poultry', min_t: -20, max_t: -18, freeze_t: -2.8, cp_above: 3.31, latent: 247, cp_below: 1.76, resp_rate: 0.0 },
+      { id: 'com_fish', name: 'Fresh / Frozen Fish', category: 'Meat & Poultry', min_t: -22, max_t: -18, freeze_t: -2.2, cp_above: 3.60, latent: 275, cp_below: 1.88, resp_rate: 0.0 },
+    ];
+
+    const insertCommodity = db.prepare(`
+      INSERT INTO thermal_commodities (
+        id, name, category, storage_temp_min, storage_temp_max,
+        freezing_point_c, cp_above, latent_heat, cp_below, respiration_rate_mw_kg, is_active
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+      ON CONFLICT(id) DO UPDATE SET
+        name = excluded.name,
+        category = excluded.category,
+        storage_temp_min = excluded.storage_temp_min,
+        storage_temp_max = excluded.storage_temp_max,
+        freezing_point_c = excluded.freezing_point_c,
+        cp_above = excluded.cp_above,
+        latent_heat = excluded.latent_heat,
+        cp_below = excluded.cp_below,
+        respiration_rate_mw_kg = excluded.respiration_rate_mw_kg
+    `);
+
+    for (const c of thermalCommodities) {
+      insertCommodity.run(c.id, c.name, c.category, c.min_t, c.max_t, c.freeze_t, c.cp_above, c.latent, c.cp_below, c.resp_rate);
     }
 
     // 10. Store Service Completion Template defaults

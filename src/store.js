@@ -573,6 +573,8 @@ export const getPriceHistory = () => apiFetch(`${API}/masters/price-history`);
 
 // ---- Technical Quotations & Sizing Engine ----
 export const calculateColdRoom = (params) => apiFetch(`${API}/quotations/calculate`, { method: 'POST', body: JSON.stringify(params) });
+export const getThermalCommodities = () => apiFetch(`${API}/quotations/commodities`);
+export const calculateHeatLoad = (params) => apiFetch(`${API}/quotations/calculate-heat-load`, { method: 'POST', body: JSON.stringify(params) });
 export const getQuotations = () => apiFetch(`${API}/quotations`);
 export const getQuotationById = (id) => apiFetch(`${API}/quotations/${encodeURIComponent(id)}`);
 export const saveQuotation = (quotation) => apiFetch(`${API}/quotations`, { method: 'POST', body: JSON.stringify(quotation) });

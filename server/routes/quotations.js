@@ -4,6 +4,7 @@ import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { db, runInTransaction, logAudit } from '../db/index.js';
 import { recommendColdRoomEquipment } from '../services/coldRoomEngine.js';
+import { calculateHeatLoad, getThermalCommodities } from '../services/heatLoadCalculator.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(__dirname, '..', '..');
@@ -27,6 +28,28 @@ router.post('/calculate', (req, res) => {
   try {
     const recommendation = recommendColdRoomEquipment(req.body);
     res.json(recommendation);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
+// 1.1 ADVANCED THERMODYNAMIC HEAT LOAD ENGINE
+// (ASHRAE / USDA / Daikin Commercial Refrigeration)
+// ==========================================
+router.get('/commodities', (req, res) => {
+  try {
+    const commodities = getThermalCommodities();
+    res.json(commodities);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/calculate-heat-load', (req, res) => {
+  try {
+    const result = calculateHeatLoad(req.body);
+    res.json(result);
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
@@ -77,7 +100,15 @@ router.get('/:id', (req, res) => {
     }
 
     const items = db.prepare('SELECT * FROM quotation_items WHERE quotation_id = ? ORDER BY id ASC').all(quotation.id);
-    const techInputs = db.prepare('SELECT * FROM quotation_technical_inputs WHERE quotation_id = ?').get(quotation.id);
+    let techInputs = db.prepare('SELECT * FROM quotation_technical_inputs WHERE quotation_id = ?').get(quotation.id);
+    if (techInputs && techInputs.notes) {
+      try {
+        const parsedNotes = JSON.parse(techInputs.notes);
+        if (parsedNotes && typeof parsedNotes === 'object') {
+          techInputs = { ...techInputs, ...parsedNotes };
+        }
+      } catch (_) {}
+    }
     const modelRec = db.prepare('SELECT * FROM quotation_model_recommendations WHERE quotation_id = ?').get(quotation.id);
 
     res.json({
@@ -202,6 +233,29 @@ router.post('/', (req, res) => {
       // 3. Technical inputs
       if (technicalInputs) {
         db.prepare('DELETE FROM quotation_technical_inputs WHERE quotation_id = ?').run(qId);
+        const pufMm = technicalInputs.insulation_puf_mm || technicalInputs.puf?.thicknessMm || 80;
+        const targetT = technicalInputs.targetTemp !== undefined ? Number(technicalInputs.targetTemp) : (technicalInputs.target_temp_c !== undefined ? Number(technicalInputs.target_temp_c) : null);
+        const ambientT = Number(technicalInputs.ambientTemp) || Number(technicalInputs.ambient_temp_c) || 43.0;
+        const loadKw = Number(technicalInputs.calculated_load_kw) || Number(technicalInputs.estimatedLoadKw) || Number(technicalInputs.machineRating?.capacityKw) || null;
+        
+        let notesStr = '';
+        if (technicalInputs.notes && typeof technicalInputs.notes === 'string' && !technicalInputs.notes.startsWith('{')) {
+          notesStr = technicalInputs.notes;
+        } else {
+          try {
+            notesStr = JSON.stringify({
+              calculationEngine: technicalInputs.calculationEngine,
+              commodity: technicalInputs.commodity,
+              puf: technicalInputs.puf,
+              thermalBreakdown: technicalInputs.thermalBreakdown,
+              machineRating: technicalInputs.machineRating,
+              dimensions: technicalInputs.dimensions,
+              temperatures: technicalInputs.temperatures,
+              internalLoads: technicalInputs.internalLoads,
+            });
+          } catch (_) {}
+        }
+
         db.prepare(`
           INSERT INTO quotation_technical_inputs (
             id, quotation_id, application_type, length_ft, width_ft, height_ft,
@@ -214,13 +268,11 @@ router.post('/', (req, res) => {
           technicalInputs.length_ft || null, technicalInputs.width_ft || null, technicalInputs.height_ft || null,
           technicalInputs.volume_ft3 || null, technicalInputs.length_m || null, technicalInputs.width_m || null,
           technicalInputs.height_m || null, technicalInputs.volume_m3 || null,
-          technicalInputs.targetTemp !== undefined ? Number(technicalInputs.targetTemp) : null,
-          Number(technicalInputs.ambientTemp) || 43.0, Number(technicalInputs.insulation_puf_mm) || 80,
+          targetT, ambientT, pufMm,
           technicalInputs.refrigerant || 'R404A', technicalInputs.compressorType || 'scroll',
           technicalInputs.dailyMilkLiters ? Number(technicalInputs.dailyMilkLiters) : null,
           technicalInputs.batches ? Number(technicalInputs.batches) : null,
-          technicalInputs.estimatedLoadKw ? Number(technicalInputs.estimatedLoadKw) : null,
-          technicalInputs.notes || ''
+          loadKw, notesStr
         );
       }
 

@@ -56,6 +56,14 @@ const seedDefaults = () => {
       VALUES (?, ?, ?, ?, ?, 1)
     `).run('wh_main', 'MAIN-WH', 'Main Central Warehouse', 'warehouse', 'Central Facility');
   }
+
+  // Auto-seed thermodynamic commodities and Daikin catalogue if not present
+  try {
+    const comCount = db.prepare('SELECT COUNT(*) as count FROM thermal_commodities').get().count;
+    if (comCount === 0) {
+      import('./seed-refrigeration-data.js').then(m => m.seedRefrigerationData()).catch(console.error);
+    }
+  } catch (_) {}
 };
 
 seedDefaults();

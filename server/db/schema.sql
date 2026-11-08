@@ -421,3 +421,19 @@ CREATE TABLE IF NOT EXISTS quotation_items (
 CREATE INDEX IF NOT EXISTS idx_quotations_number ON quotations(quotation_number);
 CREATE INDEX IF NOT EXISTS idx_quotations_customer ON quotations(customer_id);
 CREATE INDEX IF NOT EXISTS idx_quotation_items_quotation ON quotation_items(quotation_id);
+
+-- 23. Thermodynamic Properties Master Data (ASHRAE / USDA)
+CREATE TABLE IF NOT EXISTS thermal_commodities (
+  id TEXT PRIMARY KEY,
+  name TEXT NOT NULL,
+  category TEXT NOT NULL,
+  storage_temp_min REAL NOT NULL,
+  storage_temp_max REAL NOT NULL,
+  freezing_point_c REAL NOT NULL,
+  cp_above REAL NOT NULL,
+  latent_heat REAL NOT NULL,
+  cp_below REAL NOT NULL,
+  respiration_rate_mw_kg REAL NOT NULL DEFAULT 0.0,
+  is_active INTEGER DEFAULT 1
+);
+CREATE INDEX IF NOT EXISTS idx_thermal_commodities_category ON thermal_commodities(category);

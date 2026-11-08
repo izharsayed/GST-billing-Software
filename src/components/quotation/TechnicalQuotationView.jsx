@@ -1,10 +1,12 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import {
   Calculator, CheckCircle2, AlertTriangle, FileText, ArrowRight,
-  Plus, Trash2, Printer, RefreshCw, Eye, X, BookOpen, Layers
+  Plus, Trash2, Printer, RefreshCw, Eye, X, BookOpen, Layers,
+  Cpu, Flame, Wind, User, Settings2, ChevronDown, ChevronUp, Loader2
 } from 'lucide-react';
 import {
-  calculateColdRoom, getQuotations, getQuotationById, saveQuotation,
+  calculateColdRoom, calculateHeatLoad, getThermalCommodities,
+  getQuotations, getQuotationById, saveQuotation,
   convertQuotationToInvoice, getAllClients, getChargeItems, getProfile
 } from '../../store';
 import { formatCurrency } from '../../utils';
@@ -23,7 +25,66 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
   const [quotations, setQuotations] = useState([]);
   const [profile, setProfile] = useState({});
 
-  // Calculator Form State
+  // Mode: 'heatload' (ASHRAE / USDA Engine) | 'reckoner' (Standard Volume Sizing)
+  const [sizerMode, setSizerMode] = useState('heatload');
+
+  // Advanced Heat Load Form State (ASHRAE / USDA / Daikin)
+  const [commodities, setCommodities] = useState([]);
+  const [heatLoadForm, setHeatLoadForm] = useState({
+    unit: 'm', // 'm' | 'ft'
+    length: 12.0,
+    width: 8.0,
+    height: 4.5,
+    pufThicknessMm: 100, // 60, 100, 120, 150
+    ambientTemp: 42.0,
+    roomTemp: 2.0,
+    commodityId: 'com_apple',
+    dailyMassKg: 8000,
+    entryTemp: 28.0,
+    compressorRunHours: 16.0,
+    safetyFactor: 0.10,
+    compressorPreference: 'any',
+    lightsKw: '',
+    lightsHours: 8,
+    peopleCount: 1,
+    peopleHours: 4,
+    internalEquipmentKw: 0,
+    fanMotorKw: 0.5,
+    fanOperatingHours: 22,
+    defrostHeaterKw: '',
+    defrostDurationHours: '',
+  });
+  const [heatLoadResult, setHeatLoadResult] = useState(null);
+  const [showAdvancedParams, setShowAdvancedParams] = useState(false);
+
+  const handleCommodityChange = (comId) => {
+    const selected = commodities.find(c => c.id === comId);
+    setHeatLoadForm(prev => {
+      const next = { ...prev, commodityId: comId };
+      if (selected) {
+        const avg = Math.round(((selected.storage_temp_min + selected.storage_temp_max) / 2) * 10) / 10;
+        next.roomTemp = avg;
+      }
+      return next;
+    });
+  };
+
+  const selectedCommodity = commodities.find(c => c.id === heatLoadForm.commodityId) || commodities[0];
+
+  const liveDimensions = useMemo(() => {
+    const l = Number(heatLoadForm.length) || 0;
+    const w = Number(heatLoadForm.width) || 0;
+    const h = Number(heatLoadForm.height) || 0;
+    const isM = heatLoadForm.unit === 'm';
+    const lM = isM ? l : l * 0.3048;
+    const wM = isM ? w : w * 0.3048;
+    const hM = isM ? h : h * 0.3048;
+    const volM3 = Math.round(lM * wM * hM * 10) / 10;
+    const areaM2 = Math.round(2 * (lM * wM + lM * hM + wM * hM) * 10) / 10;
+    return { volM3, areaM2 };
+  }, [heatLoadForm.length, heatLoadForm.width, heatLoadForm.height, heatLoadForm.unit]);
+
+  // Reckoner Form State
   const [calcForm, setCalcForm] = useState({
     application: 'chiller',
     length: 10,
@@ -57,16 +118,18 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
   const loadInitialData = async () => {
     setLoading(true);
     try {
-      const [cls, chgs, qts, prf] = await Promise.all([
+      const [cls, chgs, qts, prf, coms] = await Promise.all([
         getAllClients().catch(() => []),
         getChargeItems().catch(() => []),
         getQuotations().catch(() => []),
         getProfile().catch(() => ({})),
+        getThermalCommodities().catch(() => []),
       ]);
       setClients(cls);
       setChargeRules(chgs);
       setQuotations(qts);
       setProfile(prf);
+      if (Array.isArray(coms) && coms.length > 0) setCommodities(coms);
       if (cls.length > 0 && !customerId) setCustomerId(cls[0].id);
     } catch {
       toast('Failed to load quotation data', 'error');
@@ -80,8 +143,129 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
   }, []);
 
   // -----------------------------------------------------------
-  // RUN CALCULATOR
+  // RUN CALCULATORS
   // -----------------------------------------------------------
+  const handleCalculateHeatLoad = async (e) => {
+    if (e) e.preventDefault();
+    setCalculating(true);
+    try {
+      const res = await calculateHeatLoad(heatLoadForm);
+      setHeatLoadResult(res);
+
+      const rec = res.recommendations || {};
+      const newItems = [];
+
+      // 1. Daikin Condensing Unit (CCU)
+      if (rec.multiUnitCcu) {
+        const mu = rec.multiUnitCcu;
+        const price = Number(mu.unit.selling_price) || 0;
+        newItems.push({
+          product_id: mu.unit.product_id,
+          model_id: mu.unit.id,
+          item_type: 'equipment',
+          description: `Daikin ${mu.unit.model_number} Outdoor Condensing Unit (${mu.unit.nominal_tr} TR each, ${mu.count} Sets = ${mu.totalCapacityTr} TR)`,
+          hsn_sac: '84189900',
+          quantity: mu.count,
+          unit: 'Set',
+          unit_price: price,
+          discount_percent: 0,
+          tax_percent: 18.0,
+          tax_amount: price * mu.count * 0.18,
+          total_amount: price * mu.count * 1.18,
+        });
+      } else if (rec.ccu) {
+        const ccu = rec.ccu;
+        const price = Number(ccu.selling_price) || 0;
+        newItems.push({
+          product_id: ccu.product_id,
+          model_id: ccu.id,
+          item_type: 'equipment',
+          description: `Daikin ${ccu.model_number} Outdoor Condensing Unit (${ccu.nominal_tr} TR / ${ccu.capacity} kW @ ${res.inputs.temperatures.roomTempC}°C)`,
+          hsn_sac: '84189900',
+          quantity: 1,
+          unit: 'Set',
+          unit_price: price,
+          discount_percent: 0,
+          tax_percent: 18.0,
+          tax_amount: price * 0.18,
+          total_amount: price * 1.18,
+        });
+      }
+
+      // 2. Daikin Air Cooling Unit (ACU)
+      if (rec.multiUnitAcu) {
+        const muA = rec.multiUnitAcu;
+        const price = Number(muA.unit.selling_price) || 0;
+        newItems.push({
+          product_id: muA.unit.product_id,
+          model_id: muA.unit.id,
+          item_type: 'equipment',
+          description: `Daikin ${muA.unit.model_number} DX Air Cooling Unit (${muA.unit.capacity_kw} kW each, ${muA.count} Nos = ${muA.totalCapacityKw} kW)`,
+          hsn_sac: '84189900',
+          quantity: muA.count,
+          unit: 'Nos',
+          unit_price: price,
+          discount_percent: 0,
+          tax_percent: 18.0,
+          tax_amount: price * muA.count * 0.18,
+          total_amount: price * muA.count * 1.18,
+        });
+      } else if (rec.evaporator) {
+        const evap = rec.evaporator;
+        const price = Number(evap.selling_price) || 0;
+        newItems.push({
+          product_id: evap.product_id,
+          model_id: evap.id,
+          item_type: 'equipment',
+          description: `Daikin ${evap.model_number} DX Air Cooling Unit Evaporator (${evap.capacity_kw} kW) - ${evap.defrost_type}`,
+          hsn_sac: '84189900',
+          quantity: 1,
+          unit: 'Nos',
+          unit_price: price,
+          discount_percent: 0,
+          tax_percent: 18.0,
+          tax_amount: price * 0.18,
+          total_amount: price * 1.18,
+        });
+      }
+
+      // 3. Refrigeration Kit & Controller
+      const vr = rec.valveRecommendations || {};
+      newItems.push({
+        item_type: 'component',
+        description: `Daikin Refrigeration Kit: ${vr.expansionValve} Expansion Valve + ${vr.orifice} Orifice + ${vr.solenoidValve} Solenoid + ${vr.controller}`,
+        hsn_sac: '84189900',
+        quantity: 1,
+        unit: 'Set',
+        unit_price: 14500,
+        discount_percent: 0,
+        tax_percent: 18.0,
+        tax_amount: 14500 * 0.18,
+        total_amount: 14500 * 1.18,
+      });
+
+      // 4. Installation & Commissioning
+      newItems.push({
+        item_type: 'installation',
+        description: 'Complete Site Installation, Refrigerant Copper Piping, Pressure Testing & Commissioning',
+        hsn_sac: '9987',
+        quantity: 1,
+        unit: 'Job',
+        unit_price: 18000,
+        discount_percent: 0,
+        tax_percent: 18.0,
+        tax_amount: 18000 * 0.18,
+        total_amount: 18000 * 1.18,
+      });
+
+      setItems(newItems);
+      toast('Heat load calculated & Daikin equipment added to quotation!', 'success');
+    } catch {
+      toast('Failed to calculate refrigeration heat load', 'error');
+    } finally {
+      setCalculating(false);
+    }
+  };
   // Switch CDU model from dropdown
   const handleSwitchCdu = (cduId) => {
     setSelectedCduId(cduId);
@@ -276,7 +460,27 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
       total_amount: grandTotal,
       terms,
       items,
-      technicalInputs: recommendation?.inputs ? {
+      technicalInputs: sizerMode === 'heatload' && heatLoadResult ? {
+        calculationEngine: 'ASHRAE / USDA Refrigeration Heat Load Engine (Daikin Commercial)',
+        application: heatLoadResult.inputs.temperatures.roomTempC < 0 ? 'freezer' : 'chiller',
+        length_ft: heatLoadResult.inputs.dimensions.lengthFt,
+        width_ft: heatLoadResult.inputs.dimensions.widthFt,
+        height_ft: heatLoadResult.inputs.dimensions.heightFt,
+        length_m: heatLoadResult.inputs.dimensions.lengthM,
+        width_m: heatLoadResult.inputs.dimensions.widthM,
+        height_m: heatLoadResult.inputs.dimensions.heightM,
+        volume_ft3: heatLoadResult.inputs.dimensions.volumeFt3,
+        volume_m3: heatLoadResult.inputs.dimensions.volumeM3,
+        targetTemp: heatLoadResult.inputs.temperatures.roomTempC,
+        ambientTemp: heatLoadResult.inputs.temperatures.ambientTempC,
+        commodity: heatLoadResult.inputs.commodity,
+        puf: heatLoadResult.inputs.puf,
+        thermalBreakdown: heatLoadResult.thermalBreakdown,
+        machineRating: heatLoadResult.machineRating,
+        calculated_load_kw: heatLoadResult.machineRating.capacityKw,
+        calculated_load_tr: heatLoadResult.machineRating.capacityTr,
+        calculated_load_btu: heatLoadResult.machineRating.capacityBtuHr,
+      } : (recommendation?.inputs ? {
         application: calcForm.application,
         length_ft: calcForm.length,
         width_ft: calcForm.width,
@@ -290,8 +494,19 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
         dailyMilkLiters: calcForm.dailyMilkLiters,
         estimatedLoadKw: recommendation.estimatedLoadKw,
         notes: recommendation.reviewReason || '',
-      } : null,
-      modelRecommendation: recommendation?.recommendations ? {
+      } : null),
+      modelRecommendation: sizerMode === 'heatload' && heatLoadResult ? {
+        cdu_model_id: heatLoadResult.recommendations?.ccu?.id,
+        evap_model_id: heatLoadResult.recommendations?.evaporator?.id,
+        expansionValve: heatLoadResult.recommendations?.valveRecommendations?.expansionValve,
+        orifice: heatLoadResult.recommendations?.valveRecommendations?.orifice,
+        solenoidValve: heatLoadResult.recommendations?.valveRecommendations?.solenoidValve,
+        solenoidCoil: heatLoadResult.recommendations?.valveRecommendations?.solenoidCoil,
+        controller: heatLoadResult.recommendations?.valveRecommendations?.controller,
+        catalogueSource: 'Daikin Commercial Refrigeration Engine',
+        cataloguePage: '4 & 5',
+        selectionNotes: `ASHRAE Heat Load: ${heatLoadResult.thermalBreakdown.qTotalKj} kJ/day (${heatLoadResult.machineRating.capacityTr} TR)`,
+      } : (recommendation?.recommendations ? {
         cdu_model_id: recommendation.recommendations.cdu?.id,
         evap_model_id: recommendation.recommendations.evaporator?.id,
         expansionValve: recommendation.recommendations.expansionValve,
@@ -302,7 +517,7 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
         catalogueSource: recommendation.catalogueSource,
         cataloguePage: recommendation.cataloguePage,
         selectionNotes: recommendation.designAssumptions?.join('; '),
-      } : null,
+      } : null),
     };
 
     try {
@@ -373,170 +588,492 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
           {/* LEFT: SIZING INPUTS */}
           <div className="glass-panel" style={{ padding: '1.25rem' }}>
             <h2 style={{ fontSize: '1.15rem', fontWeight: 700, margin: '0 0 1rem', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-              <Layers size={18} className="text-primary" /> 1. Cold Room Sizing Inputs
+              <Layers size={18} className="text-primary" /> 1. Cold Room Sizing & Equipment Selection
             </h2>
 
-            <form onSubmit={handleCalculate}>
-              {/* Application type */}
-              <div style={{ marginBottom: '1rem' }}>
-                <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.3rem' }}>Application / Room Type</label>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
-                  {[
-                    { id: 'chiller', label: 'Chiller (+4°C)', desc: 'Fruits, Veg, Dairy' },
-                    { id: 'freezer', label: 'Freezer (-20°C)', desc: 'Meat, Ice Cream' },
-                    { id: 'bmc', label: 'Milk Chiller (BMC)', desc: 'Dairy Bulk Tank' },
-                  ].map(a => (
-                    <button
-                      key={a.id}
-                      type="button"
-                      onClick={() => setCalcForm(prev => ({ ...prev, application: a.id }))}
-                      style={{
-                        padding: '8px 10px', textAlign: 'left', borderRadius: 8, cursor: 'pointer',
-                        border: calcForm.application === a.id ? '2px solid var(--primary)' : '1px solid var(--border)',
-                        background: calcForm.application === a.id ? 'rgba(37, 99, 235, 0.1)' : 'var(--bg-secondary)',
-                      }}
-                    >
-                      <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{a.label}</div>
-                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{a.desc}</div>
-                    </button>
-                  ))}
-                </div>
-              </div>
+            {/* 2-Way Mode Switcher Banner */}
+            <div style={{
+              display: 'grid',
+              gridTemplateColumns: '1fr 1fr',
+              gap: '0.4rem',
+              background: 'var(--bg-secondary)',
+              padding: '4px',
+              borderRadius: '8px',
+              marginBottom: '1rem'
+            }}>
+              <button
+                type="button"
+                className={`btn ${sizerMode === 'heatload' ? 'btn-primary' : 'btn-ghost'}`}
+                style={{ fontSize: '0.8rem', padding: '0.45rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem', fontWeight: 600 }}
+                onClick={() => setSizerMode('heatload')}
+              >
+                <Cpu size={14} /> 🔬 Heat Load (ASHRAE)
+              </button>
+              <button
+                type="button"
+                className={`btn ${sizerMode === 'reckoner' ? 'btn-primary' : 'btn-ghost'}`}
+                style={{ fontSize: '0.8rem', padding: '0.45rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.35rem', fontWeight: 600 }}
+                onClick={() => setSizerMode('reckoner')}
+              >
+                <Layers size={14} /> ⚡ Volume Sizer (Emerson)
+              </button>
+            </div>
 
-              {/* BMC Milk Volume or Room Dimensions */}
-              {calcForm.application === 'bmc' ? (
-                <div style={{ marginBottom: '1rem' }}>
-                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.3rem' }}>Daily Milk Capacity (Liters)</label>
-                  <select
-                    className="form-input"
-                    value={calcForm.dailyMilkLiters}
-                    onChange={e => setCalcForm(prev => ({ ...prev, dailyMilkLiters: Number(e.target.value) }))}
-                    style={{ width: '100%' }}
-                  >
-                    <option value={500}>500 Liters (2 Batches x 250 L)</option>
-                    <option value={1000}>1000 Liters (2 Batches x 500 L)</option>
-                    <option value={2000}>2000 Liters (2 Batches x 1000 L)</option>
-                    <option value={3000}>3000 Liters (2 Batches x 1500 L)</option>
-                    <option value={4000}>4000 Liters (2 Batches x 2000 L)</option>
-                    <option value={5000}>5000 Liters (2 Batches x 2500 L)</option>
-                  </select>
-                </div>
-              ) : (
-                <>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
-                    <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>External Room Dimensions</label>
-                    <div style={{ display: 'flex', gap: '0.2rem', background: 'var(--bg-secondary)', padding: 2, borderRadius: 6 }}>
+            {/* MODE A: ASHRAE / DAIKIN THERMODYNAMIC ENGINE */}
+            {sizerMode === 'heatload' && (
+              <form onSubmit={handleCalculateHeatLoad}>
+                {/* Dimensions */}
+                <div style={{ marginBottom: '0.75rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.3rem' }}>
+                    <label style={{ fontSize: '0.82rem', fontWeight: 600 }}>External Dimensions</label>
+                    <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-secondary)', padding: 2, borderRadius: 4 }}>
                       <button
                         type="button"
-                        onClick={() => setCalcForm(prev => ({ ...prev, unit: 'ft' }))}
+                        onClick={() => setHeatLoadForm(prev => ({ ...prev, unit: 'm' }))}
                         style={{
-                          padding: '2px 8px', border: 'none', borderRadius: 4, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer',
-                          background: calcForm.unit === 'ft' ? 'var(--primary)' : 'transparent', color: calcForm.unit === 'ft' ? '#fff' : 'var(--text)'
-                        }}
-                      >
-                        Feet (ft)
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => setCalcForm(prev => ({ ...prev, unit: 'm' }))}
-                        style={{
-                          padding: '2px 8px', border: 'none', borderRadius: 4, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer',
-                          background: calcForm.unit === 'm' ? 'var(--primary)' : 'transparent', color: calcForm.unit === 'm' ? '#fff' : 'var(--text)'
+                          padding: '1px 6px', border: 'none', borderRadius: 3, fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer',
+                          background: heatLoadForm.unit === 'm' ? 'var(--primary)' : 'transparent', color: heatLoadForm.unit === 'm' ? '#fff' : 'var(--text)'
                         }}
                       >
                         Meters (m)
                       </button>
+                      <button
+                        type="button"
+                        onClick={() => setHeatLoadForm(prev => ({ ...prev, unit: 'ft' }))}
+                        style={{
+                          padding: '1px 6px', border: 'none', borderRadius: 3, fontSize: '0.72rem', fontWeight: 600, cursor: 'pointer',
+                          background: heatLoadForm.unit === 'ft' ? 'var(--primary)' : 'transparent', color: heatLoadForm.unit === 'ft' ? '#fff' : 'var(--text)'
+                        }}
+                      >
+                        Feet (ft)
+                      </button>
                     </div>
                   </div>
-
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.6rem', marginBottom: '1rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.4rem' }}>
                     <div>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Length ({calcForm.unit})</span>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Length ({heatLoadForm.unit})</span>
                       <input
-                        type="number" step="any" className="form-input" value={calcForm.length}
-                        onChange={e => setCalcForm(prev => ({ ...prev, length: e.target.value }))}
+                        type="number" step="any" className="form-input" value={heatLoadForm.length}
+                        onChange={e => setHeatLoadForm(prev => ({ ...prev, length: Number(e.target.value) }))}
                         style={{ width: '100%' }} required
                       />
                     </div>
                     <div>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Width ({calcForm.unit})</span>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Width ({heatLoadForm.unit})</span>
                       <input
-                        type="number" step="any" className="form-input" value={calcForm.width}
-                        onChange={e => setCalcForm(prev => ({ ...prev, width: e.target.value }))}
+                        type="number" step="any" className="form-input" value={heatLoadForm.width}
+                        onChange={e => setHeatLoadForm(prev => ({ ...prev, width: Number(e.target.value) }))}
                         style={{ width: '100%' }} required
                       />
                     </div>
                     <div>
-                      <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Height ({calcForm.unit})</span>
+                      <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Height ({heatLoadForm.unit})</span>
                       <input
-                        type="number" step="any" className="form-input" value={calcForm.height}
-                        onChange={e => setCalcForm(prev => ({ ...prev, height: e.target.value }))}
+                        type="number" step="any" className="form-input" value={heatLoadForm.height}
+                        onChange={e => setHeatLoadForm(prev => ({ ...prev, height: Number(e.target.value) }))}
                         style={{ width: '100%' }} required
                       />
                     </div>
                   </div>
-                </>
-              )}
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                    Volume: <strong>{liveDimensions.volM3} m³</strong> • Surface Area: <strong>{liveDimensions.areaM2} m²</strong>
+                  </div>
+                </div>
 
-              {/* Technical Constraints */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem', marginBottom: '1rem' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.2rem' }}>Refrigerant</label>
+                {/* PUF Panel Thickness */}
+                <div style={{ marginBottom: '0.75rem' }}>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.2rem' }}>
+                    PUF Insulation (k = 0.023 W/m·K)
+                  </label>
                   <select
                     className="form-input"
-                    value={calcForm.refrigerant}
-                    onChange={e => setCalcForm(prev => ({ ...prev, refrigerant: e.target.value }))}
+                    value={heatLoadForm.pufThicknessMm}
+                    onChange={e => setHeatLoadForm(prev => ({ ...prev, pufThicknessMm: Number(e.target.value) }))}
                     style={{ width: '100%' }}
                   >
-                    <option value="R404A">R404A (Standard Eco-blend)</option>
-                    <option value="R22">R22 (Legacy / HCFC)</option>
+                    <option value={60}>60 mm (U = 0.383 W/m²·K) — Process Areas (+10°C to +15°C)</option>
+                    <option value={100}>100 mm (U = 0.230 W/m²·K) — Standard Chiller (+2°C to +8°C)</option>
+                    <option value={120}>120 mm (U = 0.192 W/m²·K) — Low Temp Freezer (-18°C)</option>
+                    <option value={150}>150 mm (U = 0.153 W/m²·K) — Deep Freezer (-25°C)</option>
                   </select>
                 </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.2rem' }}>Compressor Technology</label>
+
+                {/* Commodity Selection */}
+                <div style={{ marginBottom: '0.75rem' }}>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.2rem' }}>
+                    Stored Commodity (16 ASHRAE Handbooks)
+                  </label>
                   <select
                     className="form-input"
-                    value={calcForm.compressorType}
-                    onChange={e => setCalcForm(prev => ({ ...prev, compressorType: e.target.value }))}
+                    value={heatLoadForm.commodityId}
+                    onChange={e => handleCommodityChange(e.target.value)}
                     style={{ width: '100%' }}
                   >
-                    <option value="scroll">Scroll (High Efficiency)</option>
-                    <option value="reciprocating">Reciprocating (Standard)</option>
+                    {commodities.map(c => (
+                      <option key={c.id} value={c.id}>
+                        [{c.category}] {c.name} ({c.storage_temp_min}°C to {c.storage_temp_max}°C)
+                      </option>
+                    ))}
                   </select>
+                  {selectedCommodity && (
+                    <div style={{ fontSize: '0.72rem', color: '#0369a1', marginTop: '2px' }}>
+                      Freeze Point: <strong>{selectedCommodity.freezing_point_c}°C</strong> | Cp: <strong>{selectedCommodity.cp_above}</strong> kJ/kg·K | Resp: <strong>{selectedCommodity.respiration_rate_mw_kg || 0}</strong> mW/kg
+                    </div>
+                  )}
+                </div>
+
+                {/* Daily Inflow & Temperatures */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem', marginBottom: '0.75rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, marginBottom: '0.2rem' }}>Daily Inflow (kg/day)</label>
+                    <input
+                      type="number" className="form-input" value={heatLoadForm.dailyMassKg}
+                      onChange={e => setHeatLoadForm(prev => ({ ...prev, dailyMassKg: Number(e.target.value) }))}
+                      style={{ width: '100%' }} required
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, marginBottom: '0.2rem' }}>Inflow Temp (°C)</label>
+                    <input
+                      type="number" className="form-input" value={heatLoadForm.entryTemp}
+                      onChange={e => setHeatLoadForm(prev => ({ ...prev, entryTemp: Number(e.target.value) }))}
+                      style={{ width: '100%' }} required
+                    />
+                  </div>
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem', marginBottom: '0.75rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, marginBottom: '0.2rem' }}>Design Ambient (°C)</label>
+                    <input
+                      type="number" className="form-input" value={heatLoadForm.ambientTemp}
+                      onChange={e => setHeatLoadForm(prev => ({ ...prev, ambientTemp: Number(e.target.value) }))}
+                      style={{ width: '100%' }} required
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, marginBottom: '0.2rem' }}>Room Design Temp (°C)</label>
+                    <input
+                      type="number" className="form-input" value={heatLoadForm.roomTemp}
+                      onChange={e => setHeatLoadForm(prev => ({ ...prev, roomTemp: Number(e.target.value) }))}
+                      style={{ width: '100%' }} required
+                    />
+                  </div>
+                </div>
+
+                {/* Compressor Run Hours & Preferences */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.6rem', marginBottom: '0.75rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, marginBottom: '0.2rem' }}>Compressor Run Target</label>
+                    <select
+                      className="form-input"
+                      value={heatLoadForm.compressorRunHours}
+                      onChange={e => setHeatLoadForm(prev => ({ ...prev, compressorRunHours: Number(e.target.value) }))}
+                      style={{ width: '100%' }}
+                    >
+                      <option value={16.0}>16.0 Hours / Day</option>
+                      <option value={18.0}>18.0 Hours / Day</option>
+                      <option value={20.0}>20.0 Hours / Day</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, marginBottom: '0.2rem' }}>Safety Factor</label>
+                    <select
+                      className="form-input"
+                      value={heatLoadForm.safetyFactor}
+                      onChange={e => setHeatLoadForm(prev => ({ ...prev, safetyFactor: Number(e.target.value) }))}
+                      style={{ width: '100%' }}
+                    >
+                      <option value={0.10}>10% Allowance</option>
+                      <option value={0.15}>15% Heavy Duty</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Collapsible Advanced Loads */}
+                <div style={{ marginBottom: '1rem' }}>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.74rem', padding: '0.15rem 0' }}
+                    onClick={() => setShowAdvancedParams(!showAdvancedParams)}
+                  >
+                    <Settings2 size={12} />
+                    {showAdvancedParams ? 'Hide Internal/Defrost Loads' : 'Adjust Internal Lighting, People & Defrost...'}
+                    {showAdvancedParams ? <ChevronUp size={12} /> : <ChevronDown size={12} />}
+                  </button>
+
+                  {showAdvancedParams && (
+                    <div style={{ background: 'var(--bg-secondary)', padding: '0.6rem', borderRadius: 6, marginTop: '0.3rem', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.4rem', fontSize: '0.72rem' }}>
+                      <div>
+                        <span>Lighting (kW):</span>
+                        <input
+                          type="number" step="0.1" placeholder="Auto" className="form-input"
+                          value={heatLoadForm.lightsKw} onChange={e => setHeatLoadForm(p => ({ ...p, lightsKw: e.target.value }))}
+                        />
+                      </div>
+                      <div>
+                        <span>People Count:</span>
+                        <input
+                          type="number" className="form-input"
+                          value={heatLoadForm.peopleCount} onChange={e => setHeatLoadForm(p => ({ ...p, peopleCount: Number(e.target.value) }))}
+                        />
+                      </div>
+                    </div>
+                  )}
+                </div>
+
+                <button type="submit" className="btn btn-primary" disabled={calculating} style={{ width: '100%', padding: '10px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.4rem' }}>
+                  {calculating ? <Loader2 size={16} className="animate-spin" /> : <Calculator size={16} />}
+                  {calculating ? 'Calculating Thermodynamic Loads...' : 'Calculate Heat Load & Match Daikin Units'}
+                </button>
+              </form>
+            )}
+
+            {/* HEAT LOAD ENGINE RESULTS VIEW */}
+            {sizerMode === 'heatload' && heatLoadResult && (
+              <div style={{ marginTop: '1.25rem', padding: '1rem', background: '#f8fafc', borderRadius: 10, border: '1.5px solid #0284c7' }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem', borderBottom: '1px solid #cbd5e1', paddingBottom: '0.5rem' }}>
+                  <div>
+                    <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 700, textTransform: 'uppercase' }}>Required Machine Capacity</div>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.5rem', marginTop: '0.2rem' }}>
+                      <span style={{ fontSize: '1.35rem', fontWeight: 800, color: '#0369a1' }}>
+                        {heatLoadResult.machineRating.capacityTr} TR
+                      </span>
+                      <span style={{ fontSize: '0.95rem', fontWeight: 700, color: '#334155' }}>
+                        ({heatLoadResult.machineRating.capacityKw} kW)
+                      </span>
+                    </div>
+                  </div>
+                  <div style={{ textAlign: 'right' }}>
+                    <div style={{ fontSize: '0.72rem', color: '#64748b' }}>Total Daily Heat Load</div>
+                    <div style={{ fontSize: '0.95rem', fontWeight: 700, color: '#b45309' }}>
+                      {formatCurrency(heatLoadResult.thermalBreakdown.qTotalKj).replace('₹', '')} kJ/day
+                    </div>
+                  </div>
+                </div>
+
+                {/* Thermal breakdown pills */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.3rem', marginBottom: '0.8rem', textAlign: 'center', fontSize: '0.7rem' }}>
+                  <div style={{ background: '#fff', padding: '4px', borderRadius: 4, border: '1px solid #e2e8f0' }}>
+                    <div style={{ color: '#64748b' }}>Trans</div>
+                    <div style={{ fontWeight: 700 }}>{heatLoadResult.thermalBreakdown.breakdownPercentages.transmission}%</div>
+                  </div>
+                  <div style={{ background: '#fff', padding: '4px', borderRadius: 4, border: '1px solid #e2e8f0' }}>
+                    <div style={{ color: '#64748b' }}>Product</div>
+                    <div style={{ fontWeight: 700 }}>{heatLoadResult.thermalBreakdown.breakdownPercentages.product}%</div>
+                  </div>
+                  <div style={{ background: '#fff', padding: '4px', borderRadius: 4, border: '1px solid #e2e8f0' }}>
+                    <div style={{ color: '#64748b' }}>Infil</div>
+                    <div style={{ fontWeight: 700 }}>{heatLoadResult.thermalBreakdown.breakdownPercentages.airInfiltration}%</div>
+                  </div>
+                  <div style={{ background: '#fff', padding: '4px', borderRadius: 4, border: '1px solid #e2e8f0' }}>
+                    <div style={{ color: '#64748b' }}>Internal</div>
+                    <div style={{ fontWeight: 700 }}>{heatLoadResult.thermalBreakdown.breakdownPercentages.internal}%</div>
+                  </div>
+                  <div style={{ background: '#fff', padding: '4px', borderRadius: 4, border: '1px solid #e2e8f0' }}>
+                    <div style={{ color: '#64748b' }}>Equip</div>
+                    <div style={{ fontWeight: 700 }}>{heatLoadResult.thermalBreakdown.breakdownPercentages.equipment}%</div>
+                  </div>
+                </div>
+
+                {/* Daikin Matched Models */}
+                <div style={{ background: '#fff', padding: '0.75rem', borderRadius: 6, border: '1px solid #93c5fd', fontSize: '0.82rem', lineHeight: 1.6 }}>
+                  <div>
+                    <strong>Outdoor CCU: </strong>
+                    {heatLoadResult.recommendations.multiUnitCcu ? (
+                      <span style={{ color: '#b45309', fontWeight: 700 }}>
+                        {heatLoadResult.recommendations.multiUnitCcu.count} × Daikin {heatLoadResult.recommendations.multiUnitCcu.unit.model_number} ({heatLoadResult.recommendations.multiUnitCcu.totalCapacityTr} TR)
+                      </span>
+                    ) : (
+                      <span style={{ color: '#0369a1', fontWeight: 700 }}>
+                        Daikin {heatLoadResult.recommendations.ccu?.model_number} ({heatLoadResult.recommendations.ccu?.nominal_tr} TR)
+                      </span>
+                    )}
+                  </div>
+                  <div>
+                    <strong>Indoor ACU: </strong>
+                    {heatLoadResult.recommendations.multiUnitAcu ? (
+                      <span style={{ color: '#b45309', fontWeight: 700 }}>
+                        {heatLoadResult.recommendations.multiUnitAcu.count} × Daikin {heatLoadResult.recommendations.multiUnitAcu.unit.model_number} ({heatLoadResult.recommendations.multiUnitAcu.totalCapacityKw} kW)
+                      </span>
+                    ) : (
+                      <span style={{ color: '#0369a1', fontWeight: 700 }}>
+                        Daikin {heatLoadResult.recommendations.evaporator?.model_number} ({heatLoadResult.recommendations.evaporator?.capacity_kw} kW)
+                      </span>
+                    )}
+                  </div>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: '4px' }}>
+                    * Kit: {heatLoadResult.recommendations.valveRecommendations?.expansionValve} TXV + {heatLoadResult.recommendations.valveRecommendations?.orifice} + {heatLoadResult.recommendations.valveRecommendations?.solenoidValve} + {heatLoadResult.recommendations.valveRecommendations?.controller}
+                  </div>
                 </div>
               </div>
+            )}
 
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem', marginBottom: '1.25rem' }}>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.2rem' }}>Brand Preference</label>
-                  <select
-                    className="form-input"
-                    value={calcForm.brand}
-                    onChange={e => setCalcForm(prev => ({ ...prev, brand: e.target.value }))}
-                    style={{ width: '100%' }}
-                  >
-                    <option value="Daikin">Daikin (Authorized Dealer)</option>
-                    <option value="Emerson">Emerson Climate</option>
-                    <option value="any">Compare All (Daikin & Emerson)</option>
-                  </select>
+            {/* MODE B: STANDARD READY RECKONER */}
+            {sizerMode === 'reckoner' && (
+              <form onSubmit={handleCalculate}>
+                {/* Application type */}
+                <div style={{ marginBottom: '1rem' }}>
+                  <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.3rem' }}>Application / Room Type</label>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.5rem' }}>
+                    {[
+                      { id: 'chiller', label: 'Chiller (+4°C)', desc: 'Fruits, Veg, Dairy' },
+                      { id: 'freezer', label: 'Freezer (-20°C)', desc: 'Meat, Ice Cream' },
+                      { id: 'bmc', label: 'Milk Chiller (BMC)', desc: 'Dairy Bulk Tank' },
+                    ].map(a => (
+                      <button
+                        key={a.id}
+                        type="button"
+                        onClick={() => setCalcForm(prev => ({ ...prev, application: a.id }))}
+                        style={{
+                          padding: '8px 10px', textAlign: 'left', borderRadius: 8, cursor: 'pointer',
+                          border: calcForm.application === a.id ? '2px solid var(--primary)' : '1px solid var(--border)',
+                          background: calcForm.application === a.id ? 'rgba(37, 99, 235, 0.1)' : 'var(--bg-secondary)',
+                        }}
+                      >
+                        <div style={{ fontWeight: 600, fontSize: '0.85rem' }}>{a.label}</div>
+                        <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>{a.desc}</div>
+                      </button>
+                    ))}
+                  </div>
                 </div>
-                <div>
-                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.2rem' }}>Design Ambient (°C)</label>
-                  <input
-                    type="number" className="form-input" value={calcForm.ambientTemp}
-                    onChange={e => setCalcForm(prev => ({ ...prev, ambientTemp: e.target.value }))}
-                    style={{ width: '100%' }}
-                  />
+
+                {/* BMC Milk Volume or Room Dimensions */}
+                {calcForm.application === 'bmc' ? (
+                  <div style={{ marginBottom: '1rem' }}>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.3rem' }}>Daily Milk Capacity (Liters)</label>
+                    <select
+                      className="form-input"
+                      value={calcForm.dailyMilkLiters}
+                      onChange={e => setCalcForm(prev => ({ ...prev, dailyMilkLiters: Number(e.target.value) }))}
+                      style={{ width: '100%' }}
+                    >
+                      <option value={500}>500 Liters (2 Batches x 250 L)</option>
+                      <option value={1000}>1000 Liters (2 Batches x 500 L)</option>
+                      <option value={2000}>2000 Liters (2 Batches x 1000 L)</option>
+                      <option value={3000}>3000 Liters (2 Batches x 1500 L)</option>
+                      <option value={4000}>4000 Liters (2 Batches x 2000 L)</option>
+                      <option value={5000}>5000 Liters (2 Batches x 2500 L)</option>
+                    </select>
+                  </div>
+                ) : (
+                  <>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem' }}>
+                      <label style={{ fontSize: '0.85rem', fontWeight: 600 }}>External Room Dimensions</label>
+                      <div style={{ display: 'flex', gap: '0.2rem', background: 'var(--bg-secondary)', padding: 2, borderRadius: 6 }}>
+                        <button
+                          type="button"
+                          onClick={() => setCalcForm(prev => ({ ...prev, unit: 'ft' }))}
+                          style={{
+                            padding: '2px 8px', border: 'none', borderRadius: 4, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer',
+                            background: calcForm.unit === 'ft' ? 'var(--primary)' : 'transparent', color: calcForm.unit === 'ft' ? '#fff' : 'var(--text)'
+                          }}
+                        >
+                          Feet (ft)
+                        </button>
+                        <button
+                          type="button"
+                          onClick={() => setCalcForm(prev => ({ ...prev, unit: 'm' }))}
+                          style={{
+                            padding: '2px 8px', border: 'none', borderRadius: 4, fontSize: '0.75rem', fontWeight: 600, cursor: 'pointer',
+                            background: calcForm.unit === 'm' ? 'var(--primary)' : 'transparent', color: calcForm.unit === 'm' ? '#fff' : 'var(--text)'
+                          }}
+                        >
+                          Meters (m)
+                        </button>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.6rem', marginBottom: '1rem' }}>
+                      <div>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Length ({calcForm.unit})</span>
+                        <input
+                          type="number" step="any" className="form-input" value={calcForm.length}
+                          onChange={e => setCalcForm(prev => ({ ...prev, length: e.target.value }))}
+                          style={{ width: '100%' }} required
+                        />
+                      </div>
+                      <div>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Width ({calcForm.unit})</span>
+                        <input
+                          type="number" step="any" className="form-input" value={calcForm.width}
+                          onChange={e => setCalcForm(prev => ({ ...prev, width: e.target.value }))}
+                          style={{ width: '100%' }} required
+                        />
+                      </div>
+                      <div>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>Height ({calcForm.unit})</span>
+                        <input
+                          type="number" step="any" className="form-input" value={calcForm.height}
+                          onChange={e => setCalcForm(prev => ({ ...prev, height: e.target.value }))}
+                          style={{ width: '100%' }} required
+                        />
+                      </div>
+                    </div>
+                  </>
+                )}
+
+                {/* Technical Constraints */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem', marginBottom: '1rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.2rem' }}>Refrigerant</label>
+                    <select
+                      className="form-input"
+                      value={calcForm.refrigerant}
+                      onChange={e => setCalcForm(prev => ({ ...prev, refrigerant: e.target.value }))}
+                      style={{ width: '100%' }}
+                    >
+                      <option value="R404A">R404A (Standard Eco-blend)</option>
+                      <option value="R22">R22 (Legacy / HCFC)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.2rem' }}>Compressor Technology</label>
+                    <select
+                      className="form-input"
+                      value={calcForm.compressorType}
+                      onChange={e => setCalcForm(prev => ({ ...prev, compressorType: e.target.value }))}
+                      style={{ width: '100%' }}
+                    >
+                      <option value="scroll">Scroll (High Efficiency)</option>
+                      <option value="reciprocating">Reciprocating (Standard)</option>
+                    </select>
+                  </div>
                 </div>
-              </div>
 
-              <button type="submit" className="btn btn-primary" disabled={calculating} style={{ width: '100%', padding: '10px' }}>
-                {calculating ? 'Calculating Catalogue Tables...' : 'Calculate & Match Equipment'}
-              </button>
-            </form>
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.8rem', marginBottom: '1.25rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.2rem' }}>Brand Preference</label>
+                    <select
+                      className="form-input"
+                      value={calcForm.brand}
+                      onChange={e => setCalcForm(prev => ({ ...prev, brand: e.target.value }))}
+                      style={{ width: '100%' }}
+                    >
+                      <option value="Daikin">Daikin (Authorized Dealer)</option>
+                      <option value="Emerson">Emerson Climate</option>
+                      <option value="any">Compare All (Daikin & Emerson)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.2rem' }}>Design Ambient (°C)</label>
+                    <input
+                      type="number" className="form-input" value={calcForm.ambientTemp}
+                      onChange={e => setCalcForm(prev => ({ ...prev, ambientTemp: e.target.value }))}
+                      style={{ width: '100%' }}
+                    />
+                  </div>
+                </div>
 
-            {/* SIZING DECISION OUTPUT CARD */}
-            {recommendation && (
+                <button type="submit" className="btn btn-primary" disabled={calculating} style={{ width: '100%', padding: '10px' }}>
+                  {calculating ? 'Calculating Catalogue Tables...' : 'Calculate & Match Equipment'}
+                </button>
+              </form>
+            )}
+
+            {/* SIZING DECISION OUTPUT CARD FOR RECKONER */}
+            {sizerMode === 'reckoner' && recommendation && (
               <div style={{ marginTop: '1.25rem', padding: '1rem', background: 'var(--bg-secondary)', borderRadius: 10, border: '1px solid var(--border)' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
                   <h3 style={{ margin: 0, fontSize: '0.95rem', fontWeight: 700, color: '#16a34a', display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
@@ -565,7 +1102,7 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
                   </div>
                 </div>
 
-                                {/* MULTIPLE COMPRESSOR SELECTOR */}
+                {/* MULTIPLE COMPRESSOR SELECTOR */}
                 {recommendation.availableCompressors && recommendation.availableCompressors.length > 0 && (() => {
                   const allComps = recommendation.availableCompressors || [];
                   const brandsList = ['all', ...new Set(allComps.map(c => c.brand_name).filter(Boolean))];
@@ -797,13 +1334,35 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
                       tax_amount: taxAmount,
                       total_amount: grandTotal,
                       items,
-                      technicalInputs: recommendation?.inputs ? {
+                      technicalInputs: sizerMode === 'heatload' && heatLoadResult ? {
+                        calculationEngine: 'ASHRAE / USDA Refrigeration Heat Load Engine (Daikin Commercial)',
+                        application: heatLoadResult.inputs.temperatures.roomTempC < 0 ? 'freezer' : 'chiller',
+                        length_ft: heatLoadResult.inputs.dimensions.lengthFt,
+                        width_ft: heatLoadResult.inputs.dimensions.widthFt,
+                        height_ft: heatLoadResult.inputs.dimensions.heightFt,
+                        length_m: heatLoadResult.inputs.dimensions.lengthM,
+                        width_m: heatLoadResult.inputs.dimensions.widthM,
+                        height_m: heatLoadResult.inputs.dimensions.heightM,
+                        volume_ft3: heatLoadResult.inputs.dimensions.volumeFt3,
+                        volume_m3: heatLoadResult.inputs.dimensions.volumeM3,
+                        targetTemp: heatLoadResult.inputs.temperatures.roomTempC,
+                        ambientTemp: heatLoadResult.inputs.temperatures.ambientTempC,
+                        commodity: heatLoadResult.inputs.commodity,
+                        puf: heatLoadResult.inputs.puf,
+                        thermalBreakdown: heatLoadResult.thermalBreakdown,
+                        machineRating: heatLoadResult.machineRating,
+                        calculated_load_kw: heatLoadResult.machineRating.capacityKw,
+                        calculated_load_tr: heatLoadResult.machineRating.capacityTr,
+                        calculated_load_btu: heatLoadResult.machineRating.capacityBtuHr,
+                      } : (recommendation?.inputs ? {
                         application: calcForm.application,
                         length_ft: calcForm.length,
                         width_ft: calcForm.width,
                         height_ft: calcForm.height,
-                        target_temp_c: recommendation.inputs.targetTemp,
-                        ambient_temp_c: calcForm.ambientTemp,
+                        volume_ft3: recommendation.inputs.volume_ft3,
+                        volume_m3: recommendation.inputs.volume_m3,
+                        targetTemp: recommendation.inputs.targetTemp,
+                        ambientTemp: calcForm.ambientTemp,
                         refrigerant_preference: calcForm.refrigerant,
                         compressor_type: calcForm.compressorType,
                         calculated_load_kw: recommendation.estimatedLoadKw,
@@ -814,10 +1373,17 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
                         height_ft: calcForm.height,
                         ambient_temp_c: calcForm.ambientTemp,
                         refrigerant_preference: calcForm.refrigerant,
-                      },
-                      modelRecommendation: recommendation?.recommendations ? {
+                      }),
+                      modelRecommendation: sizerMode === 'heatload' && heatLoadResult ? {
+                        catalogue_ref: heatLoadResult.equipmentRecommendation?.ccu?.modelNumber
+                          ? `${heatLoadResult.equipmentRecommendation.ccu.modelNumber} (${heatLoadResult.equipmentRecommendation.ccu.nominal_tr} TR)`
+                          : 'Daikin CCU',
+                        evaporator_model: heatLoadResult.equipmentRecommendation?.acu?.modelNumber
+                          ? `${heatLoadResult.equipmentRecommendation.acu.modelNumber} (${heatLoadResult.equipmentRecommendation.acu.capacity_kw} kW)`
+                          : 'Daikin ACU',
+                      } : (recommendation?.recommendations ? {
                         catalogue_ref: recommendation.recommendations.cdu ? `${recommendation.recommendations.cdu.brand_name || 'Daikin'} ${recommendation.recommendations.cdu.model_number}` : '',
-                      } : null
+                      } : null)
                     };
                     setProposalQuotation(mockQuotation);
                   }}

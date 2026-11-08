@@ -108,12 +108,29 @@ export default function TechnoCommercialProposalModal({
     const length = tech.length_ft || 15;
     const width = tech.width_ft || 11;
     const height = tech.height_ft || 10;
-    const ambient = tech.ambient_temp_c || 43;
+    const ambient = tech.ambient_temp_c || tech.ambientTemp || 43;
+    let capacityStr = '';
+
+    // Thermodynamic Engine Overrides
+    if (tech.calculationEngine || tech.thermalBreakdown) {
+      if (tech.puf?.thicknessMm) {
+        panelThk = `${tech.puf.thicknessMm} mm PUF Panel (k = 0.023 W/m·K)`;
+      }
+      if (tech.machineRating?.capacityTr) {
+        capacityStr = `${tech.machineRating.capacityTr} TR (${tech.machineRating.capacityKw} kW / ${tech.machineRating.capacityBtuHr?.toLocaleString('en-IN')} BTU/Hr)`;
+      }
+      if (tech.commodity?.name) {
+        appTitle = `Cold Storage for ${tech.commodity.name}`;
+        tempRange = tech.commodity.storageTempRange || tempRange;
+      }
+    }
 
     // Cooling capacity formatting
     const dutyKw = tech.calculated_load_kw || 5.8;
     const dutyBtu = Math.round(dutyKw * 3412.142);
-    const capacityStr = `${dutyBtu.toLocaleString('en-IN')} BTU/Hr (${dutyKw} kW)`;
+    if (!tech.machineRating) {
+      capacityStr = `${dutyBtu.toLocaleString('en-IN')} BTU/Hr (${dutyKw} kW)`;
+    }
 
     // Equipment strings from quotation items or recommendations
     let cduStr = rec.catalogue_ref || 'Daikin / Emerson Air-Cooled Condensing Unit';
@@ -178,7 +195,10 @@ export default function TechnoCommercialProposalModal({
 
       // Annexure IV: Conditions of Contract (12 Clauses)
       terms: DEFAULT_TERMS.map(t => ({ ...t })),
-      client_acceptance_name: `${quotation?.customer_name || 'Client Representative'} / ${quotation?.company_name || 'Facility Owner'}`
+      client_acceptance_name: `${quotation?.customer_name || 'Client Representative'} / ${quotation?.company_name || 'Facility Owner'}`,
+      heat_load_breakdown: tech.thermalBreakdown || null,
+      machine_rating: tech.machineRating || null,
+      commodity: tech.commodity || null,
     };
   };
 
@@ -799,6 +819,64 @@ export default function TechnoCommercialProposalModal({
                       </tr>
                     </tbody>
                   </table>
+
+                  {/* Thermodynamic Heat Load Breakdown (ASHRAE / USDA Engine) */}
+                  {proposalData.heat_load_breakdown && (() => {
+                    const hlb = proposalData.heat_load_breakdown;
+                    const mr = proposalData.machine_rating || {};
+                    const com = proposalData.commodity || {};
+                    return (
+                      <div style={{
+                        background: '#f8fafc',
+                        border: '1.5px solid #0284c7',
+                        borderRadius: 6,
+                        padding: '0.6rem 0.8rem',
+                        marginBottom: '1rem',
+                        fontSize: '0.78rem'
+                      }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.4rem', borderBottom: '1px solid #cbd5e1', paddingBottom: '0.3rem' }}>
+                          <span style={{ fontWeight: 800, color: '#0369a1', textTransform: 'uppercase', fontSize: '0.76rem', letterSpacing: '0.3px' }}>
+                            Thermodynamic Heat Load Summary (ASHRAE / USDA Standards)
+                          </span>
+                          <span style={{ fontWeight: 700, color: '#0f172a' }}>
+                            Stored: {com.name || 'Produce'} • Daily Inflow: {com.dailyMassKg || 8000} kg/day
+                          </span>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(5, 1fr)', gap: '0.4rem', textAlign: 'center' }}>
+                          <div style={{ background: '#fff', padding: '4px', borderRadius: 4, border: '1px solid #e2e8f0' }}>
+                            <div style={{ color: '#64748b', fontSize: '0.68rem' }}>Q Transmission</div>
+                            <div style={{ fontWeight: 700, color: '#0f172a' }}>{Math.round(hlb.qTransmissionKj / 1000)}k kJ</div>
+                            <div style={{ color: '#0284c7', fontSize: '0.68rem', fontWeight: 600 }}>{hlb.breakdownPercentages?.transmission}%</div>
+                          </div>
+                          <div style={{ background: '#fff', padding: '4px', borderRadius: 4, border: '1px solid #e2e8f0' }}>
+                            <div style={{ color: '#64748b', fontSize: '0.68rem' }}>Q Product Load</div>
+                            <div style={{ fontWeight: 700, color: '#0f172a' }}>{Math.round(hlb.qProductKj / 1000)}k kJ</div>
+                            <div style={{ color: '#0284c7', fontSize: '0.68rem', fontWeight: 600 }}>{hlb.breakdownPercentages?.product}%</div>
+                          </div>
+                          <div style={{ background: '#fff', padding: '4px', borderRadius: 4, border: '1px solid #e2e8f0' }}>
+                            <div style={{ color: '#64748b', fontSize: '0.68rem' }}>Q Infiltration</div>
+                            <div style={{ fontWeight: 700, color: '#0f172a' }}>{Math.round(hlb.qAirInfiltrationKj / 1000)}k kJ</div>
+                            <div style={{ color: '#0284c7', fontSize: '0.68rem', fontWeight: 600 }}>{hlb.breakdownPercentages?.airInfiltration}%</div>
+                          </div>
+                          <div style={{ background: '#fff', padding: '4px', borderRadius: 4, border: '1px solid #e2e8f0' }}>
+                            <div style={{ color: '#64748b', fontSize: '0.68rem' }}>Q Internal Load</div>
+                            <div style={{ fontWeight: 700, color: '#0f172a' }}>{Math.round(hlb.qInternalKj / 1000)}k kJ</div>
+                            <div style={{ color: '#0284c7', fontSize: '0.68rem', fontWeight: 600 }}>{hlb.breakdownPercentages?.internal}%</div>
+                          </div>
+                          <div style={{ background: '#fff', padding: '4px', borderRadius: 4, border: '1px solid #e2e8f0' }}>
+                            <div style={{ color: '#64748b', fontSize: '0.68rem' }}>Q Equip / Defrost</div>
+                            <div style={{ fontWeight: 700, color: '#0f172a' }}>{Math.round(hlb.qEquipmentKj / 1000)}k kJ</div>
+                            <div style={{ color: '#0284c7', fontSize: '0.68rem', fontWeight: 600 }}>{hlb.breakdownPercentages?.equipment}%</div>
+                          </div>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '0.4rem', paddingTop: '0.3rem', borderTop: '1px dashed #cbd5e1', fontSize: '0.74rem' }}>
+                          <span><strong>Total Daily Thermal Load:</strong> {Math.round(hlb.qTotalKj / 1000)}k kJ/day</span>
+                          <span><strong>Run Target:</strong> {mr.runHours || 16} hrs/day (+10% Safety Factor)</span>
+                          <span style={{ color: '#0369a1', fontWeight: 800 }}><strong>Selected Capacity:</strong> {mr.capacityTr} TR ({mr.capacityKw} kW)</span>
+                        </div>
+                      </div>
+                    );
+                  })()}
 
                   {/* Included Accessories Badges */}
                   <div style={{ marginBottom: '1.25rem' }}>
