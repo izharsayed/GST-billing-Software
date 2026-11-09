@@ -148,6 +148,10 @@ for (const f of includeAtSystem) {
 mkdirSync(join(SYSTEM, 'src'), { recursive: true });
 copyFileSync(join(REPO_ROOT, 'src', 'utils.js'), join(SYSTEM, 'src', 'utils.js'));
 
+if (existsSync(join(REPO_ROOT, 'server'))) {
+  copyDirRecursive(join(REPO_ROOT, 'server'), join(SYSTEM, 'server'));
+}
+
 copyDirRecursive(join(REPO_ROOT, 'dist'), join(SYSTEM, 'dist'));
 // Only ship the scripts that postinstall / release-time need — not the
 // dev-only helpers (tax-test, discount-modes-test, generate-icons,
