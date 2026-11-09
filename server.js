@@ -17,6 +17,7 @@ import { migrateJsonToSqlite } from './server/db/migrate-json-to-sqlite.js';
 import { seedRefrigerationData } from './server/db/seed-refrigeration-data.js';
 import mastersRouter from './server/routes/masters.js';
 import quotationsRouter from './server/routes/quotations.js';
+import serviceCertificatesRouter from './server/routes/serviceCertificates.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const DATA_DIR = process.env.DATA_DIR || path.join(__dirname, 'data');
@@ -105,6 +106,7 @@ try {
 // Mount Master routes
 app.use('/api/masters', mastersRouter);
 app.use('/api/quotations', quotationsRouter);
+app.use('/api/service-certificates', serviceCertificatesRouter);
 
 const DIRS = ['bills', 'clients', 'templates', 'products', 'expenses', 'recurring', 'receipts', 'profiles', 'purchases'];
 for (const dir of DIRS) {

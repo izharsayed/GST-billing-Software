@@ -580,3 +580,11 @@ export const getQuotationById = (id) => apiFetch(`${API}/quotations/${encodeURIC
 export const saveQuotation = (quotation) => apiFetch(`${API}/quotations`, { method: 'POST', body: JSON.stringify(quotation) });
 export const updateQuotationProposal = (id, proposalData) => apiFetch(`${API}/quotations/${encodeURIComponent(id)}/proposal`, { method: 'PUT', body: JSON.stringify({ proposal_data: proposalData }) });
 export const convertQuotationToInvoice = (id) => apiFetch(`${API}/quotations/${encodeURIComponent(id)}/convert-to-invoice`, { method: 'POST', body: JSON.stringify({}) });
+
+// ---- Service Completion Certificates ----
+export const getServiceCertificates = (clientName) => apiFetch(`${API}/service-certificates${clientName ? `?client=${encodeURIComponent(clientName)}` : ''}`);
+export const getAllServiceCertificates = getServiceCertificates;
+export const getNextServiceRequestNumber = () => apiFetch(`${API}/service-certificates/next-number`);
+export const getServiceCertificateById = (id) => apiFetch(`${API}/service-certificates/${encodeURIComponent(id)}`);
+export const saveServiceCertificate = (cert) => apiFetch(`${API}/service-certificates`, { method: 'POST', body: JSON.stringify(cert) });
+export const deleteServiceCertificate = (id) => apiFetch(`${API}/service-certificates/${encodeURIComponent(id)}`, { method: 'DELETE' });

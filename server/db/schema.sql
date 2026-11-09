@@ -437,3 +437,42 @@ CREATE TABLE IF NOT EXISTS thermal_commodities (
   is_active INTEGER DEFAULT 1
 );
 CREATE INDEX IF NOT EXISTS idx_thermal_commodities_category ON thermal_commodities(category);
+
+-- 24. Service Completion Certificates (Daikin Standard Service Reports)
+CREATE TABLE IF NOT EXISTS service_certificates (
+  id TEXT PRIMARY KEY,
+  request_no TEXT UNIQUE NOT NULL,
+  customer_name TEXT NOT NULL,
+  customer_id TEXT,
+  site_id TEXT,
+  site_name TEXT,
+  site_address TEXT,
+  engineer_name TEXT,
+  installation_date TEXT,
+  warranty_status TEXT DEFAULT 'No',
+  amc_status TEXT DEFAULT 'No',
+  complaint_date_time TEXT,
+  rectification_date_time TEXT,
+  outdoor_model_no TEXT,
+  outdoor_serial_no TEXT,
+  indoor_model_no TEXT,
+  indoor_serial_no TEXT,
+  cause_of_claim TEXT,
+  problem_reported TEXT,
+  root_cause_analysis TEXT,
+  correction_work TEXT,
+  parts_used_json TEXT,
+  refrigerant_required TEXT DEFAULT 'No',
+  refrigerant_type TEXT,
+  refrigerant_qty TEXT,
+  rating_behaviour INTEGER DEFAULT 5,
+  rating_satisfaction INTEGER DEFAULT 5,
+  rating_explanation INTEGER DEFAULT 5,
+  customer_remarks TEXT,
+  dealer_name TEXT DEFAULT 'DAIKIN AIR-CONDITIONING PVT. LTD.',
+  status TEXT DEFAULT 'completed',
+  invoice_id TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_service_certificates_req ON service_certificates(request_no);
+CREATE INDEX IF NOT EXISTS idx_service_certificates_cust ON service_certificates(customer_name);

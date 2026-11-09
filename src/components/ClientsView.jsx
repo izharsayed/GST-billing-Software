@@ -1,7 +1,8 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { Users, Search, FileText, ChevronDown, ChevronUp, Trash2, X, MessageCircle, Mail, Plus, Edit3, Copy, Upload, Download, Wrench, MapPin, Zap } from 'lucide-react';
 import HelpButton from './HelpButton';
-import { getAllClients, getAllBills, deleteClient, saveClient, deleteBill, saveBill, getProfile, deleteReceipt, applyStockChanges, trashSavedPdf } from '../store';
+import { getAllClients, getAllBills, deleteClient, saveClient, deleteBill, saveBill, getProfile, deleteReceipt, applyStockChanges, trashSavedPdf, getAllServiceCertificates } from '../store';
+import ServiceCertificateModal from './ServiceCertificateModal';
 import { formatCurrency, INVOICE_TYPES, markPaidPatch, markUnpaidPatch, salesSign, countsAsSales, isCancelledBill, amountDue, localToday, parseLocalDate, appliedStock, stockDelta } from '../utils';
 import { getPrintSettings } from '../utils/printSettings';
 import { openWhatsAppShare } from '../utils/share';
@@ -45,6 +46,18 @@ export default function ClientsView({ onEdit, onDuplicate, onNew }) {
   const [modalClient, setModalClient] = useState(null);
   const [editingClientId, setEditingClientId] = useState(null);
   const [profileCountry, setProfileCountry] = useState('');
+  const [serviceModalOpen, setServiceModalOpen] = useState(false);
+  const [serviceClient, setServiceClient] = useState(null);
+  const [serviceEquipment, setServiceEquipment] = useState(null);
+  const [viewingCertificate, setViewingCertificate] = useState(null);
+  const [allCertificates, setAllCertificates] = useState([]);
+
+  const openServiceModal = (clientObj, equipmentObj = null, certObj = null) => {
+    setServiceClient(clientObj);
+    setServiceEquipment(equipmentObj);
+    setViewingCertificate(certObj);
+    setServiceModalOpen(true);
+  };
 
   useEffect(() => {
     getProfile().then(p => { if (p?.country) setProfileCountry(p.country); }).catch(() => {});
@@ -52,7 +65,8 @@ export default function ClientsView({ onEdit, onDuplicate, onNew }) {
 
   const loadData = async () => {
     try {
-      const [c, b] = await Promise.all([getAllClients(), getAllBills()]);
+      const [c, b, certs] = await Promise.all([getAllClients(), getAllBills(), getAllServiceCertificates().catch(() => [])]);
+      setAllCertificates(Array.isArray(certs) ? certs : []);
       setClients(c);
       setBills(b);
     } catch {
@@ -1058,6 +1072,15 @@ export default function ClientsView({ onEdit, onDuplicate, onNew }) {
                     <button
                       type="button"
                       className="btn btn-secondary"
+                      style={{ fontSize: '0.75rem', padding: '0.35rem 0.65rem', display: 'flex', alignItems: 'center', gap: '0.3rem', fontWeight: 600, color: '#0369a1', borderColor: '#7dd3fc' }}
+                      onClick={() => openServiceModal(asset.fullClient, asset)}
+                      title="Create Daikin Service Completion Certificate for this exact machine"
+                    >
+                      <Wrench size={13} /> Service Report
+                    </button>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
                       style={{ fontSize: '0.75rem', padding: '0.35rem 0.6rem' }}
                       onClick={() => handleViewClientLedger(asset.clientName)}
                       title="Open client ledger and invoices"
@@ -1118,53 +1141,75 @@ export default function ClientsView({ onEdit, onDuplicate, onNew }) {
                         {savedClient?.state ? ` | ${savedClient.state}` : ''}
                         {savedClient?.gstin ? ` | ${savedClient.gstin}` : ''}
                       </p>
-                      {/* Always-visible AMC & Warranty Badges on Front of Card */}
-                      {savedClient && (savedClient.amcExpiry || (savedClient.equipment || []).some(eq => eq.warrantyUntil)) && (
-                        <div style={{ marginTop: '0.35rem', display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
-                          {savedClient.amcExpiry && (
-                            <span style={{
-                              fontSize: '0.74rem',
-                              fontWeight: 600,
-                              padding: '2px 8px',
-                              borderRadius: 4,
-                              background: '#eff6ff',
-                              color: '#1d4ed8',
-                              border: '1px solid #bfdbfe',
-                              display: 'inline-flex',
-                              alignItems: 'center',
-                              gap: '4px'
-                            }}>
+                      {/* AMC, Warranty Badges & Quick Service Certificate Action */}
+                      <div style={{ marginTop: '0.35rem', display: 'flex', gap: '0.4rem', flexWrap: 'wrap', alignItems: 'center' }}>
+                        {savedClient?.amcExpiry && (
+                          <span style={{
+                            fontSize: '0.74rem',
+                            fontWeight: 600,
+                            padding: '2px 8px',
+                            borderRadius: 4,
+                            background: '#eff6ff',
+                            color: '#1d4ed8',
+                            border: '1px solid #bfdbfe',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px'
+                          }}>
+                            <span>🛡️</span>
+                            <span>AMC Contract: <strong>{savedClient.amcExpiry}</strong></span>
+                          </span>
+                        )}
+                        {(savedClient?.equipment || []).filter(eq => eq.warrantyUntil).map(eq => {
+                          const val = (eq.warrantyUntil || '').toLowerCase();
+                          const isExpired = val.includes('expire') && !val.includes('active');
+                          return (
+                            <span
+                              key={eq.id}
+                              style={{
+                                fontSize: '0.74rem',
+                                fontWeight: 600,
+                                padding: '2px 8px',
+                                borderRadius: 4,
+                                background: isExpired ? '#fef2f2' : '#ecfdf5',
+                                color: isExpired ? '#dc2626' : '#059669',
+                                border: `1px solid ${isExpired ? '#fecaca' : '#a7f3d0'}`,
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: '4px'
+                              }}
+                              title={`Model: ${eq.modelNumber || 'Machine'} • S/N: ${eq.serialNumber || 'N/A'} • Site: ${eq.siteName || 'N/A'}`}
+                            >
                               <span>🛡️</span>
-                              <span>AMC Contract: <strong>{savedClient.amcExpiry}</strong></span>
+                              <span>{eq.modelNumber ? `${eq.modelNumber}: ` : 'Warranty: '}<strong>{eq.warrantyUntil}</strong></span>
                             </span>
-                          )}
-                          {(savedClient.equipment || []).filter(eq => eq.warrantyUntil).map(eq => {
-                            const val = (eq.warrantyUntil || '').toLowerCase();
-                            const isExpired = val.includes('expire') && !val.includes('active');
-                            return (
-                              <span
-                                key={eq.id}
-                                style={{
-                                  fontSize: '0.74rem',
-                                  fontWeight: 600,
-                                  padding: '2px 8px',
-                                  borderRadius: 4,
-                                  background: isExpired ? '#fef2f2' : '#ecfdf5',
-                                  color: isExpired ? '#dc2626' : '#059669',
-                                  border: `1px solid ${isExpired ? '#fecaca' : '#a7f3d0'}`,
-                                  display: 'inline-flex',
-                                  alignItems: 'center',
-                                  gap: '4px'
-                                }}
-                                title={`Model: ${eq.modelNumber || 'Machine'} • S/N: ${eq.serialNumber || 'N/A'} • Site: ${eq.siteName || 'N/A'}`}
-                              >
-                                <span>🛡️</span>
-                                <span>{eq.modelNumber ? `${eq.modelNumber}: ` : 'Warranty: '}<strong>{eq.warrantyUntil}</strong></span>
-                              </span>
-                            );
-                          })}
-                        </div>
-                      )}
+                          );
+                        })}
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openServiceModal(savedClient || { name: clientName });
+                          }}
+                          style={{
+                            fontSize: '0.74rem',
+                            fontWeight: 600,
+                            padding: '2px 8px',
+                            borderRadius: 4,
+                            background: '#f0fdf4',
+                            color: '#15803d',
+                            border: '1px solid #bbf7d0',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            gap: '4px',
+                            cursor: 'pointer'
+                          }}
+                          title="Create Daikin Service Completion Certificate"
+                        >
+                          <Wrench size={12} />
+                          <span>Service Certificate</span>
+                        </button>
+                      </div>
                       {search.trim() && (() => {
                         const q = search.trim().toLowerCase();
                         const matchedEq = (savedClient?.equipment || []).filter(eq =>
@@ -1235,6 +1280,11 @@ export default function ClientsView({ onEdit, onDuplicate, onNew }) {
                         onClick={() => generateAgingReport(clientName)}
                         title="Aging report: outstanding invoices bucketed by how overdue they are">
                         <Download size={14} /> Aging PDF
+                      </button>
+                      <button className="btn btn-secondary" style={{ fontSize: '0.78rem', padding: '0.35rem 0.75rem', color: '#0369a1', borderColor: '#7dd3fc', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+                        onClick={() => openServiceModal(savedClient || { name: clientName })}
+                        title="Create Daikin Service Completion Certificate">
+                        <Wrench size={14} /> Service Certificate
                       </button>
                     </div>
 
@@ -1388,6 +1438,94 @@ export default function ClientsView({ onEdit, onDuplicate, onNew }) {
                         </table>
                       </div>
                     )}
+                    {/* v2.0 - Service Completion Certificates History for this client */}
+                    {(() => {
+                      const clientCerts = (allCertificates || []).filter(cert => {
+                        if (savedClient?.id && cert.customer_id && cert.customer_id === savedClient.id) return true;
+                        return (cert.customer_name || '').trim().toLowerCase() === clientName.trim().toLowerCase();
+                      });
+                      return (
+                        <div style={{ padding: '0.85rem 1.5rem', borderTop: '1px solid var(--border)', background: 'var(--bg-secondary, #f8fafc)' }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: clientCerts.length > 0 ? '0.6rem' : 0 }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                              <Wrench size={15} style={{ color: '#0284c7' }} />
+                              <span style={{ fontWeight: 700, fontSize: '0.83rem', color: 'var(--text-color)' }}>
+                                Service Completion Certificates ({clientCerts.length})
+                              </span>
+                            </div>
+                            <button
+                              type="button"
+                              className="btn btn-secondary"
+                              style={{ fontSize: '0.74rem', padding: '0.25rem 0.65rem', display: 'flex', alignItems: 'center', gap: '0.3rem', color: '#0369a1', borderColor: '#7dd3fc', fontWeight: 600 }}
+                              onClick={() => openServiceModal(savedClient || { name: clientName })}
+                            >
+                              <Plus size={13} /> New Certificate
+                            </button>
+                          </div>
+
+                          {clientCerts.length > 0 && (
+                            <div className="table-scroll" style={{ marginTop: '0.4rem' }}>
+                              <table className="data-table" style={{ fontSize: '0.78rem', marginBottom: 0 }}>
+                                <thead>
+                                  <tr>
+                                    <th>Date</th>
+                                    <th>Request No</th>
+                                    <th>Equipment / Model</th>
+                                    <th>Site / Location</th>
+                                    <th>Engineer</th>
+                                    <th>Problem / Correction</th>
+                                    <th>Rating</th>
+                                    <th className="col-center">Actions</th>
+                                  </tr>
+                                </thead>
+                                <tbody>
+                                  {clientCerts.map(cert => (
+                                    <tr key={cert.id}>
+                                      <td className="text-muted">{cert.rectification_date_time?.split(' ')[0] || cert.created_at?.split('T')[0] || '—'}</td>
+                                      <td><span className="invoice-badge" style={{ background: '#e0f2fe', color: '#0369a1', borderColor: '#bae6fd' }}>{cert.request_no}</span></td>
+                                      <td>
+                                        <div style={{ fontWeight: 600 }}>{cert.outdoor_model_no || cert.indoor_model_no || 'Refrigeration Machine'}</div>
+                                        {(cert.outdoor_serial_no || cert.indoor_serial_no) && (
+                                          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>S/N: {cert.outdoor_serial_no || cert.indoor_serial_no}</div>
+                                        )}
+                                      </td>
+                                      <td>{cert.site_name || (cert.site_address ? cert.site_address.slice(0, 22) + '...' : '—')}</td>
+                                      <td>{cert.engineer_name || '—'}</td>
+                                      <td style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={cert.correction_work || cert.problem_reported}>
+                                        {cert.correction_work || cert.problem_reported || '—'}
+                                      </td>
+                                      <td>
+                                        <span title={`Customer Rating: ${cert.rating_satisfaction || 5}/5`}>
+                                          {'⭐'.repeat(Math.max(1, Math.min(5, Number(cert.rating_satisfaction) || 5)))}
+                                        </span>
+                                      </td>
+                                      <td>
+                                        <div className="table-actions" style={{ justifyContent: 'center' }}>
+                                          <button
+                                            className="icon-btn icon-btn-blue"
+                                            title="View / Print Certificate"
+                                            onClick={() => openServiceModal(savedClient || { name: clientName }, null, cert)}
+                                          >
+                                            <FileText size={14} />
+                                          </button>
+                                          <button
+                                            className="icon-btn icon-btn-blue"
+                                            title="Convert to GST Invoice"
+                                            onClick={() => openServiceModal(savedClient || { name: clientName }, null, cert)}
+                                          >
+                                            <Zap size={14} />
+                                          </button>
+                                        </div>
+                                      </td>
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          )}
+                        </div>
+                      );
+                    })()}
                     <div className="client-actions-bar" style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', padding: '0.75rem 1.5rem', borderTop: '1px solid var(--border)' }}>
                       {savedClient ? (
                         <>
@@ -1412,6 +1550,24 @@ export default function ClientsView({ onEdit, onDuplicate, onNew }) {
         </div>
       )}
         </>
+      )}
+
+      {/* Service Certificate Modal */}
+      {serviceModalOpen && (
+        <ServiceCertificateModal
+          isOpen={serviceModalOpen}
+          onClose={() => {
+            setServiceModalOpen(false);
+            setServiceClient(null);
+            setServiceEquipment(null);
+            setViewingCertificate(null);
+          }}
+          client={serviceClient}
+          equipment={serviceEquipment}
+          existingCertificate={viewingCertificate}
+          onConvertToInvoice={(draft) => onNew(draft)}
+          onSaved={() => loadData()}
+        />
       )}
     </div>
   );
