@@ -5,7 +5,7 @@ import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(__dirname, '..', '..');
-const DATA_DIR = path.join(ROOT_DIR, 'data');
+const DATA_DIR = process.env.DATA_DIR || path.join(ROOT_DIR, 'data');
 const DB_PATH = path.join(DATA_DIR, 'refrigeration.db');
 
 if (!fs.existsSync(DATA_DIR)) {

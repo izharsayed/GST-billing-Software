@@ -5,7 +5,7 @@ import { db, runInTransaction } from './index.js';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(__dirname, '..', '..');
-const DATA_DIR = path.join(ROOT_DIR, 'data');
+const DATA_DIR = process.env.DATA_DIR || path.join(ROOT_DIR, 'data');
 
 export function migrateJsonToSqlite() {
   const summary = {

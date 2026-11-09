@@ -8,7 +8,7 @@ import { calculateHeatLoad, getThermalCommodities } from '../services/heatLoadCa
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const ROOT_DIR = path.resolve(__dirname, '..', '..');
-const DATA_DIR = path.join(ROOT_DIR, 'data');
+const DATA_DIR = process.env.DATA_DIR || path.join(ROOT_DIR, 'data');
 const BILLS_DIR = path.join(DATA_DIR, 'bills');
 
 if (!fs.existsSync(BILLS_DIR)) {
