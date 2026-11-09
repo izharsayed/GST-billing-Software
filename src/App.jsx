@@ -22,6 +22,7 @@ import SetupWizard from './components/SetupWizard';
 import ToastContainer, { toast } from './components/Toast';
 import ConfirmModalContainer from './components/ConfirmModal';
 import WelcomeGuide from './components/WelcomeGuide';
+import mifLogo from './assets/logo.png';
 const SettingsView = lazy(() => import('./components/SettingsView'));
 const ClientsView = lazy(() => import('./components/ClientsView'));
 const InventoryView = lazy(() => import('./components/InventoryView'));
@@ -828,8 +829,8 @@ function App() {
       {navOpen && <div className="sidebar-backdrop" onClick={() => setNavOpen(false)} aria-hidden="true" />}
       <div className={`sidebar${navOpen ? ' sidebar-open' : ''}`} onClick={closeNavAfterPick}>
         <div className="sidebar-brand">
-          <div className="sidebar-logo">
-            <img src="/mif-logo-192.png" alt="MIF Logo" style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none'; }} />
+          <div className="sidebar-logo" style={{ background: 'transparent', padding: 0, overflow: 'hidden' }}>
+            <img src={mifLogo} alt="MIF Logo" style={{ width: 40, height: 40, borderRadius: 10, objectFit: 'cover', display: 'block' }} />
           </div>
           <div>
             <h2 className="sidebar-title">MIF CoolERP</h2>
