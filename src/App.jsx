@@ -822,18 +822,18 @@ function App() {
           aria-label="Open menu" aria-expanded={navOpen}>
           <Menu size={22} />
         </button>
-        <span className="mobile-topbar-title">GST Billing</span>
+        <span className="mobile-topbar-title">MIF CoolERP</span>
         <span className="mobile-topbar-business">{profile?.businessName || ''}</span>
       </div>
       {navOpen && <div className="sidebar-backdrop" onClick={() => setNavOpen(false)} aria-hidden="true" />}
       <div className={`sidebar${navOpen ? ' sidebar-open' : ''}`} onClick={closeNavAfterPick}>
         <div className="sidebar-brand">
           <div className="sidebar-logo">
-            <FileText size={22} />
+            <img src="/mif-logo-192.png" alt="MIF Logo" style={{ width: 28, height: 28, borderRadius: 6, objectFit: 'cover' }} onError={(e) => { e.target.style.display = 'none'; }} />
           </div>
           <div>
-            <h2 className="sidebar-title">GST Billing</h2>
-            <p className="sidebar-subtitle">by DiceCodes</p>
+            <h2 className="sidebar-title">MIF CoolERP</h2>
+            <p className="sidebar-subtitle">Cold Room & GST Suite</p>
           </div>
           {/* Auto-hide as a ☰ button (was a text checkbox): pressed = the menu
               shrinks to icons and opens when pointed at. */}
