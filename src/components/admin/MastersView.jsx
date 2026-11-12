@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
-  Layers, Tag, Cpu, DollarSign, Truck, History, Plus, Edit2, Trash2, CheckCircle2,
+  Layers, Tag, Cpu, IndianRupee, Truck, History, Plus, Edit2, Trash2, CheckCircle2,
   AlertCircle, Search, RefreshCw, X, ChevronLeft, ChevronRight, Copy, Check,
   Snowflake, AlertTriangle
 } from 'lucide-react';
@@ -326,7 +326,7 @@ export default function MastersView() {
           { id: 'categories', label: 'Product Categories', icon: Layers, count: categories.length },
           { id: 'brands', label: 'Brands / Makers', icon: Tag, count: brands.length },
           { id: 'warehouses', label: 'Warehouses & Vans', icon: Truck, count: warehouses.length },
-          { id: 'charges', label: 'Service Charges & Labour', icon: DollarSign, count: charges.length },
+          { id: 'charges', label: 'Service Charges & Labour', icon: IndianRupee, count: charges.length },
           { id: 'history', label: 'Price Change Audit', icon: History, count: history.length },
         ].map((t) => {
           const Icon = t.icon;
