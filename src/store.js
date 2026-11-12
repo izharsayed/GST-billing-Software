@@ -558,6 +558,9 @@ export const getBrands = () => apiFetch(`${API}/masters/brands`);
 export const saveBrand = (brand) => apiFetch(`${API}/masters/brands`, { method: 'POST', body: JSON.stringify(brand) });
 export const deleteBrand = (id) => apiFetch(`${API}/masters/brands/${encodeURIComponent(id)}`, { method: 'DELETE' });
 
+export const getMasterProducts = () => apiFetch(`${API}/masters/products`);
+export const saveMasterProduct = (prod) => apiFetch(`${API}/masters/products`, { method: 'POST', body: JSON.stringify(prod) });
+
 export const getProductModels = (productId) => apiFetch(`${API}/masters/models${productId ? `?product_id=${encodeURIComponent(productId)}` : ''}`);
 export const saveProductModel = (model) => apiFetch(`${API}/masters/models`, { method: 'POST', body: JSON.stringify(model) });
 export const deleteProductModel = (id) => apiFetch(`${API}/masters/models/${encodeURIComponent(id)}`, { method: 'DELETE' });

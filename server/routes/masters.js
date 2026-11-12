@@ -108,6 +108,54 @@ router.delete('/brands/:id', (req, res) => {
 });
 
 // ==========================================
+// 2B. BASE PRODUCTS (MASTER EQUIPMENT)
+// ==========================================
+router.get('/products', (req, res) => {
+  try {
+    const products = db.prepare(`
+      SELECT p.*, c.name as category_name, b.name as brand_name
+      FROM products p
+      LEFT JOIN product_categories c ON p.category_id = c.id
+      LEFT JOIN brands b ON p.brand_id = b.id
+      WHERE (p.is_active = 1 OR p.is_active IS NULL)
+      ORDER BY p.name ASC
+    `).all();
+    res.json(products);
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.post('/products', (req, res) => {
+  try {
+    const { id, name, category_id, brand_id, unit = 'Nos', hsn_sac = '84189900', tax_percent = 18, product_type = 'Refrigeration Equipment', track_inventory = 1, description } = req.body;
+    if (!name || !name.trim()) {
+      return res.status(400).json({ error: 'Product name is required' });
+    }
+    const prodId = id || 'prod_' + Date.now() + '_' + Math.random().toString(36).slice(2, 6);
+    db.prepare(`
+      INSERT INTO products (id, name, category_id, brand_id, unit, hsn_sac, tax_percent, product_type, track_inventory, description, is_active)
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1)
+      ON CONFLICT(id) DO UPDATE SET
+        name = excluded.name,
+        category_id = excluded.category_id,
+        brand_id = excluded.brand_id,
+        unit = excluded.unit,
+        hsn_sac = excluded.hsn_sac,
+        tax_percent = excluded.tax_percent,
+        product_type = excluded.product_type,
+        track_inventory = excluded.track_inventory,
+        description = excluded.description,
+        is_active = 1
+    `).run(prodId, name.trim(), category_id || null, brand_id || null, unit, hsn_sac, tax_percent, product_type, track_inventory ? 1 : 0, description || '');
+    logAudit('admin', 'save', 'master_product', prodId, { name });
+    res.json({ success: true, id: prodId });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+// ==========================================
 // 3. PRODUCT MODELS & TECHNICAL SPECS
 // ==========================================
 router.get('/models', (req, res) => {

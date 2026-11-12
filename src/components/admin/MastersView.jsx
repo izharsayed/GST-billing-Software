@@ -8,7 +8,7 @@ import {
   getCategories, saveCategory, deleteCategory,
   getBrands, saveBrand, deleteBrand,
   getProductModels, saveProductModel, deleteProductModel,
-  getAllProducts, getWarehouses, saveWarehouse,
+  getMasterProducts, getWarehouses, saveWarehouse,
   getChargeItems, saveChargeItem, getPriceHistory
 } from '../../store';
 import { toast } from '../Toast';
@@ -46,7 +46,7 @@ export default function MastersView() {
       const [cats, brds, prods, mods, whs, chgs, hist] = await Promise.all([
         getCategories().catch(() => []),
         getBrands().catch(() => []),
-        getAllProducts().catch(() => []),
+        getMasterProducts().catch(() => []),
         getProductModels().catch(() => []),
         getWarehouses().catch(() => []),
         getChargeItems().catch(() => []),
@@ -1452,10 +1452,20 @@ export default function MastersView() {
                 <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
                   <div>
                     <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.3rem' }}>Base Product *</label>
-                    <select name="product_id" defaultValue={editModal.data?.product_id || (products[0]?.id || '')} className="form-input" style={{ width: '100%' }} required>
-                      {products.map(p => (
-                        <option key={p.id} value={p.id}>{p.name} ({p.unit || 'Nos'})</option>
-                      ))}
+                    <select name="product_id" defaultValue={editModal.data?.product_id || (products[0]?.id || 'prod_daikin_cdu')} className="form-input" style={{ width: '100%' }} required>
+                      {products.length === 0 ? (
+                        <>
+                          <option value="prod_daikin_cdu">Daikin Commercial Condensing Unit (Set)</option>
+                          <option value="prod_emerson_cdu">Emerson Cold Room Condensing Unit (Set)</option>
+                          <option value="prod_daikin_evap">Daikin Air Cooling Unit (Evaporator) (Nos)</option>
+                          <option value="prod_comm_evap">Commercial Air Cooling Unit (Evaporator) (Nos)</option>
+                          <option value="prod_emerson_bmc">Emerson Bulk Milk Chiller Unit (Set)</option>
+                        </>
+                      ) : (
+                        products.map(p => (
+                          <option key={p.id} value={p.id}>{p.name} ({p.unit || 'Nos'})</option>
+                        ))
+                      )}
                     </select>
                   </div>
                   <div>
