@@ -3,6 +3,7 @@ import { Users, Search, FileText, ChevronDown, ChevronUp, Trash2, X, MessageCirc
 import HelpButton from './HelpButton';
 import { getAllClients, getAllBills, deleteClient, saveClient, deleteBill, saveBill, getProfile, deleteReceipt, applyStockChanges, trashSavedPdf, getAllServiceCertificates } from '../store';
 import ServiceCertificateModal from './ServiceCertificateModal';
+import TechnoCommercialProposalModal from './quotation/TechnoCommercialProposalModal';
 import { formatCurrency, INVOICE_TYPES, markPaidPatch, markUnpaidPatch, salesSign, countsAsSales, isCancelledBill, amountDue, localToday, parseLocalDate, appliedStock, stockDelta } from '../utils';
 import { getPrintSettings } from '../utils/printSettings';
 import { openWhatsAppShare } from '../utils/share';
@@ -51,6 +52,195 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert }) {
   const [serviceEquipment, setServiceEquipment] = useState(null);
   const [viewingCertificate, setViewingCertificate] = useState(null);
   const [allCertificates, setAllCertificates] = useState([]);
+  const [proposalQuotation, setProposalQuotation] = useState(null);
+  const [targetBillForProposal, setTargetBillForProposal] = useState(null);
+  const [clientDocTabs, setClientDocTabs] = useState({});
+
+  const handleOpenProposal = (bill) => {
+    if (!bill) return;
+    const data = bill.data || {};
+    const clientObj = data.client || bill.client || clients.find(c => c.name === bill.clientName) || { name: bill.clientName };
+    const items = data.items || [];
+    const mappedItems = items.length > 0 ? items.map(it => ({
+      description: it.name || it.description || '',
+      quantity: Number(it.quantity) || 1,
+      unit: it.unit || 'Nos',
+      unit_price: Number(it.rate) || 0,
+      total_amount: it.total != null ? Number(it.total) : ((Number(it.quantity) || 1) * (Number(it.rate) || 0)),
+    })) : [
+      {
+        description: bill.invoiceNumber ? `Quotation ${bill.invoiceNumber}` : 'Industrial Refrigeration Equipment & Cold Room Supply',
+        quantity: 1,
+        unit: 'Set',
+        unit_price: Number(bill.totalAmount) || 0,
+        total_amount: Number(bill.totalAmount) || 0,
+      }
+    ];
+
+    const technicalSpecs = data.technicalSpecs || null;
+
+    const payload = {
+      id: bill.id || data.details?.invoiceNumber || 'proposal',
+      quotation_number: bill.invoiceNumber || data.details?.invoiceNumber || 'CER/CR-DRAFT',
+      quotation_date: bill.invoiceDate || data.details?.invoiceDate || new Date().toISOString().split('T')[0],
+      customer_name: clientObj.name || bill.clientName || 'Valued Customer',
+      company_name: clientObj.companyName || '',
+      customer_phone: clientObj.phone || '',
+      customer_gstin: clientObj.gstin || '',
+      site_name: data.details?.shippingAddress || data.details?.placeOfSupply || 'Site Facility',
+      site_address: data.details?.shippingAddress || clientObj.address || '',
+      site_contact: clientObj.name || '',
+      equipment_subtotal: Number(data.totals?.subtotal) || Number(bill.totalAmount) || 0,
+      charges_subtotal: 0,
+      tax_amount: Number(data.totals?.taxAmount) || 0,
+      total_amount: Number(bill.totalAmount) || Number(data.totals?.total) || 0,
+      items: mappedItems,
+      technicalInputs: technicalSpecs ? {
+        ...technicalSpecs,
+        application_type: technicalSpecs.application,
+        application: technicalSpecs.application,
+        target_temp_c: technicalSpecs.targetTemp !== undefined ? technicalSpecs.targetTemp : technicalSpecs.temperatures?.roomTempC,
+        ambient_temp_c: technicalSpecs.ambientTemp !== undefined ? technicalSpecs.ambientTemp : technicalSpecs.temperatures?.ambientTempC,
+        length_ft: technicalSpecs.dimensions?.lengthFt || (technicalSpecs.unit === 'm' ? Math.round(Number(technicalSpecs.length) * 3.28084) : (Number(technicalSpecs.length) || null)),
+        width_ft: technicalSpecs.dimensions?.widthFt || (technicalSpecs.unit === 'm' ? Math.round(Number(technicalSpecs.width) * 3.28084) : (Number(technicalSpecs.width) || null)),
+        height_ft: technicalSpecs.dimensions?.heightFt || (technicalSpecs.unit === 'm' ? Math.round(Number(technicalSpecs.height) * 3.28084) : (Number(technicalSpecs.height) || null)),
+        length_m: technicalSpecs.dimensions?.lengthM || (technicalSpecs.unit === 'm' ? Number(technicalSpecs.length) : null),
+        width_m: technicalSpecs.dimensions?.widthM || (technicalSpecs.unit === 'm' ? Number(technicalSpecs.width) : null),
+        height_m: technicalSpecs.dimensions?.heightM || (technicalSpecs.unit === 'm' ? Number(technicalSpecs.height) : null),
+        calculated_load_kw: technicalSpecs.estimatedLoadKw ?? technicalSpecs.machineRating?.capacityKw,
+        calculated_load_tr: technicalSpecs.capacityTr ?? technicalSpecs.machineRating?.capacityTr,
+        calculated_load_btu: technicalSpecs.machineRating?.capacityBtuHr,
+      } : null,
+      modelRecommendation: technicalSpecs ? {
+        catalogue_ref: technicalSpecs.cdu?.model_number || (typeof technicalSpecs.cdu === 'string' ? technicalSpecs.cdu : ''),
+        cdu: technicalSpecs.cdu,
+        evaporator: technicalSpecs.evaporator,
+        expansionValve: technicalSpecs.expansionValve,
+        orifice: technicalSpecs.orifice,
+        solenoidValve: technicalSpecs.solenoidValve,
+        controller: technicalSpecs.controller,
+      } : null,
+      proposal_data: data.proposalData || null,
+    };
+
+    setTargetBillForProposal(bill);
+    setProposalQuotation(payload);
+  };
+
+  const handleProposalSaved = async (updatedProposalData) => {
+    if (targetBillForProposal) {
+      try {
+        const updatedBill = {
+          ...targetBillForProposal,
+          data: {
+            ...targetBillForProposal.data,
+            proposalData: updatedProposalData,
+          }
+        };
+        await saveBill(updatedBill, { overwrite: true });
+        toast('5-Page Proposal customisations saved successfully', 'success');
+        loadData();
+      } catch (err) {
+        console.error(err);
+        toast('Failed to save proposal data', 'error');
+      }
+    }
+  };
+
+  const renderServiceCertificatesTable = (clientCerts, clientName, savedClient, showHeader = true) => (
+    <div style={{ padding: '0.85rem 1.5rem', borderTop: showHeader ? '1px solid var(--border)' : 'none', background: 'var(--bg-secondary, #f8fafc)' }}>
+      {showHeader && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: clientCerts.length > 0 ? '0.6rem' : 0 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            <Wrench size={15} style={{ color: '#0284c7' }} />
+            <span style={{ fontWeight: 700, fontSize: '0.83rem', color: 'var(--text-color)' }}>
+              Service Completion Certificates ({clientCerts.length})
+            </span>
+          </div>
+          <button
+            type="button"
+            className="btn btn-secondary"
+            style={{ fontSize: '0.74rem', padding: '0.25rem 0.65rem', display: 'flex', alignItems: 'center', gap: '0.3rem', color: '#0369a1', borderColor: '#7dd3fc', fontWeight: 600 }}
+            onClick={() => openServiceModal(savedClient || { name: clientName })}
+          >
+            <Plus size={13} /> New Certificate
+          </button>
+        </div>
+      )}
+
+      {clientCerts.length > 0 ? (
+        <div className="table-scroll" style={{ marginTop: showHeader ? '0.4rem' : 0 }}>
+          <table className="data-table" style={{ fontSize: '0.78rem', marginBottom: 0 }}>
+            <thead>
+              <tr>
+                <th>Date</th>
+                <th>Request No</th>
+                <th>Equipment / Model</th>
+                <th>Site / Location</th>
+                <th>Engineer</th>
+                <th>Problem / Correction</th>
+                <th>Rating</th>
+                <th className="col-center">Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {clientCerts.map(cert => (
+                <tr key={cert.id}>
+                  <td className="text-muted">{cert.rectification_date_time?.split(' ')[0] || cert.created_at?.split('T')[0] || '—'}</td>
+                  <td><span className="invoice-badge" style={{ background: '#e0f2fe', color: '#0369a1', borderColor: '#bae6fd' }}>{cert.request_no}</span></td>
+                  <td>
+                    <div style={{ fontWeight: 600 }}>{cert.outdoor_model_no || cert.indoor_model_no || 'Refrigeration Machine'}</div>
+                    {(cert.outdoor_serial_no || cert.indoor_serial_no) && (
+                      <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>S/N: {cert.outdoor_serial_no || cert.indoor_serial_no}</div>
+                    )}
+                  </td>
+                  <td>{cert.site_name || (cert.site_address ? cert.site_address.slice(0, 22) + '...' : '—')}</td>
+                  <td>{cert.engineer_name || '—'}</td>
+                  <td style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={cert.correction_work || cert.problem_reported}>
+                    {cert.correction_work || cert.problem_reported || '—'}
+                  </td>
+                  <td>
+                    <span title={`Customer Rating: ${cert.rating_satisfaction || 5}/5`}>
+                      {'⭐'.repeat(Math.max(1, Math.min(5, Number(cert.rating_satisfaction) || 5)))}
+                    </span>
+                  </td>
+                  <td>
+                    <div className="table-actions" style={{ justifyContent: 'center' }}>
+                      <button
+                        className="icon-btn icon-btn-blue"
+                        title="View / Print Certificate"
+                        onClick={() => openServiceModal(savedClient || { name: clientName }, null, cert)}
+                      >
+                        <FileText size={14} />
+                      </button>
+                      <button
+                        className="icon-btn icon-btn-blue"
+                        title="Convert to GST Invoice"
+                        onClick={() => openServiceModal(savedClient || { name: clientName }, null, cert)}
+                      >
+                        <Zap size={14} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      ) : (
+        <div style={{ padding: '2rem 1rem', textAlign: 'center' }}>
+          <p className="text-muted" style={{ fontSize: '0.85rem', marginBottom: '0.75rem' }}>No service completion certificates for this client yet.</p>
+          <button
+            className="btn btn-primary"
+            style={{ fontSize: '0.8rem', padding: '0.4rem 1rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+            onClick={() => openServiceModal(savedClient || { name: clientName })}
+          >
+            <Plus size={14} /> Create Service Certificate
+          </button>
+        </div>
+      )}
+    </div>
+  );
 
   const openServiceModal = (clientObj, equipmentObj = null, certObj = null) => {
     setServiceClient(clientObj);
@@ -1365,170 +1555,284 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert }) {
                         </div>
                       </div>
                     )}
-                    {clientBills.length === 0 ? (
-                      <div style={{ padding: '1.5rem', textAlign: 'center' }}>
-                        <p className="text-muted" style={{ fontSize: '0.85rem', marginBottom: '0.75rem' }}>No invoices for this client yet.</p>
-                        <button className="btn btn-primary" style={{ fontSize: '0.8rem', padding: '0.4rem 1rem' }} onClick={onNew}>
-                          <Plus size={15} /> Create Invoice
-                        </button>
-                      </div>
-                    ) : (
-                      <div className="table-scroll">
-                        <table className="data-table" style={{ marginBottom: 0, minWidth: '750px' }}>
-                          <thead>
-                            <tr>
-                              <th>Date</th>
-                              <th>Invoice No.</th>
-                              <th>Type</th>
-                              <th style={{ textAlign: 'right' }}>Amount</th>
-                              <th>Status</th>
-                              <th className="col-center">Actions</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {clientBills.map(bill => {
-                              const status = bill.status || 'unpaid';
-                              const sc = STATUS_COLORS[status] || STATUS_COLORS.unpaid;
-                              const cancelled = isCancelledBill(bill);
-                              const isOverdue = status !== 'paid' && !cancelled && bill.data?.details?.dueDate && new Date(bill.data.details.dueDate) < new Date();
-                              return (
-                                <tr key={bill.id} className={isOverdue ? 'row-overdue' : ''}>
-                                  <td className="text-muted">{new Date(bill.invoiceDate).toLocaleDateString('en-IN')}</td>
-                                  <td><span className="invoice-badge">{bill.invoiceNumber}</span></td>
-                                  <td><span className="type-badge">{(INVOICE_TYPES[bill.invoiceType || 'tax-invoice'])?.label}</span></td>
-                                  <td className="font-bold" style={{ textAlign: 'right' }}>{formatCurrency(bill.totalAmount, bill.currency || bill.data?.invoiceOptions?.currency || 'INR')}</td>
-                                  <td>
-                                    <select className="status-select" value={isOverdue && status !== 'overdue' ? 'overdue' : status}
-                                      style={{ background: sc.bg, color: sc.color, borderColor: sc.color + '44', fontSize: '0.75rem', padding: '0.2rem 0.4rem', borderRadius: '4px', border: '1px solid', cursor: 'pointer', fontWeight: 600 }}
-                                      onClick={e => e.stopPropagation()}
-                                      onChange={e => changeStatus(bill, e.target.value)}
-                                      disabled={cancelled}
-                                      title={cancelled ? 'Undo the cancel from the Dashboard' : undefined}>
-                                      {/* v1.10.74 - Cancelled is shown, never picked here (no stock restore in this screen). */}
-                                      {Object.entries(STATUS_COLORS).filter(([key]) => cancelled || key !== 'cancelled').map(([key, val]) => (
-                                        <option key={key} value={key}>{val.label}</option>
-                                      ))}
-                                    </select>
-                                  </td>
-                                  <td>
-                                    <div className="table-actions">
-                                      {onConvert && ['quotation', 'proforma', 'delivery-challan'].includes(bill.invoiceType) && !bill.convertedTo && (
-                                        <button className="icon-btn icon-btn-green" onClick={() => onConvert(bill)} title="Convert to Tax Invoice" aria-label="Convert to Tax Invoice">
-                                          <FileText size={14} />
-                                        </button>
-                                      )}
-                                      {bill.data && (
-                                        <button className="icon-btn icon-btn-blue" onClick={() => onEdit(bill)} title="Edit Invoice">
-                                          <Edit3 size={14} />
-                                        </button>
-                                      )}
-                                      <button className="icon-btn icon-btn-blue" onClick={() => onDuplicate(bill)} title="Duplicate Invoice">
-                                        <Copy size={14} />
-                                      </button>
-                                      <button className="icon-btn icon-btn-green" onClick={() => shareWhatsApp(bill)} title="WhatsApp">
-                                        <MessageCircle size={14} />
-                                      </button>
-                                      <button className="icon-btn icon-btn-blue" onClick={() => shareEmail(bill)} title="Email">
-                                        <Mail size={14} />
-                                      </button>
-                                      <button className="icon-btn icon-btn-red" onClick={() => handleDeleteBill(bill.id)} title="Delete Invoice">
-                                        <Trash2 size={14} />
-                                      </button>
-                                    </div>
-                                  </td>
-                                </tr>
-                              );
-                            })}
-                          </tbody>
-                        </table>
-                      </div>
-                    )}
-                    {/* v2.0 - Service Completion Certificates History for this client */}
+                    {/* Document Classification & Tabs Bar */}
                     {(() => {
+                      const activeTab = clientDocTabs[clientName] || 'all';
+                      const setActiveTab = (tab) => setClientDocTabs(prev => ({ ...prev, [clientName]: tab }));
+
+                      const taxInvoices = clientBills.filter(b => b.invoiceType === 'tax-invoice' || b.invoiceType === 'bill-of-supply' || !b.invoiceType);
+                      const quotations = clientBills.filter(b => b.invoiceType === 'quotation');
+                      const proformasAndChallans = clientBills.filter(b => ['proforma', 'delivery-challan', 'credit-note'].includes(b.invoiceType));
+
                       const clientCerts = (allCertificates || []).filter(cert => {
                         if (savedClient?.id && cert.customer_id && cert.customer_id === savedClient.id) return true;
                         return (cert.customer_name || '').trim().toLowerCase() === clientName.trim().toLowerCase();
                       });
+
+                      let displayedBills = clientBills;
+                      if (activeTab === 'invoices') displayedBills = taxInvoices;
+                      else if (activeTab === 'quotations') displayedBills = quotations;
+                      else if (activeTab === 'proformas') displayedBills = proformasAndChallans;
+
                       return (
-                        <div style={{ padding: '0.85rem 1.5rem', borderTop: '1px solid var(--border)', background: 'var(--bg-secondary, #f8fafc)' }}>
-                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: clientCerts.length > 0 ? '0.6rem' : 0 }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-                              <Wrench size={15} style={{ color: '#0284c7' }} />
-                              <span style={{ fontWeight: 700, fontSize: '0.83rem', color: 'var(--text-color)' }}>
-                                Service Completion Certificates ({clientCerts.length})
-                              </span>
+                        <>
+                          <div style={{
+                            padding: '0.7rem 1.5rem',
+                            borderBottom: '1px solid var(--border)',
+                            background: 'var(--bg-secondary, #f8fafc)',
+                            display: 'flex',
+                            justifyContent: 'space-between',
+                            alignItems: 'center',
+                            flexWrap: 'wrap',
+                            gap: '0.6rem'
+                          }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', flexWrap: 'wrap' }}>
+                              <button
+                                type="button"
+                                className={`btn ${activeTab === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+                                style={{
+                                  fontSize: '0.75rem',
+                                  padding: '0.25rem 0.65rem',
+                                  borderRadius: '20px',
+                                  fontWeight: activeTab === 'all' ? 700 : 500,
+                                  cursor: 'pointer'
+                                }}
+                                onClick={() => setActiveTab('all')}
+                              >
+                                All Documents ({clientBills.length + clientCerts.length})
+                              </button>
+                              <button
+                                type="button"
+                                className={`btn ${activeTab === 'invoices' ? 'btn-primary' : 'btn-secondary'}`}
+                                style={{
+                                  fontSize: '0.75rem',
+                                  padding: '0.25rem 0.65rem',
+                                  borderRadius: '20px',
+                                  fontWeight: activeTab === 'invoices' ? 700 : 500,
+                                  cursor: 'pointer'
+                                }}
+                                onClick={() => setActiveTab('invoices')}
+                              >
+                                🧾 Tax Invoices ({taxInvoices.length})
+                              </button>
+                              <button
+                                type="button"
+                                className={`btn ${activeTab === 'quotations' ? 'btn-primary' : 'btn-secondary'}`}
+                                style={{
+                                  fontSize: '0.75rem',
+                                  padding: '0.25rem 0.65rem',
+                                  borderRadius: '20px',
+                                  fontWeight: activeTab === 'quotations' ? 700 : 500,
+                                  cursor: 'pointer'
+                                }}
+                                onClick={() => setActiveTab('quotations')}
+                              >
+                                📄 Quotations & Proposals ({quotations.length})
+                              </button>
+                              <button
+                                type="button"
+                                className={`btn ${activeTab === 'proformas' ? 'btn-primary' : 'btn-secondary'}`}
+                                style={{
+                                  fontSize: '0.75rem',
+                                  padding: '0.25rem 0.65rem',
+                                  borderRadius: '20px',
+                                  fontWeight: activeTab === 'proformas' ? 700 : 500,
+                                  cursor: 'pointer'
+                                }}
+                                onClick={() => setActiveTab('proformas')}
+                              >
+                                🚚 Proforma & Challans ({proformasAndChallans.length})
+                              </button>
+                              <button
+                                type="button"
+                                className={`btn ${activeTab === 'service' ? 'btn-primary' : 'btn-secondary'}`}
+                                style={{
+                                  fontSize: '0.75rem',
+                                  padding: '0.25rem 0.65rem',
+                                  borderRadius: '20px',
+                                  fontWeight: activeTab === 'service' ? 700 : 500,
+                                  cursor: 'pointer'
+                                }}
+                                onClick={() => setActiveTab('service')}
+                              >
+                                🛠️ Service Certificates ({clientCerts.length})
+                              </button>
                             </div>
-                            <button
-                              type="button"
-                              className="btn btn-secondary"
-                              style={{ fontSize: '0.74rem', padding: '0.25rem 0.65rem', display: 'flex', alignItems: 'center', gap: '0.3rem', color: '#0369a1', borderColor: '#7dd3fc', fontWeight: 600 }}
-                              onClick={() => openServiceModal(savedClient || { name: clientName })}
-                            >
-                              <Plus size={13} /> New Certificate
-                            </button>
+
+                            <div>
+                              {activeTab === 'quotations' ? (
+                                <button
+                                  type="button"
+                                  className="btn btn-primary"
+                                  style={{ fontSize: '0.75rem', padding: '0.28rem 0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                                  onClick={() => onNew({ invoiceType: 'quotation', client: savedClient || { name: clientName } })}
+                                >
+                                  <Plus size={13} /> New Quotation
+                                </button>
+                              ) : activeTab === 'proformas' ? (
+                                <button
+                                  type="button"
+                                  className="btn btn-primary"
+                                  style={{ fontSize: '0.75rem', padding: '0.28rem 0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                                  onClick={() => onNew({ invoiceType: 'proforma', client: savedClient || { name: clientName } })}
+                                >
+                                  <Plus size={13} /> New Proforma
+                                </button>
+                              ) : activeTab === 'service' ? (
+                                <button
+                                  type="button"
+                                  className="btn btn-primary"
+                                  style={{ fontSize: '0.75rem', padding: '0.28rem 0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                                  onClick={() => openServiceModal(savedClient || { name: clientName })}
+                                >
+                                  <Plus size={13} /> New Certificate
+                                </button>
+                              ) : (
+                                <button
+                                  type="button"
+                                  className="btn btn-primary"
+                                  style={{ fontSize: '0.75rem', padding: '0.28rem 0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                                  onClick={() => onNew({ invoiceType: 'tax-invoice', client: savedClient || { name: clientName } })}
+                                >
+                                  <Plus size={13} /> New Tax Invoice
+                                </button>
+                              )}
+                            </div>
                           </div>
 
-                          {clientCerts.length > 0 && (
-                            <div className="table-scroll" style={{ marginTop: '0.4rem' }}>
-                              <table className="data-table" style={{ fontSize: '0.78rem', marginBottom: 0 }}>
-                                <thead>
-                                  <tr>
-                                    <th>Date</th>
-                                    <th>Request No</th>
-                                    <th>Equipment / Model</th>
-                                    <th>Site / Location</th>
-                                    <th>Engineer</th>
-                                    <th>Problem / Correction</th>
-                                    <th>Rating</th>
-                                    <th className="col-center">Actions</th>
-                                  </tr>
-                                </thead>
-                                <tbody>
-                                  {clientCerts.map(cert => (
-                                    <tr key={cert.id}>
-                                      <td className="text-muted">{cert.rectification_date_time?.split(' ')[0] || cert.created_at?.split('T')[0] || '—'}</td>
-                                      <td><span className="invoice-badge" style={{ background: '#e0f2fe', color: '#0369a1', borderColor: '#bae6fd' }}>{cert.request_no}</span></td>
-                                      <td>
-                                        <div style={{ fontWeight: 600 }}>{cert.outdoor_model_no || cert.indoor_model_no || 'Refrigeration Machine'}</div>
-                                        {(cert.outdoor_serial_no || cert.indoor_serial_no) && (
-                                          <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>S/N: {cert.outdoor_serial_no || cert.indoor_serial_no}</div>
-                                        )}
-                                      </td>
-                                      <td>{cert.site_name || (cert.site_address ? cert.site_address.slice(0, 22) + '...' : '—')}</td>
-                                      <td>{cert.engineer_name || '—'}</td>
-                                      <td style={{ maxWidth: 220, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={cert.correction_work || cert.problem_reported}>
-                                        {cert.correction_work || cert.problem_reported || '—'}
-                                      </td>
-                                      <td>
-                                        <span title={`Customer Rating: ${cert.rating_satisfaction || 5}/5`}>
-                                          {'⭐'.repeat(Math.max(1, Math.min(5, Number(cert.rating_satisfaction) || 5)))}
-                                        </span>
-                                      </td>
-                                      <td>
-                                        <div className="table-actions" style={{ justifyContent: 'center' }}>
-                                          <button
-                                            className="icon-btn icon-btn-blue"
-                                            title="View / Print Certificate"
-                                            onClick={() => openServiceModal(savedClient || { name: clientName }, null, cert)}
-                                          >
-                                            <FileText size={14} />
-                                          </button>
-                                          <button
-                                            className="icon-btn icon-btn-blue"
-                                            title="Convert to GST Invoice"
-                                            onClick={() => openServiceModal(savedClient || { name: clientName }, null, cert)}
-                                          >
-                                            <Zap size={14} />
-                                          </button>
-                                        </div>
-                                      </td>
-                                    </tr>
-                                  ))}
-                                </tbody>
-                              </table>
-                            </div>
+                          {activeTab === 'service' ? (
+                            renderServiceCertificatesTable(clientCerts, clientName, savedClient, false)
+                          ) : (
+                            <>
+                              {displayedBills.length === 0 ? (
+                                <div style={{ padding: '2rem 1.5rem', textAlign: 'center' }}>
+                                  <p className="text-muted" style={{ fontSize: '0.85rem', marginBottom: '0.75rem' }}>
+                                    {activeTab === 'quotations'
+                                      ? 'No quotations or project proposals for this client yet.'
+                                      : activeTab === 'proformas'
+                                      ? 'No proforma invoices or delivery challans for this client yet.'
+                                      : activeTab === 'invoices'
+                                      ? 'No tax invoices for this client yet.'
+                                      : 'No documents for this client yet.'}
+                                  </p>
+                                  <button
+                                    className="btn btn-primary"
+                                    style={{ fontSize: '0.8rem', padding: '0.4rem 1rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                                    onClick={() => {
+                                      if (activeTab === 'quotations') onNew({ invoiceType: 'quotation', client: savedClient || { name: clientName } });
+                                      else if (activeTab === 'proformas') onNew({ invoiceType: 'proforma', client: savedClient || { name: clientName } });
+                                      else onNew({ invoiceType: 'tax-invoice', client: savedClient || { name: clientName } });
+                                    }}
+                                  >
+                                    <Plus size={14} />
+                                    {activeTab === 'quotations'
+                                      ? 'Create Quotation'
+                                      : activeTab === 'proformas'
+                                      ? 'Create Proforma'
+                                      : activeTab === 'invoices'
+                                      ? 'Create Tax Invoice'
+                                      : 'Create Document'}
+                                  </button>
+                                </div>
+                              ) : (
+                                <div className="table-scroll">
+                                  <table className="data-table" style={{ marginBottom: 0, minWidth: '750px' }}>
+                                    <thead>
+                                      <tr>
+                                        <th>Date</th>
+                                        <th>Document No.</th>
+                                        <th>Type</th>
+                                        <th style={{ textAlign: 'right' }}>Amount</th>
+                                        <th>Status</th>
+                                        <th className="col-center">Actions</th>
+                                      </tr>
+                                    </thead>
+                                    <tbody>
+                                      {displayedBills.map(bill => {
+                                        const status = bill.status || 'unpaid';
+                                        const sc = STATUS_COLORS[status] || STATUS_COLORS.unpaid;
+                                        const cancelled = isCancelledBill(bill);
+                                        const isOverdue = status !== 'paid' && !cancelled && bill.data?.details?.dueDate && new Date(bill.data.details.dueDate) < new Date();
+                                        const isProposalEligible = ['quotation', 'proforma'].includes(bill.invoiceType);
+                                        return (
+                                          <tr key={bill.id} className={isOverdue ? 'row-overdue' : ''}>
+                                            <td className="text-muted">{new Date(bill.invoiceDate).toLocaleDateString('en-IN')}</td>
+                                            <td>
+                                              <span className="invoice-badge">{bill.invoiceNumber}</span>
+                                              {bill.convertedTo && (
+                                                <span style={{ marginLeft: 6, fontSize: '0.68rem', color: '#059669', background: '#ecfdf5', padding: '1px 5px', borderRadius: 3, border: '1px solid #a7f3d0' }}>
+                                                  Converted → {bill.convertedTo}
+                                                </span>
+                                              )}
+                                            </td>
+                                            <td><span className="type-badge">{(INVOICE_TYPES[bill.invoiceType || 'tax-invoice'])?.label}</span></td>
+                                            <td className="font-bold" style={{ textAlign: 'right' }}>{formatCurrency(bill.totalAmount, bill.currency || bill.data?.invoiceOptions?.currency || 'INR')}</td>
+                                            <td>
+                                              <select className="status-select" value={isOverdue && status !== 'overdue' ? 'overdue' : status}
+                                                style={{ background: sc.bg, color: sc.color, borderColor: sc.color + '44', fontSize: '0.75rem', padding: '0.2rem 0.4rem', borderRadius: '4px', border: '1px solid', cursor: 'pointer', fontWeight: 600 }}
+                                                onClick={e => e.stopPropagation()}
+                                                onChange={e => changeStatus(bill, e.target.value)}
+                                                disabled={cancelled}
+                                                title={cancelled ? 'Undo the cancel from the Dashboard' : undefined}>
+                                                {Object.entries(STATUS_COLORS).filter(([key]) => cancelled || key !== 'cancelled').map(([key, val]) => (
+                                                  <option key={key} value={key}>{val.label}</option>
+                                                ))}
+                                              </select>
+                                            </td>
+                                            <td>
+                                              <div className="table-actions">
+                                                {/* 5-Page Techno-Commercial Project Proposal */}
+                                                {isProposalEligible && (
+                                                  <button
+                                                    className="icon-btn"
+                                                    style={{ color: '#0369a1', background: '#e0f2fe', borderColor: '#7dd3fc' }}
+                                                    onClick={() => handleOpenProposal(bill)}
+                                                    title="View / Print 5-Page Techno-Commercial Project Proposal"
+                                                    aria-label="5-Page Proposal"
+                                                  >
+                                                    <FileText size={14} />
+                                                  </button>
+                                                )}
+                                                {/* Convert to Tax Invoice */}
+                                                {onConvert && ['quotation', 'proforma', 'delivery-challan'].includes(bill.invoiceType) && !bill.convertedTo && (
+                                                  <button className="icon-btn icon-btn-green" onClick={() => onConvert(bill)} title="Convert to Tax Invoice" aria-label="Convert to Tax Invoice">
+                                                    <Zap size={14} />
+                                                  </button>
+                                                )}
+                                                {bill.data && (
+                                                  <button className="icon-btn icon-btn-blue" onClick={() => onEdit(bill)} title="Edit Document" aria-label="Edit Document">
+                                                    <Edit3 size={14} />
+                                                  </button>
+                                                )}
+                                                <button className="icon-btn icon-btn-blue" onClick={() => onDuplicate(bill)} title="Duplicate Document" aria-label="Duplicate Document">
+                                                  <Copy size={14} />
+                                                </button>
+                                                <button className="icon-btn icon-btn-green" onClick={() => shareWhatsApp(bill)} title="WhatsApp" aria-label="WhatsApp">
+                                                  <MessageCircle size={14} />
+                                                </button>
+                                                <button className="icon-btn icon-btn-blue" onClick={() => shareEmail(bill)} title="Email" aria-label="Email">
+                                                  <Mail size={14} />
+                                                </button>
+                                                <button className="icon-btn icon-btn-red" onClick={() => handleDeleteBill(bill.id)} title="Delete Document" aria-label="Delete Document">
+                                                  <Trash2 size={14} />
+                                                </button>
+                                              </div>
+                                            </td>
+                                          </tr>
+                                        );
+                                      })}
+                                    </tbody>
+                                  </table>
+                                </div>
+                              )}
+
+                              {/* In 'all' tab, also display service completion certificates below the bills table */}
+                              {activeTab === 'all' && clientCerts.length > 0 && (
+                                renderServiceCertificatesTable(clientCerts, clientName, savedClient, true)
+                              )}
+                            </>
                           )}
-                        </div>
+                        </>
                       );
                     })()}
                     <div className="client-actions-bar" style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', padding: '0.75rem 1.5rem', borderTop: '1px solid var(--border)' }}>
@@ -1572,6 +1876,20 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert }) {
           existingCertificate={viewingCertificate}
           onConvertToInvoice={(draft) => onNew(draft)}
           onSaved={() => loadData()}
+        />
+      )}
+
+      {/* 5-Page Techno-Commercial Project Proposal Modal */}
+      {proposalQuotation && (
+        <TechnoCommercialProposalModal
+          isOpen={!!proposalQuotation}
+          onClose={() => {
+            setProposalQuotation(null);
+            setTargetBillForProposal(null);
+          }}
+          quotation={proposalQuotation}
+          profile={profileForStatement || {}}
+          onProposalSaved={handleProposalSaved}
         />
       )}
     </div>
