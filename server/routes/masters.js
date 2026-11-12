@@ -209,16 +209,18 @@ router.post('/models', (req, res) => {
 
     let effectiveProductId = product_id;
     if (!effectiveProductId) {
-      let cduProd = db.prepare("SELECT id FROM products WHERE category_id = 'cat_cdu' OR name LIKE '%Condensing Unit%' OR name LIKE '%Compressor%'").get();
+      let cduProd = null;
+      if (effectiveBrandId) {
+        cduProd = db.prepare("SELECT id FROM products WHERE brand_id = ? AND (category_id = 'cat_cdu' OR name LIKE '%Condensing%')").get(effectiveBrandId);
+      }
+      if (!cduProd) {
+        cduProd = db.prepare("SELECT id FROM products WHERE category_id = 'cat_cdu' OR name LIKE '%Condensing%' OR name LIKE '%Compressor%'").get();
+      }
       if (cduProd) {
         effectiveProductId = cduProd.id;
       } else {
-        effectiveProductId = 'prod_cdu_master';
-        db.prepare(`
-          INSERT INTO products (id, name, category_id, brand_id, unit, hsn_sac, tax_percent, product_type, track_inventory)
-          VALUES (?, 'Condensing Unit / Compressor', 'cat_cdu', ?, 'Set', '84189900', 18.0, 'goods', 1)
-          ON CONFLICT(id) DO NOTHING
-        `).run(effectiveProductId, effectiveBrandId || null);
+        const firstProd = db.prepare("SELECT id FROM products LIMIT 1").get();
+        effectiveProductId = firstProd ? firstProd.id : 'prod_emerson_cdu';
       }
     }
 
@@ -269,18 +271,18 @@ router.post('/models', (req, res) => {
           db.prepare(`
             INSERT INTO price_change_history (id, product_id, model_id, old_cost, new_cost, old_price, new_price, changed_by, change_reason)
             VALUES (?, ?, ?, ?, ?, ?, ?, 'admin', 'Model Price Update')
-          `).run('pch_' + Date.now(), product_id, modelId, existingPrice.purchase_cost, newCost, existingPrice.selling_price, newPrice);
+          `).run('pch_' + Date.now(), effectiveProductId, modelId, existingPrice.purchase_cost, newCost, existingPrice.selling_price, newPrice);
         }
         db.prepare(`
           UPDATE product_prices
-          SET purchase_cost = ?, selling_price = ?, min_selling_price = ?
+          SET purchase_cost = ?, selling_price = ?, min_selling_price = ?, product_id = ?
           WHERE model_id = ?
-        `).run(newCost, newPrice, newMin, modelId);
+        `).run(newCost, newPrice, newMin, effectiveProductId, modelId);
       } else {
         db.prepare(`
           INSERT INTO product_prices (id, product_id, model_id, purchase_cost, selling_price, min_selling_price)
           VALUES (?, ?, ?, ?, ?, ?)
-        `).run('prc_' + modelId, product_id, modelId, newCost, newPrice, newMin);
+        `).run('prc_' + modelId, effectiveProductId, modelId, newCost, newPrice, newMin);
       }
 
       // Save additional dynamic specs if provided

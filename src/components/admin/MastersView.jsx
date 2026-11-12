@@ -213,8 +213,13 @@ export default function MastersView() {
     const existingBrand = brands.find(b => b.id === brandIdVal);
     const customBrand = fd.get('brand_name_custom');
 
+    const cduBaseProd = products.find(p => p.id === (existingBrand?.name === 'Daikin' ? 'prod_daikin_cdu' : 'prod_emerson_cdu'))
+      || products.find(p => p.category_id === 'cat_cdu' || p.name?.toLowerCase().includes('condensing') || p.name?.toLowerCase().includes('compressor'))
+      || products[0];
+
     const data = {
       id: editModal?.data?.id || undefined,
+      product_id: editModal?.data?.product_id || cduBaseProd?.id || 'prod_emerson_cdu',
       brand_id: existingBrand ? existingBrand.id : null,
       brand_name: existingBrand ? existingBrand.name : (customBrand || 'Generic'),
       model_number: fd.get('model_number'),
