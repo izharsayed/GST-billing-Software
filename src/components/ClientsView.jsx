@@ -37,7 +37,7 @@ const STATUS_COLORS = {
   cancelled: { label: 'Cancelled', color: '#64748b', bg: '#f1f5f9' },
 };
 
-export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert }) {
+export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert, onPrint }) {
   const [clients, setClients] = useState([]);
   const [bills, setBills] = useState([]);
   const [search, setSearch] = useState('');
@@ -64,9 +64,23 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert }) {
   const [fileCategoryFilter, setFileCategoryFilter] = useState('all');
   const fileUploadInputRef = useRef(null);
 
-  const FILE_CATEGORIES = [
+  const VAULT_CATEGORIES = [
+    { id: 'all', label: 'All Files', icon: '📁' },
+    { id: 'Invoice', label: 'Tax Invoices', icon: '🧾', color: '#059669', bg: '#ecfdf5' },
+    { id: 'Quotation', label: 'Quotations & Proposals', icon: '📄', color: '#0284c7', bg: '#e0f2fe' },
+    { id: 'Proforma', label: 'Proformas & Challans', icon: '🚚', color: '#ea580c', bg: '#ffedd5' },
+    { id: 'ServiceCert', label: 'Service Certificates', icon: '🛠️', color: '#0284c7', bg: '#e0f2fe' },
+    { id: 'PO', label: 'Purchase Orders', icon: '📋', color: '#15803d', bg: '#dcfce7' },
     { id: 'Drawing', label: 'Site Layout & CAD', icon: '📐', color: '#0369a1', bg: '#e0f2fe' },
+    { id: 'GST', label: 'GST Certificates', icon: '📑', color: '#7c3aed', bg: '#ede9fe' },
+    { id: 'Agreement', label: 'Contracts & AMC', icon: '🤝', color: '#b45309', bg: '#fef3c7' },
+    { id: 'Photo', label: 'Site Survey & Photos', icon: '📸', color: '#0891b2', bg: '#cffafe' },
+    { id: 'General', label: 'Other Documents', icon: '📄', color: '#475569', bg: '#f1f5f9' },
+  ];
+
+  const FILE_CATEGORIES = [
     { id: 'PO', label: 'Purchase Order (PO)', icon: '📋', color: '#15803d', bg: '#dcfce7' },
+    { id: 'Drawing', label: 'Site Layout & CAD', icon: '📐', color: '#0369a1', bg: '#e0f2fe' },
     { id: 'GST', label: 'GST Certificate', icon: '📑', color: '#7c3aed', bg: '#ede9fe' },
     { id: 'Agreement', label: 'Contract / AMC', icon: '🤝', color: '#b45309', bg: '#fef3c7' },
     { id: 'Photo', label: 'Site Survey & Photos', icon: '📸', color: '#0891b2', bg: '#cffafe' },
@@ -411,9 +425,9 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert }) {
                 style={{ fontSize: '0.72rem', padding: '0.18rem 0.55rem', borderRadius: '15px' }}
                 onClick={() => setFileCategoryFilter('all')}
               >
-                All ({files.length})
+                All Files ({files.length})
               </button>
-              {FILE_CATEGORIES.map(cat => {
+              {VAULT_CATEGORIES.filter(c => c.id !== 'all').map(cat => {
                 const count = files.filter(f => f.category === cat.id).length;
                 if (count === 0) return null;
                 const active = fileCategoryFilter === cat.id;
@@ -438,9 +452,11 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert }) {
             ) : (
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '0.75rem' }}>
                 {filteredFiles.map(file => {
-                  const catMeta = FILE_CATEGORIES.find(c => c.id === file.category) || { label: file.category || 'Document', icon: '📄', color: '#475569', bg: '#f1f5f9' };
+                  const catMeta = VAULT_CATEGORIES.find(c => c.id === file.category)
+                    || FILE_CATEGORIES.find(c => c.id === file.category)
+                    || { label: file.category || 'Document', icon: '📄', color: '#475569', bg: '#f1f5f9' };
                   const isImage = file.type?.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(file.name);
-                  const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+                  const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name) || file.isGenerated;
 
                   return (
                     <div
@@ -468,7 +484,15 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert }) {
                           </div>
                         ) : (
                           <div
-                            onClick={() => setFilePreviewModal(file)}
+                            onClick={() => {
+                              if (file.isGenerated && file.rawBill) {
+                                (onPrint || onEdit)(file.rawBill);
+                              } else if (file.isGenerated && file.rawCert) {
+                                openServiceModal(savedClient || { name: clientName }, null, file.rawCert);
+                              } else {
+                                setFilePreviewModal(file);
+                              }
+                            }}
                             style={{
                               width: '46px',
                               height: '46px',
@@ -489,7 +513,15 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert }) {
 
                         <div style={{ flex: 1, minWidth: 0 }}>
                           <div
-                            onClick={() => setFilePreviewModal(file)}
+                            onClick={() => {
+                              if (file.isGenerated && file.rawBill) {
+                                (onPrint || onEdit)(file.rawBill);
+                              } else if (file.isGenerated && file.rawCert) {
+                                openServiceModal(savedClient || { name: clientName }, null, file.rawCert);
+                              } else {
+                                setFilePreviewModal(file);
+                              }
+                            }}
                             style={{ fontWeight: 600, fontSize: '0.82rem', color: 'var(--text-color)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }}
                             title={file.name}
                           >
@@ -499,9 +531,15 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert }) {
                             <span style={{ fontSize: '0.68rem', fontWeight: 600, padding: '1px 5px', borderRadius: 3, background: catMeta.bg, color: catMeta.color }}>
                               {catMeta.icon} {catMeta.label}
                             </span>
-                            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                              {formatFileSize(file.size)}
-                            </span>
+                            {file.isGenerated ? (
+                              <span style={{ fontSize: '0.66rem', fontWeight: 700, padding: '1px 5px', borderRadius: 3, background: '#f1f5f9', color: '#0284c7', border: '1px solid #bae6fd' }}>
+                                ⚡ Auto-Stored
+                              </span>
+                            ) : (
+                              <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                                {formatFileSize(file.size)}
+                              </span>
+                            )}
                           </div>
                           {file.notes && (
                             <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.25rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={file.notes}>
@@ -512,38 +550,119 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert }) {
                       </div>
 
                       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border)', paddingTop: '0.4rem', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
-                        <span>{file.uploadedAt ? new Date(file.uploadedAt).toLocaleDateString('en-IN') : 'Attached'}</span>
+                        <span>{file.uploadedAt ? (file.uploadedAt.includes('T') ? new Date(file.uploadedAt).toLocaleDateString('en-IN') : file.uploadedAt) : 'Attached'}</span>
                         <div style={{ display: 'flex', gap: '0.25rem' }}>
-                          <button
-                            type="button"
-                            className="icon-btn icon-btn-blue"
-                            style={{ padding: '3px' }}
-                            onClick={() => setFilePreviewModal(file)}
-                            title="Preview Document"
-                            aria-label="Preview Document"
-                          >
-                            <Eye size={13} />
-                          </button>
-                          <button
-                            type="button"
-                            className="icon-btn icon-btn-green"
-                            style={{ padding: '3px' }}
-                            onClick={() => handleDownloadFile(file)}
-                            title="Download File"
-                            aria-label="Download File"
-                          >
-                            <Download size={13} />
-                          </button>
-                          <button
-                            type="button"
-                            className="icon-btn icon-btn-red"
-                            style={{ padding: '3px' }}
-                            onClick={() => handleDeleteFile(clientName, savedClient, file.id)}
-                            title="Delete File"
-                            aria-label="Delete File"
-                          >
-                            <Trash2 size={13} />
-                          </button>
+                          {file.isGenerated ? (
+                            <>
+                              {file.rawBill && (
+                                <>
+                                  {file.isProposalEligible && (
+                                    <button
+                                      type="button"
+                                      className="icon-btn"
+                                      style={{ color: '#0369a1', background: '#e0f2fe', borderColor: '#7dd3fc', padding: '3px' }}
+                                      onClick={() => handleOpenProposal(file.rawBill)}
+                                      title="Open 5-Page Techno-Commercial Project Proposal"
+                                      aria-label="5-Page Proposal"
+                                    >
+                                      <FileText size={13} />
+                                    </button>
+                                  )}
+                                  <button
+                                    type="button"
+                                    className="icon-btn icon-btn-blue"
+                                    style={{ padding: '3px' }}
+                                    onClick={() => (onPrint ? onPrint(file.rawBill) : onEdit(file.rawBill))}
+                                    title="View & Print Document"
+                                    aria-label="View Document"
+                                  >
+                                    <Eye size={13} />
+                                  </button>
+                                  {onConvert && ['quotation', 'proforma', 'delivery-challan'].includes(file.rawBill.invoiceType) && !file.rawBill.convertedTo && (
+                                    <button
+                                      type="button"
+                                      className="icon-btn icon-btn-green"
+                                      style={{ padding: '3px' }}
+                                      onClick={() => onConvert(file.rawBill)}
+                                      title="Convert to Tax Invoice"
+                                      aria-label="Convert to Tax Invoice"
+                                    >
+                                      <Zap size={13} />
+                                    </button>
+                                  )}
+                                  {file.rawBill.data && (
+                                    <button
+                                      type="button"
+                                      className="icon-btn icon-btn-blue"
+                                      style={{ padding: '3px' }}
+                                      onClick={() => onEdit(file.rawBill)}
+                                      title="Edit Document"
+                                      aria-label="Edit Document"
+                                    >
+                                      <Edit3 size={13} />
+                                    </button>
+                                  )}
+                                </>
+                              )}
+                              {file.rawCert && (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="icon-btn icon-btn-blue"
+                                    style={{ padding: '3px' }}
+                                    onClick={() => openServiceModal(savedClient || { name: clientName }, null, file.rawCert)}
+                                    title="View / Print Certificate"
+                                    aria-label="View Certificate"
+                                  >
+                                    <Eye size={13} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="icon-btn icon-btn-blue"
+                                    style={{ padding: '3px' }}
+                                    onClick={() => openServiceModal(savedClient || { name: clientName }, null, file.rawCert)}
+                                    title="Convert to GST Invoice"
+                                    aria-label="Convert to Invoice"
+                                  >
+                                    <Zap size={13} />
+                                  </button>
+                                </>
+                              )}
+                            </>
+                          ) : (
+                            <>
+                              <button
+                                type="button"
+                                className="icon-btn icon-btn-blue"
+                                style={{ padding: '3px' }}
+                                onClick={() => setFilePreviewModal(file)}
+                                title="Preview Document"
+                                aria-label="Preview Document"
+                              >
+                                <Eye size={13} />
+                              </button>
+                              <button
+                                type="button"
+                                className="icon-btn icon-btn-green"
+                                style={{ padding: '3px' }}
+                                onClick={() => handleDownloadFile(file)}
+                                title="Download File"
+                                aria-label="Download File"
+                              >
+                                <Download size={13} />
+                              </button>
+                              <button
+                                type="button"
+                                className="icon-btn icon-btn-red"
+                                style={{ padding: '3px' }}
+                                onClick={() => handleDeleteFile(clientName, savedClient, file.id)}
+                                title="Delete File"
+                                aria-label="Delete File"
+                              >
+                                <Trash2 size={13} />
+                              </button>
+                            </>
+                          )}
                         </div>
                       </div>
                     </div>
@@ -1907,6 +2026,84 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert }) {
 
                       const clientFiles = savedClient?.files || [];
 
+                      const vaultItems = [
+                        ...clientBills.map(bill => {
+                          const isQuote = bill.invoiceType === 'quotation';
+                          const isProforma = bill.invoiceType === 'proforma';
+                          const isChallan = bill.invoiceType === 'delivery-challan';
+                          const isCreditNote = bill.invoiceType === 'credit-note';
+
+                          let category = 'Invoice';
+                          let typeLabel = 'Tax Invoice';
+                          let icon = '🧾';
+                          let badgeColor = '#059669';
+                          let badgeBg = '#ecfdf5';
+
+                          if (isQuote) {
+                            category = 'Quotation';
+                            typeLabel = 'Quotation & Proposal';
+                            icon = '📄';
+                            badgeColor = '#0284c7';
+                            badgeBg = '#e0f2fe';
+                          } else if (isProforma) {
+                            category = 'Proforma';
+                            typeLabel = 'Proforma Invoice';
+                            icon = '🚚';
+                            badgeColor = '#ea580c';
+                            badgeBg = '#ffedd5';
+                          } else if (isChallan) {
+                            category = 'Proforma';
+                            typeLabel = 'Delivery Challan';
+                            icon = '📦';
+                            badgeColor = '#0891b2';
+                            badgeBg = '#cffafe';
+                          } else if (isCreditNote) {
+                            category = 'Invoice';
+                            typeLabel = 'Credit Note';
+                            icon = '💳';
+                            badgeColor = '#dc2626';
+                            badgeBg = '#fee2e2';
+                          }
+
+                          return {
+                            id: 'doc_' + bill.id,
+                            billId: bill.id,
+                            isGenerated: true,
+                            rawBill: bill,
+                            name: `${typeLabel} - ${bill.invoiceNumber || 'Draft'}.pdf`,
+                            category: category,
+                            categoryLabel: typeLabel,
+                            icon: icon,
+                            badgeColor,
+                            badgeBg,
+                            size: null,
+                            uploadedAt: bill.invoiceDate,
+                            notes: `Total: ${formatCurrency(bill.totalAmount, bill.currency || 'INR')} • Status: ${(bill.status || 'unpaid').toUpperCase()}`,
+                            isProposalEligible: isQuote || isProforma,
+                          };
+                        }),
+                        ...clientCerts.map(cert => ({
+                          id: 'cert_' + cert.id,
+                          certId: cert.id,
+                          isGenerated: true,
+                          isCert: true,
+                          rawCert: cert,
+                          name: `Service Certificate - ${cert.request_no || 'Draft'}.pdf`,
+                          category: 'ServiceCert',
+                          categoryLabel: 'Service Certificate',
+                          icon: '🛠️',
+                          badgeColor: '#0284c7',
+                          badgeBg: '#e0f2fe',
+                          size: null,
+                          uploadedAt: cert.rectification_date_time?.split(' ')[0] || cert.created_at?.split('T')[0] || '',
+                          notes: `${cert.outdoor_model_no || cert.indoor_model_no || 'Refrigeration Machine'} • Site: ${cert.site_name || 'N/A'}`,
+                        })),
+                        ...clientFiles.map(f => ({
+                          ...f,
+                          isGenerated: false,
+                        }))
+                      ];
+
                       let displayedBills = clientBills;
                       if (activeTab === 'invoices') displayedBills = taxInvoices;
                       else if (activeTab === 'quotations') displayedBills = quotations;
@@ -2007,7 +2204,7 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert }) {
                                 }}
                                 onClick={() => setActiveTab('files')}
                               >
-                                📁 Files & Vault ({clientFiles.length})
+                                📁 Files & Vault ({vaultItems.length})
                               </button>
                             </div>
 
@@ -2069,7 +2266,7 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert }) {
                           {activeTab === 'service' ? (
                             renderServiceCertificatesTable(clientCerts, clientName, savedClient, false)
                           ) : activeTab === 'files' ? (
-                            renderFilesSection(clientFiles, clientName, savedClient, false)
+                            renderFilesSection(vaultItems, clientName, savedClient, false)
                           ) : (
                             <>
                               {displayedBills.length === 0 ? (
@@ -2200,8 +2397,8 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert }) {
                               )}
 
                               {/* In 'all' tab, also display files and attachments below service certificates */}
-                              {activeTab === 'all' && clientFiles.length > 0 && (
-                                renderFilesSection(clientFiles, clientName, savedClient, true)
+                              {activeTab === 'all' && vaultItems.length > 0 && (
+                                renderFilesSection(vaultItems, clientName, savedClient, true)
                               )}
                             </>
                           )}
