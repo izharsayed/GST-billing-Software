@@ -915,7 +915,12 @@ export default function MastersView() {
                               type="button"
                               className="icon-btn text-danger"
                               onClick={() => {
-                                confirmAction('Delete this model?', async () => {
+                                confirmAction({
+                                  title: `Delete model "${m.model_number}"?`,
+                                  message: 'This will permanently remove this equipment model from your master catalog.',
+                                  confirmLabel: 'Delete Model',
+                                  tone: 'danger',
+                                }, async () => {
                                   try {
                                     await deleteProductModel(m.id);
                                     toast('Model deleted', 'info');
@@ -1040,7 +1045,12 @@ export default function MastersView() {
                         <button
                           className="icon-btn text-danger"
                           onClick={() => {
-                            confirmAction(`Delete category "${c.name}"?`, async () => {
+                            confirmAction({
+                              title: `Delete category "${c.name}"?`,
+                              message: 'Are you sure you want to delete this category?',
+                              confirmLabel: 'Delete Category',
+                              tone: 'danger',
+                            }, async () => {
                               try {
                                 await deleteCategory(c.id);
                                 toast('Category deleted', 'info');
@@ -1098,7 +1108,12 @@ export default function MastersView() {
                         <button
                           className="icon-btn text-danger"
                           onClick={() => {
-                            confirmAction(`Delete brand "${b.name}"?`, async () => {
+                            confirmAction({
+                              title: `Delete brand "${b.name}"?`,
+                              message: 'Are you sure you want to delete this brand?',
+                              confirmLabel: 'Delete Brand',
+                              tone: 'danger',
+                            }, async () => {
                               try {
                                 await deleteBrand(b.id);
                                 toast('Brand deleted', 'info');

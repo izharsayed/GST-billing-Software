@@ -31,22 +31,44 @@ let dispatchFn = null;
  * @param {'danger'|'warning'|'default'} [options.tone='default'] - Colour scheme
  * @returns {Promise<boolean>} - true if user confirmed, false if cancelled or dismissed
  */
-export function confirmAction(options) {
+export function confirmAction(options, onConfirm) {
+  let opts = typeof options === 'string' ? { title: options } : (options ? { ...options } : {});
+  if (!opts.title && opts.message) {
+    opts.title = opts.message;
+    opts.message = '';
+  }
+  if (!opts.title) {
+    opts.title = 'Are you sure?';
+  }
+
   return new Promise((resolve) => {
     if (typeof dispatchFn !== 'function') {
       // Container not mounted yet — fall back to native so calls made
       // pre-mount don't silently return undefined.
-      resolve(window.confirm(options?.message || options?.title || 'Are you sure?'));
+      const ok = window.confirm(opts.message || opts.title || 'Are you sure?');
+      if (ok && typeof onConfirm === 'function') {
+        try { onConfirm(); } catch (err) { console.error(err); }
+      }
+      resolve(ok);
       return;
     }
-    dispatchFn({ ...options, kind: 'confirm', resolve });
+    dispatchFn({
+      ...opts,
+      kind: 'confirm',
+      resolve: async (confirmed) => {
+        if (confirmed && typeof onConfirm === 'function') {
+          try { await onConfirm(); } catch (err) { console.error(err); }
+        }
+        resolve(confirmed);
+      },
+    });
   });
 }
 
 /**
  * Open an in-app text-prompt modal.
  *
- * @param {Object} options
+ * @param {Object|string} options
  * @param {string} options.title - Bold headline of the modal (what to enter)
  * @param {string} [options.message] - Optional hint below the title
  * @param {string} [options.defaultValue] - Prefilled input value
@@ -57,12 +79,13 @@ export function confirmAction(options) {
  * @returns {Promise<string|null>} - the entered string, or null on cancel
  */
 export function promptAction(options) {
+  let opts = typeof options === 'string' ? { title: options } : (options ? { ...options } : {});
   return new Promise((resolve) => {
     if (typeof dispatchFn !== 'function') {
-      resolve(window.prompt(options?.message || options?.title || '', options?.defaultValue || ''));
+      resolve(window.prompt(opts.message || opts.title || '', opts.defaultValue || ''));
       return;
     }
-    dispatchFn({ ...options, kind: 'prompt', resolve });
+    dispatchFn({ ...opts, kind: 'prompt', resolve });
   });
 }
 

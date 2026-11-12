@@ -534,7 +534,11 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
 
   // Convert to Invoice
   const handleConvert = async (quotationId) => {
-    confirmAction('Convert this quotation to a Tax Invoice? This will make it an active invoice without re-entering line items.', async () => {
+    confirmAction({
+      title: 'Convert to Tax Invoice?',
+      message: 'This will convert the technical quotation into an active Tax Invoice without having to re-enter line items.',
+      confirmLabel: 'Convert to Invoice',
+    }, async () => {
       try {
         const res = await convertQuotationToInvoice(quotationId);
         toast(`Quotation converted to Invoice #${res.invoiceNumber}!`, 'success');
