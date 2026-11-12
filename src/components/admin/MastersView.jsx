@@ -874,7 +874,7 @@ export default function MastersView() {
                         <td style={{ padding: '0.7rem 0.85rem', textAlign: 'right' }}>
                           {Number(m.selling_price) > 0 ? (
                             <span style={{ whiteSpace: 'nowrap', fontWeight: 700, color: '#16a34a', fontSize: '0.88rem' }}>
-                              ₹${Number(m.selling_price).toLocaleString('en-IN')}
+                              ₹{Number(m.selling_price).toLocaleString('en-IN')}
                             </span>
                           ) : (
                             <span style={{
