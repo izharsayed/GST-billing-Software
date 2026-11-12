@@ -105,32 +105,89 @@ export default function TechnoCommercialProposalModal({
       panelThk = '80 mm PUF Panel';
     }
 
-    const length = tech.length_ft || 15;
-    const width = tech.width_ft || 11;
-    const height = tech.height_ft || 10;
-    const ambient = tech.ambient_temp_c || tech.ambientTemp || 43;
-    let capacityStr = '';
-
     // Thermodynamic Engine Overrides
     if (tech.calculationEngine || tech.thermalBreakdown) {
       if (tech.puf?.thicknessMm) {
         panelThk = `${tech.puf.thicknessMm} mm PUF Panel (k = 0.023 W/m·K)`;
       }
-      if (tech.machineRating?.capacityTr) {
-        capacityStr = `${tech.machineRating.capacityTr} TR (${tech.machineRating.capacityKw} kW / ${tech.machineRating.capacityBtuHr?.toLocaleString('en-IN')} BTU/Hr)`;
-      }
       if (tech.commodity?.name) {
         appTitle = `Cold Storage for ${tech.commodity.name}`;
         tempRange = tech.commodity.storageTempRange || tempRange;
       }
+    } else if (tech.pufThicknessMm) {
+      panelThk = `${tech.pufThicknessMm} mm PUF Panel`;
     }
 
-    // Cooling capacity formatting
-    const dutyKw = tech.calculated_load_kw || 5.8;
-    const dutyBtu = Math.round(dutyKw * 3412.142);
-    if (!tech.machineRating) {
-      capacityStr = `${dutyBtu.toLocaleString('en-IN')} BTU/Hr (${dutyKw} kW)`;
+    // Dynamic Sizing & Dimensions (Option 1. A: 'As per Site Survey & Layout' when no sizer is used)
+    const chambersCount = Number(tech.chambersCount || tech.numRooms || 1);
+    let externalSizeStr = 'As per Site Survey & Layout';
+    if (tech.dimensions?.lengthM) {
+      externalSizeStr = `${tech.dimensions.lengthM}m × ${tech.dimensions.widthM}m × ${tech.dimensions.heightM}m${chambersCount > 1 ? ` (${chambersCount} Equal Chambers)` : ''}`;
+    } else if (tech.length_ft && tech.width_ft && tech.height_ft) {
+      externalSizeStr = `${tech.length_ft} Ft × ${tech.width_ft} Ft × ${tech.height_ft} Ft${chambersCount > 1 ? ` (${chambersCount} Equal Chambers)` : ''}`;
+    } else if (tech.length && tech.width && tech.height) {
+      externalSizeStr = `${tech.length} ${tech.unit || 'm'} × ${tech.width} ${tech.unit || 'm'} × ${tech.height} ${tech.unit || 'm'}`;
     }
+
+    // Dynamic Capacity Calculation & Auto-Detection from Quote items
+    let capacityStr = '';
+    if (tech.machineRating?.capacityTr) {
+      capacityStr = `${tech.machineRating.capacityTr} TR (${tech.machineRating.capacityKw} kW / ${tech.machineRating.capacityBtuHr?.toLocaleString('en-IN')} BTU/Hr)`;
+    } else if (tech.calculated_load_tr || tech.capacityTr) {
+      const trVal = Number(tech.calculated_load_tr || tech.capacityTr);
+      const kwVal = Number(tech.calculated_load_kw || tech.estimatedLoadKw || (trVal * 3.517).toFixed(1));
+      const btuVal = Math.round(trVal * 12000);
+      capacityStr = `${trVal} TR (${kwVal} kW / ${btuVal.toLocaleString('en-IN')} BTU/Hr)`;
+    } else if (tech.calculated_load_kw || tech.estimatedLoadKw) {
+      const kwVal = Number(tech.calculated_load_kw || tech.estimatedLoadKw);
+      const trVal = (kwVal / 3.517).toFixed(1);
+      const btuVal = Math.round(kwVal * 3412.142);
+      capacityStr = `${trVal} TR (${kwVal} kW / ${btuVal.toLocaleString('en-IN')} BTU/Hr)`;
+    } else {
+      // Auto-detect capacity directly from quotation items (e.g. "9.07 TR each, 2 Sets = 18.14 TR")
+      let autoDetected = '';
+      for (const itm of (quotation?.items || [])) {
+        const desc = itm.description || itm.name || '';
+        const trMatch = desc.match(/(\d+(?:\.\d+)?)\s*TR/i);
+        if (trMatch) {
+          const tr = parseFloat(trMatch[1]);
+          const kw = (tr * 3.517).toFixed(1);
+          const btu = Math.round(tr * 12000);
+          autoDetected = `${tr} TR (${kw} kW / ${btu.toLocaleString('en-IN')} BTU/Hr)`;
+          break;
+        }
+        const kwMatch = desc.match(/(\d+(?:\.\d+)?)\s*kW/i);
+        if (kwMatch) {
+          const kw = parseFloat(kwMatch[1]);
+          const tr = (kw / 3.517).toFixed(1);
+          const btu = Math.round(kw * 3412.142);
+          autoDetected = `${tr} TR (${kw} kW / ${btu.toLocaleString('en-IN')} BTU/Hr)`;
+          break;
+        }
+      }
+      capacityStr = autoDetected || 'As per Matched Equipment Selection';
+    }
+
+    // Dynamic Door Specification (Option 2. C)
+    const doorsCount = tech.doors?.totalDoors || chambersCount || 1;
+    let doorLabel = 'Heavy-Duty Swing Flush Type (34" × 78")';
+    if (tech.doors?.doorSpec) {
+      doorLabel = tech.doors.doorSpec;
+    } else if (tech.doorType === 'sliding' || (tech.door_spec && tech.door_spec.toLowerCase().includes('sliding'))) {
+      doorLabel = 'Heavy-Duty Industrial Overlap / Sliding Door (1200mm × 2100mm)';
+    } else if (tech.doorType === 'hatch' || (tech.door_spec && tech.door_spec.toLowerCase().includes('hatch'))) {
+      doorLabel = 'Manual Flush Hatch Door / Reach-in Window (600mm × 600mm)';
+    } else if (tech.door_spec && typeof tech.door_spec === 'string' && !tech.door_spec.includes('Nos.')) {
+      doorLabel = tech.door_spec;
+    }
+
+    const doorSpecStr = tech.door_spec && tech.door_spec.includes('Nos.')
+      ? tech.door_spec
+      : (doorsCount > 1 ? `${doorsCount} Nos. ${doorLabel} (1 per Chamber)` : `1 No. ${doorLabel}`);
+
+    const ambientVal = tech.ambient_temp_c || tech.ambientTemp || tech.temperatures?.ambientTempC || 43;
+    const roomTempVal = tech.room_temp || tech.target_temp_c || (tech.temperatures?.roomTempC !== undefined ? `${tech.temperatures.roomTempC}°C` : tempRange);
+    const sheetMat = tech.sheetMaterial || tech.sheet_material || '0.5 mm PPGI (Inner & Outer)';
 
     // Equipment strings from quotation items or recommendations
     let cduStr = rec.catalogue_ref || 'Daikin / Emerson Air-Cooled Condensing Unit';
@@ -155,25 +212,21 @@ export default function TechnoCommercialProposalModal({
 
       // Annexure I: Technical Specifications
       annexure_i: {
-        room_title: `${appTitle} (${tempRange})`,
+        room_title: `${appTitle} (${roomTempVal})`,
         application: appTitle.replace('Walk-In ', ''),
-        room_temp: tempRange,
-        external_size: (tech.dimensions?.lengthM)
-          ? `${tech.dimensions.lengthM}m × ${tech.dimensions.widthM}m × ${tech.dimensions.heightM}m${(tech.chambersCount || tech.numRooms || 1) > 1 ? ` (${tech.chambersCount || tech.numRooms} Equal Chambers)` : ''}`
-          : `${length} Ft × ${width} Ft × ${height} Ft${(tech.chambersCount || tech.numRooms || 1) > 1 ? ` (${tech.chambersCount || tech.numRooms} Equal Chambers)` : ''}`,
-        ambient_temp: `${ambient}°C Design Ambient`,
+        room_temp: roomTempVal,
+        external_size: externalSizeStr,
+        ambient_temp: ambientStr,
         panel_thickness: panelThk,
         refrigerant: `${tech.refrigerant_preference || tech.refrigerant || 'R-404A'} Eco-Friendly`,
-        door_spec: (tech.doors?.totalDoors || tech.chambersCount || tech.numRooms || 1) > 1
-          ? `${tech.doors?.totalDoors || tech.chambersCount || tech.numRooms} Nos. Heavy-Duty Swing Flush Type (1 per Chamber)`
-          : '1 No. Swing Flush Type (34" × 78")',
+        door_spec: doorSpecStr,
         refrigeration_capacity: capacityStr,
         condensing_unit: cduStr,
         evaporator_model: evapStr,
-        sheet_material: '0.5 mm PPGI (Inner & Outer)',
+        sheet_material: sheetMat,
         features: [...DEFAULT_FEATURES],
         detailed_specs: DEFAULT_ENGINEERING_SPECS.map(s =>
-          s.replace('{ambientTemp}', ambient).replace('{panelThickness}', panelThk)
+          s.replace('{ambientTemp}', ambientVal).replace('{panelThickness}', panelThk)
         ),
       },
 
@@ -1413,6 +1466,14 @@ export default function TechnoCommercialProposalModal({
                       type="text" className="form-input" style={{ width: '100%', fontSize: '0.85rem' }}
                       value={proposalData.annexure_i.evaporator_model}
                       onChange={e => updateAnnexureI('evaporator_model', e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.25rem' }}>Sheet Material Lamination</label>
+                    <input
+                      type="text" className="form-input" style={{ width: '100%', fontSize: '0.85rem' }}
+                      value={proposalData.annexure_i.sheet_material}
+                      onChange={e => updateAnnexureI('sheet_material', e.target.value)}
                     />
                   </div>
                 </div>

@@ -11,6 +11,12 @@ export const PUF_SPECS = {
   150: { thicknessM: 0.15, k: 0.023 },
 };
 
+export const DOOR_OPTIONS = [
+  { id: 'swing', label: 'Heavy-Duty Swing Flush Type (34" × 78")', short: 'Swing Flush Door', defaultRate: 28500 },
+  { id: 'sliding', label: 'Heavy-Duty Industrial Overlap / Sliding Door (1200mm × 2100mm)', short: 'Industrial Sliding Door', defaultRate: 42000 },
+  { id: 'hatch', label: 'Manual Flush Hatch Door / Reach-in Window (600mm × 600mm)', short: 'Hatch Door', defaultRate: 16500 },
+];
+
 export function calculateAirEnthalpy(tempC, relativeHumidity = 0.5) {
   const T = Number(tempC);
   const rh = Math.max(0.01, Math.min(1.0, Number(relativeHumidity)));
@@ -325,13 +331,17 @@ export function buildColdRoomInvoiceItems({
   }
 
   // 3. Cold Room Doors (Automatic 1 per Chamber)
+  const selectedDoorOption = DOOR_OPTIONS.find(d => d.id === form.doorType) || DOOR_OPTIONS[0];
+  const doorLabel = form.doorSpec || selectedDoorOption.label;
+  const doorRate = Number(customRates.doors) || selectedDoorOption.defaultRate;
+
   if (selectedLines.doors !== false) {
     itemsToInsert.push({
-      name: `Heavy-Duty PUF Insulated Cold Room Swing Doors (with Positive Seal Gasket, Frame Heater & Safety Release Knob)${isMultiChamber ? ` - 1 Door per Chamber (${numRooms} Chambers)` : ''}`,
+      name: `${doorLabel} (with Positive Seal Gasket, Frame Heater & Safety Release Knob)${isMultiChamber ? ` - 1 Door per Chamber (${numRooms} Chambers)` : ''}`,
       hsn: '73083000',
       quantity: numRooms,
       unit: 'Nos',
-      rate: Number(customRates.doors) || 28500,
+      rate: doorRate,
       taxPercent: 18,
       discount: 0,
     });
@@ -396,7 +406,17 @@ export function buildColdRoomInvoiceItems({
     numRooms,
     chambersCount: numRooms,
     chambers: normResult.chambers,
-    doors: normResult.doors,
+    doors: {
+      totalDoors: numRooms,
+      doorType: form.doorType || 'swing',
+      doorSpec: doorLabel,
+      doorsPerChamber: 1,
+    },
+    doorType: form.doorType || 'swing',
+    door_spec: isMultiChamber
+      ? `${numRooms} Nos. ${doorLabel} (1 per Chamber)`
+      : `1 No. ${doorLabel}`,
+    sheetMaterial: form.sheetMaterial || '0.5 mm PPGI (Inner & Outer)',
     partitionWalls: normResult.partitionWalls,
     totalPufSurfaceAreaM2: totalPufArea,
     surfaceAreaM2: outerEnvelopeArea,

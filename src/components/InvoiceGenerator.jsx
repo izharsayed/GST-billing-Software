@@ -955,7 +955,7 @@ export default function InvoiceGenerator({ onBack, profile: profileProp, editing
   const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [showSizerModal, setShowSizerModal] = useState(false);
   const [showProposalModal, setShowProposalModal] = useState(false);
-  const [technicalSpecs, setTechnicalSpecs] = useState(draft?.technicalSpecs || null);
+  const [technicalSpecs, setTechnicalSpecs] = useState(() => editingBill?.data?.technicalSpecs || draft?.technicalSpecs || null);
   const [proposalData, setProposalData] = useState(() => editingBill?.data?.proposalData || editingBill?.proposal_data || draft?.proposalData || null);
   const printRef = useRef(null);
   // v1.10.48 — reported: "live preview show full when browser zoom on 50%".
@@ -1684,17 +1684,29 @@ export default function InvoiceGenerator({ onBack, profile: profileProp, editing
       total_amount: Number(totals?.total) || 0,
       items: mappedItems,
       technicalInputs: technicalSpecs ? {
+        ...technicalSpecs,
         application_type: technicalSpecs.application,
         application: technicalSpecs.application,
-        target_temp_c: technicalSpecs.targetTemp,
-        ambient_temp_c: technicalSpecs.ambientTemp,
-        length_ft: technicalSpecs.unit === 'm' ? Math.round(Number(technicalSpecs.length) * 3.28084) : Number(technicalSpecs.length),
-        width_ft: technicalSpecs.unit === 'm' ? Math.round(Number(technicalSpecs.width) * 3.28084) : Number(technicalSpecs.width),
-        height_ft: technicalSpecs.unit === 'm' ? Math.round(Number(technicalSpecs.height) * 3.28084) : Number(technicalSpecs.height),
-        calculated_load_kw: technicalSpecs.estimatedLoadKw,
+        target_temp_c: technicalSpecs.targetTemp !== undefined ? technicalSpecs.targetTemp : technicalSpecs.temperatures?.roomTempC,
+        ambient_temp_c: technicalSpecs.ambientTemp !== undefined ? technicalSpecs.ambientTemp : technicalSpecs.temperatures?.ambientTempC,
+        length_ft: technicalSpecs.dimensions?.lengthFt || (technicalSpecs.unit === 'm' ? Math.round(Number(technicalSpecs.length) * 3.28084) : (Number(technicalSpecs.length) || null)),
+        width_ft: technicalSpecs.dimensions?.widthFt || (technicalSpecs.unit === 'm' ? Math.round(Number(technicalSpecs.width) * 3.28084) : (Number(technicalSpecs.width) || null)),
+        height_ft: technicalSpecs.dimensions?.heightFt || (technicalSpecs.unit === 'm' ? Math.round(Number(technicalSpecs.height) * 3.28084) : (Number(technicalSpecs.height) || null)),
+        length_m: technicalSpecs.dimensions?.lengthM || (technicalSpecs.unit === 'm' ? Number(technicalSpecs.length) : null),
+        width_m: technicalSpecs.dimensions?.widthM || (technicalSpecs.unit === 'm' ? Number(technicalSpecs.width) : null),
+        height_m: technicalSpecs.dimensions?.heightM || (technicalSpecs.unit === 'm' ? Number(technicalSpecs.height) : null),
+        calculated_load_kw: technicalSpecs.estimatedLoadKw ?? technicalSpecs.machineRating?.capacityKw,
+        calculated_load_tr: technicalSpecs.capacityTr ?? technicalSpecs.machineRating?.capacityTr,
+        calculated_load_btu: technicalSpecs.machineRating?.capacityBtuHr,
       } : null,
       modelRecommendation: technicalSpecs ? {
         catalogue_ref: technicalSpecs.cdu?.model_number || (typeof technicalSpecs.cdu === 'string' ? technicalSpecs.cdu : ''),
+        cdu: technicalSpecs.cdu,
+        evaporator: technicalSpecs.evaporator,
+        expansionValve: technicalSpecs.expansionValve,
+        orifice: technicalSpecs.orifice,
+        solenoidValve: technicalSpecs.solenoidValve,
+        controller: technicalSpecs.controller,
       } : null,
       proposal_data: proposalData,
     };

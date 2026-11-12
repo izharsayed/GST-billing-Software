@@ -559,6 +559,15 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
         calculated_load_kw: heatLoadResult.machineRating.capacityKw,
         calculated_load_tr: heatLoadResult.machineRating.capacityTr,
         calculated_load_btu: heatLoadResult.machineRating.capacityBtuHr,
+        numRooms: heatLoadResult.inputs?.numRooms || heatLoadResult.chambers?.length || 1,
+        chambersCount: heatLoadResult.inputs?.numRooms || heatLoadResult.chambers?.length || 1,
+        chambers: heatLoadResult.chambers || null,
+        doors: heatLoadResult.doors || null,
+        partitionWalls: heatLoadResult.partitionWalls || null,
+        totalPufSurfaceAreaM2: heatLoadResult.inputs?.dimensions?.totalPufSurfaceAreaM2 || null,
+        door_spec: (heatLoadResult.doors?.totalDoors || heatLoadResult.chambers?.length || 1) > 1
+          ? `${heatLoadResult.doors?.totalDoors || heatLoadResult.chambers.length} Nos. Heavy-Duty Swing Flush Type (1 per Chamber)`
+          : '1 No. Swing Flush Type (34" × 78")',
       } : (recommendation?.inputs ? {
         application: calcForm.application,
         length_ft: calcForm.length,
@@ -1570,6 +1579,15 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
                         calculated_load_kw: heatLoadResult.machineRating.capacityKw,
                         calculated_load_tr: heatLoadResult.machineRating.capacityTr,
                         calculated_load_btu: heatLoadResult.machineRating.capacityBtuHr,
+                        numRooms: heatLoadResult.inputs?.numRooms || heatLoadResult.chambers?.length || 1,
+                        chambersCount: heatLoadResult.inputs?.numRooms || heatLoadResult.chambers?.length || 1,
+                        chambers: heatLoadResult.chambers || null,
+                        doors: heatLoadResult.doors || null,
+                        partitionWalls: heatLoadResult.partitionWalls || null,
+                        totalPufSurfaceAreaM2: heatLoadResult.inputs?.dimensions?.totalPufSurfaceAreaM2 || null,
+                        door_spec: (heatLoadResult.doors?.totalDoors || heatLoadResult.chambers?.length || 1) > 1
+                          ? `${heatLoadResult.doors?.totalDoors || heatLoadResult.chambers.length} Nos. Heavy-Duty Swing Flush Type (1 per Chamber)`
+                          : '1 No. Swing Flush Type (34" × 78")',
                       } : (recommendation?.inputs ? {
                         application: calcForm.application,
                         length_ft: calcForm.length,

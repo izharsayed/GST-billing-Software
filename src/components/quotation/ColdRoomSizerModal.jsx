@@ -7,7 +7,7 @@ import {
 import { calculateColdRoom, calculateHeatLoad, getThermalCommodities } from '../../store';
 import { formatCurrency } from '../../utils';
 import { toast } from '../Toast';
-import { normalizeChamberResult, buildColdRoomInvoiceItems } from './chamberUtils';
+import { normalizeChamberResult, buildColdRoomInvoiceItems, DOOR_OPTIONS } from './chamberUtils';
 
 export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialSpecs = null }) {
   // Sizing Mode: 'heatload' (ASHRAE / USDA Thermodynamic Engine) | 'reckoner' (Standard Volume Reckoner)
@@ -41,6 +41,8 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
     height: 4.5,
     numRooms: 1, // Multi-chamber partition count (default 1)
     pufThicknessMm: 100, // 60, 100, 120, 150
+    doorType: 'swing', // 'swing' | 'sliding' | 'hatch'
+    sheetMaterial: '0.5 mm PPGI (Inner & Outer)',
     ambientTemp: 42.0,
     roomTemp: 2.0,
     commodityId: 'com_apple',
@@ -564,24 +566,49 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                     </div>
                   </div>
 
-                  {/* Right: PUF Panel Thickness */}
-                  <div className="form-group" style={{ margin: 0 }}>
-                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8rem', marginBottom: '0.35rem' }}>
-                      PUF Panel Thickness (k = 0.023 W/m·K)
-                    </label>
-                    <select
-                      className="form-input"
-                      style={{ height: '36px', fontSize: '0.82rem' }}
-                      value={heatLoadForm.pufThicknessMm}
-                      onChange={e => setHeatLoadForm(p => ({ ...p, pufThicknessMm: Number(e.target.value) }))}
-                    >
-                      <option value={60}>60 mm (U = 0.383 W/m²·K) — Ante-rooms &amp; Process Areas</option>
-                      <option value={100}>100 mm (U = 0.230 W/m²·K) — Standard Chiller (+2°C to +8°C)</option>
-                      <option value={120}>120 mm (U = 0.192 W/m²·K) — Low Temp Freezer (-18°C)</option>
-                      <option value={150}>150 mm (U = 0.153 W/m²·K) — Deep Freezer (-25°C to -30°C)</option>
-                    </select>
-                    <div style={{ fontSize: '0.71rem', color: 'var(--text-muted)', marginTop: '0.35rem', lineHeight: 1.3 }}>
-                      Governs heat ingress through walls and ceiling based on temperature gradient.
+                  {/* Right: PUF Panel Thickness & Door Specification */}
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8rem', marginBottom: '0.25rem' }}>
+                        PUF Panel Thickness (k = 0.023 W/m·K)
+                      </label>
+                      <select
+                        className="form-input"
+                        style={{ height: '36px', fontSize: '0.82rem' }}
+                        value={heatLoadForm.pufThicknessMm}
+                        onChange={e => setHeatLoadForm(p => ({ ...p, pufThicknessMm: Number(e.target.value) }))}
+                      >
+                        <option value={60}>60 mm (U = 0.383 W/m²·K) — Ante-rooms &amp; Process Areas</option>
+                        <option value={100}>100 mm (U = 0.230 W/m²·K) — Standard Chiller (+2°C to +8°C)</option>
+                        <option value={120}>120 mm (U = 0.192 W/m²·K) — Low Temp Freezer (-18°C)</option>
+                        <option value={150}>150 mm (U = 0.153 W/m²·K) — Deep Freezer (-25°C to -30°C)</option>
+                      </select>
+                    </div>
+
+                    <div className="form-group" style={{ margin: 0 }}>
+                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8rem', marginBottom: '0.25rem' }}>
+                        Cold Room Door Specification
+                      </label>
+                      <select
+                        className="form-input"
+                        style={{ height: '36px', fontSize: '0.82rem' }}
+                        value={heatLoadForm.doorType}
+                        onChange={e => {
+                          const val = e.target.value;
+                          const opt = DOOR_OPTIONS.find(d => d.id === val) || DOOR_OPTIONS[0];
+                          setHeatLoadForm(p => ({ ...p, doorType: val }));
+                          setCustomRates(p => ({ ...p, doors: opt.defaultRate }));
+                        }}
+                      >
+                        {DOOR_OPTIONS.map(d => (
+                          <option key={d.id} value={d.id}>{d.label}</option>
+                        ))}
+                      </select>
+                      <div style={{ fontSize: '0.71rem', color: 'var(--text-muted)', marginTop: '0.25rem', lineHeight: 1.3 }}>
+                        {liveDimensions.doorsCount > 1
+                          ? `${liveDimensions.doorsCount} doors assigned (1 per chamber).`
+                          : '1 door assigned for thermal envelope.'}
+                      </div>
                     </div>
                   </div>
                 </div>
@@ -1277,9 +1304,13 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                           onChange={e => setSelectedLines(p => ({ ...p, doors: e.target.checked }))}
                         />
                         <span>
-                          {(heatLoadResult.doors?.totalDoors || heatLoadResult.chambers?.length || 1) > 1
-                            ? `${heatLoadResult.doors?.totalDoors || heatLoadResult.chambers.length} × Heavy-Duty PUF Cold Room Swing Doors (1 per Chamber)`
-                            : 'Heavy-Duty PUF Insulated Cold Room Swing Door'}
+                          {(() => {
+                            const opt = DOOR_OPTIONS.find(d => d.id === heatLoadForm.doorType) || DOOR_OPTIONS[0];
+                            const doorsCount = heatLoadResult.doors?.totalDoors || heatLoadResult.chambers?.length || 1;
+                            return doorsCount > 1
+                              ? `${doorsCount} × ${opt.short} (1 per Chamber)`
+                              : opt.label;
+                          })()}
                         </span>
                       </label>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
