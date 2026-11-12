@@ -984,9 +984,11 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
                       style={{ width: '100%' }}
                     >
                       <option value="R404A">R404A (Eco-blend)</option>
+                      <option value="R410A">R410A / 410</option>
                       <option value="R22">R22</option>
                       <option value="R134a">R134a</option>
-                      <option value="R410A">R410A</option>
+                      <option value="R32">R32</option>
+                      <option value="R407C">R407C</option>
                     </select>
                   </div>
                 </div>
@@ -1250,7 +1252,11 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
                       style={{ width: '100%' }}
                     >
                       <option value="R404A">R404A (Standard Eco-blend)</option>
+                      <option value="R410A">R410A / 410</option>
                       <option value="R22">R22 (Legacy / HCFC)</option>
+                      <option value="R134a">R134a</option>
+                      <option value="R32">R32</option>
+                      <option value="R407C">R407C</option>
                     </select>
                   </div>
                   <div>

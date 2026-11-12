@@ -289,9 +289,12 @@ export default function ServiceCertificateModal({
 
     // 2. Add Refrigerant Gas if required
     if (formData.refrigerant_required === 'Yes' && formData.refrigerant_qty) {
+      const gasName = formData.refrigerant_type === 'custom'
+        ? (formData.custom_refrigerant || '410')
+        : formData.refrigerant_type;
       items.push({
         id: Date.now().toString() + 'gas',
-        name: `Refrigerant Gas Charging (${formData.refrigerant_type})`,
+        name: `Refrigerant Gas Charging (${gasName})`,
         hsn: '3824',
         quantity: Number(formData.refrigerant_qty) || 1,
         unit: 'Kg',
@@ -852,12 +855,24 @@ export default function ServiceCertificateModal({
                             style={{ padding: '2px 6px', fontWeight: 600 }}
                           >
                             <option value="R404A">R404A</option>
+                            <option value="410">410</option>
+                            <option value="R410A">R410A</option>
+                            <option value="R410">R410</option>
                             <option value="R22">R22</option>
                             <option value="R134a">R134a</option>
-                            <option value="R410A">R410A</option>
                             <option value="R32">R32</option>
                             <option value="R407C">R407C</option>
+                            <option value="custom">Other (Type custom)</option>
                           </select>
+                          {formData.refrigerant_type === 'custom' && (
+                            <input
+                              type="text"
+                              value={formData.custom_refrigerant || ''}
+                              onChange={(e) => setFormData({ ...formData, custom_refrigerant: e.target.value })}
+                              placeholder="Type gas..."
+                              style={{ width: 85, padding: '2px 5px', fontWeight: 600 }}
+                            />
+                          )}
                         </div>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                           <span className="cert-label" style={{ margin: 0 }}>QUANTITY:</span>

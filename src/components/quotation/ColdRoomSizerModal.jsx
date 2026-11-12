@@ -887,9 +887,11 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                       onChange={e => setHeatLoadForm(p => ({ ...p, refrigerant: e.target.value }))}
                     >
                       <option value="R404A">R404A (Eco-blend)</option>
+                      <option value="R410A">R410A / 410</option>
                       <option value="R22">R22</option>
                       <option value="R134a">R134a</option>
-                      <option value="R410A">R410A</option>
+                      <option value="R32">R32</option>
+                      <option value="R407C">R407C</option>
                     </select>
                   </div>
                 </div>
@@ -1554,9 +1556,11 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                     onChange={e => setCalcForm(p => ({ ...p, refrigerant: e.target.value }))}
                   >
                     <option value="R404A">R404A (Eco-blend)</option>
+                    <option value="R410A">R410A / 410</option>
                     <option value="R22">R22</option>
                     <option value="R134a">R134a</option>
-                    <option value="R410A">R410A</option>
+                    <option value="R32">R32</option>
+                    <option value="R407C">R407C</option>
                   </select>
                 </div>
                 <div className="form-group">
