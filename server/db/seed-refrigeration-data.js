@@ -1,27 +1,10 @@
 import { db, runInTransaction } from './index.js';
 
 export function seedRefrigerationData() {
-  console.log('[Seed] Seeding Emerson technical catalogue data...');
+  console.log('[Seed] Seeding Emerson & Daikin 2024 technical catalogue data...');
 
   runInTransaction(() => {
-    // 0. Clean up any leftover Daikin models, specs, and products
-    db.prepare(`
-      DELETE FROM model_specifications WHERE model_id IN (
-        SELECT id FROM product_models WHERE brand_id = 'brd_daikin' OR model_number LIKE 'CCM%' OR model_number LIKE 'CCL%' OR model_number LIKE 'CRE%' OR id LIKE 'mod_dk_%'
-      )
-    `).run();
-    db.prepare(`
-      DELETE FROM product_prices WHERE model_id IN (
-        SELECT id FROM product_models WHERE brand_id = 'brd_daikin' OR model_number LIKE 'CCM%' OR model_number LIKE 'CCL%' OR model_number LIKE 'CRE%' OR id LIKE 'mod_dk_%'
-      )
-    `).run();
-    db.prepare(`
-      DELETE FROM product_models WHERE brand_id = 'brd_daikin' OR model_number LIKE 'CCM%' OR model_number LIKE 'CCL%' OR model_number LIKE 'CRE%' OR id LIKE 'mod_dk_%'
-    `).run();
-    db.prepare("DELETE FROM products WHERE id IN ('prod_daikin_cdu', 'prod_daikin_evap')").run();
-    db.prepare("DELETE FROM brands WHERE id = 'brd_daikin' OR name = 'Daikin'").run();
-
-    // 1. Brands
+        // 1. Brands
     const upsertBrand = (name, desc, defaultId) => {
       let b = db.prepare('SELECT id FROM brands WHERE name = ?').get(name);
       if (!b) {
@@ -32,10 +15,11 @@ export function seedRefrigerationData() {
       return b.id;
     };
 
+    const daikinBrandId = upsertBrand('Daikin', 'Daikin Airconditioning India Pvt. Ltd. - Cold Room Units', 'brd_daikin');
     const emersonBrandId = upsertBrand('Emerson', 'Hermetic Reciprocating & Copeland Scroll Condensing Units', 'brd_emerson');
     const dixellBrandId = upsertBrand('Dixell', 'Digital Electronic Controllers (XR02CX, XR06CX, XR30CX, XR70CX)', 'brd_dixell');
 
-    // 2. Categories
+// 2. Categories
     const upsertCategory = (name, desc, defaultId) => {
       let c = db.prepare('SELECT id FROM product_categories WHERE name = ?').get(name);
       if (!c) {
@@ -71,6 +55,8 @@ export function seedRefrigerationData() {
     };
 
     const emCduProdId = upsertProduct('prod_emerson_cdu', 'Emerson Cold Room Condensing Unit', cduCatId, emersonBrandId, 'Set', '84189900', 'Emerson Air-Cooled Condensing Unit for Chiller & Freezer Rooms');
+    const dkCduProdId = upsertProduct('prod_daikin_cdu', 'Daikin Commercial Condensing Unit', cduCatId, daikinBrandId, 'Set', '84189900', 'Daikin Scroll & Reciprocating Air-Cooled Condensing Unit');
+    const dkEvapProdId = upsertProduct('prod_daikin_evap', 'Daikin Air Cooling Unit (Evaporator)', evapCatId, daikinBrandId, 'Nos', '84189900', 'Daikin Indoor DX Air Cooling Unit with axial fans');
     const commEvapProdId = upsertProduct('prod_comm_evap', 'Commercial Air Cooling Unit (Evaporator)', evapCatId, emersonBrandId, 'Nos', '84189900', 'Indoor DX Unit Cooler with axial fans');
     const bmcProdId = upsertProduct('prod_emerson_bmc', 'Emerson Bulk Milk Chiller Unit', bmcCatId, emersonBrandId, 'Set', '84186990', 'Dedicated BMC refrigeration unit with agitator control');
 
@@ -341,6 +327,103 @@ export function seedRefrigerationData() {
       insertSpec.run('sp_fans_' + mid, mid, 'fan_specs', item.fans, '');
       insertSpec.run('sp_defrost_' + mid, mid, 'defrost_type', item.defrost, '');
       insertSpec.run('sp_wt_' + mid, mid, 'weight', String(item.weight), 'kg');
+    }
+
+        // ---------------------------------------------------------------
+    // 8.5 DAIKIN COMMERCIAL CONDENSING UNITS (CCU) — 2024 CATALOGUE
+    // ---------------------------------------------------------------
+    const daikinCdus = [
+      // Medium Temp (@ 0°C SST, 38°C Ambient, R404A, 415V/3Ph/50Hz)
+      { model: 'CCMR0200ARY16', hp: 2.0, cap_w: 4730, nominal_tr: 1.35, power_w: 1940, airflow: 4050, comp: 'KCM511-CAL', type: 'Reciprocating', temp: 'Medium (-10°C to +5°C)', t_min: -10, t_max: 5, refr: 'R404A', volt: '415V/3~/50Hz', swept: 7.2, oil: 1.33, current: 3.5, mcc: 4.5, lrc: 20, fans: 1, flc: 1.0, liquid: '3/8"', suction: '5/8"', dims: '700x1025x410 mm', weight: 73, sound: 62 },
+      { model: 'CCMR0300ARY16', hp: 3.0, cap_w: 6934, nominal_tr: 1.97, power_w: 3020, airflow: 4050, comp: 'KCM522-CAL', type: 'Reciprocating', temp: 'Medium (-10°C to +5°C)', t_min: -10, t_max: 5, refr: 'R404A', volt: '415V/3~/50Hz', swept: 12.8, oil: 1.33, current: 7.0, mcc: 8.0, lrc: 45, fans: 1, flc: 1.0, liquid: '3/8"', suction: '5/8"', dims: '700x1025x410 mm', weight: 76, sound: 67 },
+      { model: 'CCMS0400ARY16', hp: 4.0, cap_w: 9342, nominal_tr: 2.66, power_w: 3880, airflow: 7450, comp: 'ZB29KQE-TFD', type: 'Scroll', temp: 'Medium (-10°C to +5°C)', t_min: -10, t_max: 5, refr: 'R404A', volt: '415V/3~/50Hz', swept: 11.4, oil: 1.36, current: 10.0, mcc: 11.0, lrc: 50, fans: 1, flc: 2.75, liquid: '1/2"', suction: '7/8"', dims: '930x1025x410 mm', weight: 94, sound: 71 },
+      { model: 'CCMS0600ARY16', hp: 6.0, cap_w: 12524, nominal_tr: 3.56, power_w: 5950, airflow: 7450, comp: 'ZB45KQE-TFD', type: 'Scroll', temp: 'Medium (-10°C to +5°C)', t_min: -10, t_max: 5, refr: 'R404A', volt: '415V/3~/50Hz', swept: 17.1, oil: 1.77, current: 13.1, mcc: 14.2, lrc: 74, fans: 1, flc: 2.75, liquid: '1/2"', suction: '7/8"', dims: '930x1025x410 mm', weight: 107, sound: 71 },
+      { model: 'CCMS0800ARY16', hp: 8.0, cap_w: 18300, nominal_tr: 5.20, power_w: 7120, airflow: 17698, comp: 'ZB58KQE-TFD-550', type: 'Scroll', temp: 'Medium (-10°C to +5°C)', t_min: -10, t_max: 5, refr: 'R404A', volt: '415V/3~/50Hz', swept: 22.1, oil: 2.51, current: 15.9, mcc: 23.0, lrc: 95, fans: 2, flc: 2.5, liquid: '5/8"', suction: '1-1/8"', dims: '930x1650x620 mm', weight: 167, sound: 73 },
+      { model: 'CCMS1000ARY16', hp: 10.0, cap_w: 24300, nominal_tr: 6.91, power_w: 9100, airflow: 17698, comp: 'ZB76KQE-TFD-550', type: 'Scroll', temp: 'Medium (-10°C to +5°C)', t_min: -10, t_max: 5, refr: 'R404A', volt: '415V/3~/50Hz', swept: 29.1, oil: 3.25, current: 20.4, mcc: 28.0, lrc: 118, fans: 2, flc: 2.5, liquid: '5/8"', suction: '1-1/8"', dims: '930x1650x620 mm', weight: 167, sound: 72 },
+
+      // Low Temp Freezer (@ -25°C SST, 38°C Ambient, R404A, 415V/3Ph/50Hz)
+      { model: 'CCLR0200ARY16', hp: 2.0, cap_w: 1914, nominal_tr: 0.54, power_w: 1870, airflow: 4050, comp: 'KCM512-LAL', type: 'Reciprocating', temp: 'Low Temp (-35°C to -20°C)', t_min: -35, t_max: -20, refr: 'R404A', volt: '415V/3~/50Hz', swept: 14.7, oil: 1.33, current: 7.0, mcc: 8.0, lrc: 45, fans: 1, flc: 1.0, liquid: '3/8"', suction: '5/8"', dims: '700x1025x410 mm', weight: 78, sound: 68 },
+      { model: 'CCLR0300ARY16', hp: 3.0, cap_w: 2510, nominal_tr: 0.71, power_w: 2230, airflow: 4050, comp: 'KCM515-LAL', type: 'Reciprocating', temp: 'Low Temp (-35°C to -20°C)', t_min: -35, t_max: -20, refr: 'R404A', volt: '415V/3~/50Hz', swept: 15.9, oil: 1.30, current: 7.0, mcc: 8.0, lrc: 45, fans: 1, flc: 1.0, liquid: '3/8"', suction: '5/8"', dims: '700x1025x410 mm', weight: 86, sound: 66 },
+      { model: 'CCLS0400ARY16', hp: 4.0, cap_w: 3816, nominal_tr: 1.08, power_w: 2920, airflow: 7450, comp: 'ZF13K4E-TFD', type: 'Scroll', temp: 'Low Temp (-35°C to -20°C)', t_min: -35, t_max: -20, refr: 'R404A', volt: '415V/3~/50Hz', swept: 11.7, oil: 1.90, current: 8.6, mcc: 10.0, lrc: 54.5, fans: 1, flc: 2.75, liquid: '1/2"', suction: '7/8"', dims: '930x1025x410 mm', weight: 108, sound: 71 },
+      { model: 'CCLS0600ARY16', hp: 6.0, cap_w: 5429, nominal_tr: 1.54, power_w: 4280, airflow: 8100, comp: 'ZF18K4E-TFD', type: 'Scroll', temp: 'Low Temp (-35°C to -20°C)', t_min: -35, t_max: -20, refr: 'R404A', volt: '415V/3~/50Hz', swept: 17.1, oil: 1.90, current: 10.5, mcc: 12.5, lrc: 74, fans: 1, flc: 3.7, liquid: '1/2"', suction: '7/8"', dims: '930x1025x410 mm', weight: 112, sound: 72 },
+      { model: 'CCLS0800ARY16', hp: 8.0, cap_w: 6525, nominal_tr: 1.86, power_w: 5658, airflow: 17698, comp: 'ZF25KQE-TFD-550', type: 'Scroll', temp: 'Low Temp (-35°C to -20°C)', t_min: -35, t_max: -20, refr: 'R404A', volt: '415V/3~/50Hz', swept: 21.4, oil: 1.90, current: 13.7, mcc: 16.6, lrc: 102, fans: 2, flc: 2.5, liquid: '5/8"', suction: '1-1/8"', dims: '930x1650x620 mm', weight: 133, sound: 72 },
+      { model: 'CCLS1000ARY16', hp: 10.0, cap_w: 8546, nominal_tr: 2.43, power_w: 7648, airflow: 17698, comp: 'ZF34KQE-TFD-554', type: 'Scroll', temp: 'Low Temp (-35°C to -20°C)', t_min: -35, t_max: -20, refr: 'R404A', volt: '415V/3~/50Hz', swept: 29.1, oil: 3.37, current: 22.0, mcc: 25.0, lrc: 100, fans: 2, flc: 2.5, liquid: '5/8"', suction: '1-1/8"', dims: '930x1650x620 mm', weight: 172, sound: 72 },
+
+      // High-Med Temp Models
+      { model: 'CCHMS0400ARY16', hp: 4.0, cap_w: 10450, nominal_tr: 2.97, power_w: 3850, airflow: 7450, comp: 'ZE55KME-TFM', type: 'Scroll', temp: 'High/Med (-5°C to +15°C)', t_min: -5, t_max: 15, refr: 'R404A', volt: '415V/3~/50Hz', swept: 8.3, oil: 1.24, current: 11.0, mcc: 13.8, lrc: 64, fans: 1, flc: 1.0, liquid: '3/8"', suction: '5/8"', dims: '990x940x350 mm', weight: 85, sound: 61 },
+      { model: 'CCMX0150AV16', hp: 1.5, cap_w: 3800, nominal_tr: 1.08, power_w: 1208, airflow: 3120, comp: 'KSF165S2VFPC3', type: 'Rotary', temp: 'High/Med (-5°C to +15°C)', t_min: -5, t_max: 15, refr: 'R404A', volt: '230V/1~/50Hz', swept: 16.55, oil: 0.41, current: 5.7, mcc: 7.0, lrc: 37, fans: 1, flc: 0.65, liquid: '1/4"', suction: '1/2"', dims: '595x845x300 mm', weight: 41, sound: 56 },
+    ];
+
+    for (const item of daikinCdus) {
+      const capKw = Math.round((item.cap_w / 1000) * 100) / 100;
+      const desc = `Daikin ${item.temp.includes('Low') ? 'Low-Temp' : 'Medium-Temp'} ${item.type} CDU ${item.hp} HP (${capKw} kW / ${item.nominal_tr} TR) with ${item.comp}`;
+      const mid = saveModelAndPrice(
+        'mod_dk_cdu_' + item.model,
+        dkCduProdId, daikinBrandId, item.model,
+        desc,
+        capKw, 'kW', item.t_min, item.t_max,
+        item.refr, item.volt, 'Daikin Cold Room Catalogue 2024', '3-4'
+      );
+
+      insertSpec.run('sp_hp_' + mid, mid, 'horse_power', String(item.hp), 'HP');
+      insertSpec.run('sp_comp_' + mid, mid, 'internal_compressor', item.comp, '');
+      insertSpec.run('sp_tech_' + mid, mid, 'compressor_type', item.type, '');
+      insertSpec.run('sp_cap_w_' + mid, mid, 'cooling_capacity_watts', String(item.cap_w), 'W');
+      insertSpec.run('sp_nom_tr_' + mid, mid, 'nominal_tr', String(item.nominal_tr), 'TR');
+      insertSpec.run('sp_pwr_w_' + mid, mid, 'power_input_watts', String(item.power_w), 'W');
+      insertSpec.run('sp_airflow_' + mid, mid, 'air_flow_m3h', String(item.airflow), 'm3/h');
+      insertSpec.run('sp_liq_' + mid, mid, 'liquid_line', item.liquid || '1/2"', 'inch');
+      insertSpec.run('sp_suc_' + mid, mid, 'suction_line', item.suction || '7/8"', 'inch');
+      insertSpec.run('sp_snd_' + mid, mid, 'sound_level', String(item.sound || 70), 'dBA');
+      insertSpec.run('sp_wt_' + mid, mid, 'weight', String(item.weight || 100), 'kg');
+      insertSpec.run('sp_dims_' + mid, mid, 'dimensions_mm', item.dims, 'mm');
+    }
+
+    // ---------------------------------------------------------------
+    // 9. DAIKIN AIR COOLING UNITS (ACU Evaporators) — 2024 CATALOGUE
+    // ---------------------------------------------------------------
+    const daikinEvaps = [
+      // Medium Temperature Evaporators (0°C to +15°C, R404A)
+      { model: 'CRE1M400ASV16', cap_kw: 4.62, temp: 'Medium Temp (0°C to +15°C)', t_min: 0, t_max: 15, airflow: 2350, throw: 10, fans: '350mm × 1 Fan (1380 rpm, 140W)', defrost: 'Air Defrost', heater_w: 0, volt: '230V/1Ph/50Hz', dims: '745x560x515 mm', weight: 35, sound: 67 },
+      { model: 'CRE2M600ASV16', cap_kw: 7.10, temp: 'Medium Temp (0°C to +15°C)', t_min: 0, t_max: 15, airflow: 4700, throw: 13, fans: '350mm × 2 Fans (1380 rpm, 280W)', defrost: 'Air Defrost', heater_w: 0, volt: '230V/1Ph/50Hz', dims: '1205x560x515 mm', weight: 52, sound: 68 },
+      { model: 'CRE2M800ASV16', cap_kw: 9.62, temp: 'Medium Temp (0°C to +15°C)', t_min: 0, t_max: 15, airflow: 4700, throw: 13, fans: '350mm × 2 Fans (1380 rpm, 280W)', defrost: 'Air Defrost', heater_w: 0, volt: '230V/1Ph/50Hz', dims: '1205x560x515 mm', weight: 61, sound: 68 },
+      { model: 'CRE3M980ASV16', cap_kw: 11.62, temp: 'Medium Temp (0°C to +15°C)', t_min: 0, t_max: 15, airflow: 7050, throw: 15, fans: '350mm × 3 Fans (1380 rpm, 420W)', defrost: 'Air Defrost', heater_w: 0, volt: '230V/1Ph/50Hz', dims: '1665x560x515 mm', weight: 67, sound: 70 },
+      { model: 'CRE3M1400ASV16', cap_kw: 16.57, temp: 'Medium Temp (0°C to +15°C)', t_min: 0, t_max: 15, airflow: 7050, throw: 15, fans: '350mm × 3 Fans (1380 rpm, 420W)', defrost: 'Air Defrost', heater_w: 0, volt: '230V/1Ph/50Hz', dims: '1665x560x515 mm', weight: 78, sound: 70 },
+      { model: 'CRE2M1700ASY16', cap_kw: 19.60, temp: 'Medium Temp (0°C to +15°C)', t_min: 0, t_max: 15, airflow: 17150, throw: 19, fans: '550mm × 2 Fans (1400 rpm, 1000W)', defrost: 'Air / Electric Defrost', heater_w: 0, volt: '415V/3Ph/50Hz', dims: '2400x555x720 mm', weight: 119, sound: 75 },
+      { model: 'CRE2M2200ASY16', cap_kw: 26.20, temp: 'Medium Temp (0°C to +15°C)', t_min: 0, t_max: 15, airflow: 16700, throw: 18, fans: '550mm × 2 Fans (1400 rpm, 1000W)', defrost: 'Air / Electric Defrost', heater_w: 0, volt: '415V/3Ph/50Hz', dims: '2400x555x720 mm', weight: 140, sound: 75 },
+      { model: 'CRE2M2800ASY16', cap_kw: 32.70, temp: 'Medium Temp (0°C to +15°C)', t_min: 0, t_max: 15, airflow: 16200, throw: 18, fans: '550mm × 2 Fans (1400 rpm, 1000W)', defrost: 'Air / Electric Defrost', heater_w: 0, volt: '415V/3Ph/50Hz', dims: '2400x555x720 mm', weight: 155, sound: 75 },
+
+      // Low Temperature Freezer Evaporators (-25°C to -15°C, R404A with Built-in Electric Defrost)
+      { model: 'CRE1L200ASV16', cap_kw: 2.18, temp: 'Low Temp Freezer (-25°C to -15°C)', t_min: -25, t_max: -15, airflow: 2350, throw: 10, fans: '350mm × 1 Fan (1380 rpm, 140W)', defrost: 'Electric Defrost Elements Built-in', heater_w: 1800, volt: '230V/1Ph/50Hz', dims: '745x560x515 mm', weight: 35, sound: 67 },
+      { model: 'CRE2L320ASV16', cap_kw: 3.48, temp: 'Low Temp Freezer (-25°C to -15°C)', t_min: -25, t_max: -15, airflow: 4700, throw: 13, fans: '350mm × 2 Fans (1380 rpm, 280W)', defrost: 'Electric Defrost Elements Built-in', heater_w: 2400, volt: '230V/1Ph/50Hz', dims: '1205x560x515 mm', weight: 52, sound: 68 },
+      { model: 'CRE2L400ASV16', cap_kw: 4.36, temp: 'Low Temp Freezer (-25°C to -15°C)', t_min: -25, t_max: -15, airflow: 4700, throw: 13, fans: '350mm × 2 Fans (1380 rpm, 280W)', defrost: 'Electric Defrost Elements Built-in', heater_w: 2400, volt: '230V/1Ph/50Hz', dims: '1205x560x515 mm', weight: 61, sound: 68 },
+      { model: 'CRE3L480ASV16', cap_kw: 5.23, temp: 'Low Temp Freezer (-25°C to -15°C)', t_min: -25, t_max: -15, airflow: 7050, throw: 15, fans: '350mm × 3 Fans (1380 rpm, 420W)', defrost: 'Electric Defrost Elements Built-in', heater_w: 3600, volt: '230V/1Ph/50Hz', dims: '1665x560x515 mm', weight: 67, sound: 70 },
+      { model: 'CRE3L600ASV16', cap_kw: 6.54, temp: 'Low Temp Freezer (-25°C to -15°C)', t_min: -25, t_max: -15, airflow: 7050, throw: 15, fans: '350mm × 3 Fans (1380 rpm, 420W)', defrost: 'Electric Defrost Elements Built-in', heater_w: 3600, volt: '230V/1Ph/50Hz', dims: '1665x560x515 mm', weight: 78, sound: 70 },
+      { model: 'CRE2L0900ASY16', cap_kw: 10.00, temp: 'Deep Freeze (-20°C to -30°C)', t_min: -30, t_max: -20, airflow: 17375, throw: 19, fans: '550mm × 2 Fans (1400 rpm, 1000W)', defrost: 'Heavy-Duty Electric Defrost', heater_w: 5000, volt: '415V/3Ph/50Hz', dims: '2400x555x720 mm', weight: 119, sound: 75 },
+      { model: 'CRE2L1400ASY16', cap_kw: 15.00, temp: 'Deep Freeze (-20°C to -30°C)', t_min: -30, t_max: -20, airflow: 16975, throw: 18, fans: '550mm × 2 Fans (1400 rpm, 1000W)', defrost: 'Heavy-Duty Electric Defrost', heater_w: 5000, volt: '415V/3Ph/50Hz', dims: '2400x555x720 mm', weight: 140, sound: 75 },
+      { model: 'CRE2L1800ASY16', cap_kw: 20.00, temp: 'Deep Freeze (-20°C to -30°C)', t_min: -30, t_max: -20, airflow: 16550, throw: 18, fans: '550mm × 2 Fans (1400 rpm, 1000W)', defrost: 'Heavy-Duty Electric Defrost', heater_w: 7000, volt: '415V/3Ph/50Hz', dims: '2400x555x720 mm', weight: 155, sound: 75 },
+
+      // High-Med Temp R32 Evaporators
+      { model: 'CRE1HM150ASV16', cap_kw: 4.36, temp: 'High/Med R32 (-8°C to +15°C)', t_min: -8, t_max: 15, airflow: 2350, throw: 10, fans: '350mm × 1 Fan', defrost: 'Air Defrost', heater_w: 0, volt: '230V/1Ph/50Hz', dims: '745x560x515 mm', weight: 35, sound: 67 },
+      { model: 'CRE1HM800ASV16', cap_kw: 22.80, temp: 'High/Med R32 (-8°C to +15°C)', t_min: -8, t_max: 15, airflow: 16700, throw: 18, fans: '550mm × 2 Fans', defrost: 'Air Defrost', heater_w: 0, volt: '415V/3Ph/50Hz', dims: '2400x555x720 mm', weight: 140, sound: 75 },
+    ];
+
+    for (const item of daikinEvaps) {
+      const mid = saveModelAndPrice(
+        'mod_dk_evap_' + item.model,
+        dkEvapProdId, daikinBrandId, item.model,
+        `Daikin Indoor DX Air Cooling Unit (${item.cap_kw} kW) - ${item.defrost}`,
+        item.cap_kw, 'kW', item.t_min, item.t_max,
+        'R404A / R32', item.volt, 'Daikin Cold Room Catalogue 2024', '5'
+      );
+
+      insertSpec.run('sp_airflow_' + mid, mid, 'air_flow_m3h', String(item.airflow), 'm3/h');
+      insertSpec.run('sp_fans_' + mid, mid, 'fan_specs', item.fans, '');
+      insertSpec.run('sp_defrost_' + mid, mid, 'defrost_type', item.defrost, '');
+      insertSpec.run('sp_heater_w_' + mid, mid, 'heater_watts', String(item.heater_w || 0), 'W');
+      insertSpec.run('sp_throw_' + mid, mid, 'air_throw_m', String(item.throw || 10), 'm');
+      insertSpec.run('sp_wt_' + mid, mid, 'weight', String(item.weight), 'kg');
+      insertSpec.run('sp_dims_' + mid, mid, 'dimensions_mm', item.dims, 'mm');
     }
 
     // ---------------------------------------------------------------

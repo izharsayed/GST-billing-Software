@@ -869,9 +869,9 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                         else setCduBrandFilter('all');
                       }}
                     >
+                      <option value="Daikin">Daikin (Authorized Service Dealer)</option>
                       <option value="Emerson">Emerson Climate Technologies</option>
-                      <option value="Emerson">Emerson</option>
-                      <option value="any">Compare All Brands</option>
+                      <option value="any">Compare All Brands (Daikin &amp; Emerson)</option>
                     </select>
                   </div>
 
@@ -1336,9 +1336,9 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                     value={calcForm.brand}
                     onChange={e => setCalcForm(p => ({ ...p, brand: e.target.value }))}
                   >
+                    <option value="Daikin">Daikin (Authorized Service Dealer)</option>
                     <option value="Emerson">Emerson Climate Technologies</option>
-                    <option value="Emerson">Emerson</option>
-                    <option value="any">Compare All Brands</option>
+                    <option value="any">Compare All Brands (Daikin &amp; Emerson)</option>
                   </select>
                 </div>
                 <div className="form-group">

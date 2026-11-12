@@ -835,9 +835,9 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
                       onChange={e => setHeatLoadForm(p => ({ ...p, brand: e.target.value }))}
                       style={{ width: '100%' }}
                     >
+                      <option value="Daikin">Daikin (Authorized Service Dealer)</option>
                       <option value="Emerson">Emerson Climate Technologies</option>
-                      <option value="Emerson">Emerson</option>
-                      <option value="any">Compare All Brands</option>
+                      <option value="any">Compare All Brands (Daikin &amp; Emerson)</option>
                     </select>
                   </div>
                   <div>
@@ -1097,9 +1097,9 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
                       onChange={e => setCalcForm(prev => ({ ...prev, brand: e.target.value }))}
                       style={{ width: '100%' }}
                     >
+                      <option value="Daikin">Daikin (Authorized Service Dealer)</option>
                       <option value="Emerson">Emerson Climate Technologies</option>
-                      <option value="Emerson">Emerson Climate</option>
-                      <option value="any">Compare All (Daikin & Emerson)</option>
+                      <option value="any">Compare All (Daikin &amp; Emerson)</option>
                     </select>
                   </div>
                   <div>

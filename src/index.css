@@ -606,8 +606,8 @@ body {
 }
 
 .sidebar-logo {
-  width: 38px;
-  height: 38px;
+  width: 40px;
+  height: 40px;
   border-radius: 10px;
   background: transparent;
   display: flex;
@@ -619,10 +619,9 @@ body {
 .sidebar-logo-img {
   width: 100%;
   height: 100%;
-  border-radius: 10px;
-  object-fit: cover;
+  object-fit: contain;
   display: block;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.12);
+  filter: drop-shadow(0 2px 6px rgba(0, 0, 0, 0.18));
 }
 
 .sidebar-brand-text {

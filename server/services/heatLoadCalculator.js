@@ -212,12 +212,13 @@ export function calculateHeatLoad(inputs = {}) {
   const capacityTr = Math.round((capacityKw / 3.517) * 100) / 100;
   const capacityBtuHr = Math.round(capacityKw * 3412.14);
 
-  // 10. Commercial Equipment Matching Algorithm (Emerson & Commercial DX Evaporators)
+  // 10. Commercial Equipment Matching Algorithm (Emerson & Daikin 2024 Technical Catalogues)
   const matchedEquipment = matchCommercialEquipment({
     requiredTr: capacityTr,
     requiredKw: capacityKw,
     roomTempC,
     compressorPreference: inputs.compressorPreference || 'any',
+    brandPreference: inputs.brand || inputs.brandPreference || 'any',
   });
 
   return {
@@ -311,10 +312,18 @@ export function calculateHeatLoad(inputs = {}) {
 /**
  * Match Emerson Outdoor Condensing Unit (CCU) and Indoor Air Cooling Unit (ACU)
  */
-export function matchCommercialEquipment({ requiredTr, requiredKw, roomTempC, compressorPreference = 'any' }) {
+export function matchCommercialEquipment({ requiredTr, requiredKw, roomTempC, compressorPreference = 'any', brandPreference = 'any' }) {
   const isFreezer = roomTempC < 0;
 
-  // Fetch Emerson condensing units
+  // Build brand condition for CDU
+  let brandCcuFilter = "b.name IN ('Emerson', 'Daikin')";
+  if (brandPreference === 'Daikin') {
+    brandCcuFilter = "b.name = 'Daikin'";
+  } else if (brandPreference === 'Emerson') {
+    brandCcuFilter = "b.name = 'Emerson'";
+  }
+
+  // Fetch condensing units
   const ccuQuery = `
     SELECT m.*, b.name as brand_name, p.name as product_name,
            prc.selling_price, prc.purchase_cost
@@ -322,14 +331,14 @@ export function matchCommercialEquipment({ requiredTr, requiredKw, roomTempC, co
     JOIN brands b ON m.brand_id = b.id
     JOIN products p ON m.product_id = p.id
     LEFT JOIN product_prices prc ON m.id = prc.model_id
-    WHERE b.name = 'Emerson' AND (p.id = 'prod_emerson_cdu' OR p.name LIKE '%Condensing%')
+    WHERE ${brandCcuFilter} AND (p.id = 'prod_emerson_cdu' OR p.id = 'prod_daikin_cdu' OR p.name LIKE '%Condensing%')
   `;
 
   let ccuModels = [];
   try {
     ccuModels = db.prepare(ccuQuery).all();
   } catch (err) {
-    console.error('Error fetching Emerson CCUs:', err);
+    console.error('Error fetching CCUs:', err);
   }
 
   // Parse specifications into model objects
@@ -385,6 +394,14 @@ export function matchCommercialEquipment({ requiredTr, requiredKw, roomTempC, co
     selectedCcu = maxUnit; // default representative unit
   }
 
+  // Build brand condition for ACU / Evaporator
+  let brandEvapFilter = "b.name IN ('Emerson', 'Daikin', 'Dixell')";
+  if (brandPreference === 'Daikin') {
+    brandEvapFilter = "b.name = 'Daikin'";
+  } else if (brandPreference === 'Emerson') {
+    brandEvapFilter = "b.name = 'Emerson' OR b.name = 'Dixell'";
+  }
+
   // Fetch indoor evaporators (ACU)
   const evapQuery = `
     SELECT m.*, b.name as brand_name, p.name as product_name,
@@ -393,7 +410,7 @@ export function matchCommercialEquipment({ requiredTr, requiredKw, roomTempC, co
     JOIN brands b ON m.brand_id = b.id
     JOIN products p ON m.product_id = p.id
     LEFT JOIN product_prices prc ON m.id = prc.model_id
-    WHERE p.id = 'prod_comm_evap' OR p.name LIKE '%Evaporator%'
+    WHERE (${brandEvapFilter}) AND (p.id = 'prod_comm_evap' OR p.id = 'prod_daikin_evap' OR p.name LIKE '%Evaporator%')
   `;
   let evapModels = [];
   try {
