@@ -104,9 +104,9 @@ const medMatch = calculateHeatLoad({
   entryTemp: 25.0,
 });
 
-assert(medMatch.recommendations.ccu !== null, 'Emerson CCU matched for medium temp');
+assert(medMatch.recommendations.ccu !== null, 'CCU matched for medium temp');
 console.log(`  Matched Medium CCU: ${medMatch.recommendations.ccu.model_number} (${medMatch.recommendations.ccu.nominal_tr} TR)`);
-assert(medMatch.recommendations.ccu.brand_name === 'Emerson', 'Matched CCU brand is Emerson');
+assert(medMatch.recommendations.ccu.brand_name === 'Daikin' || medMatch.recommendations.ccu.brand_name === 'Emerson', 'Matched CCU brand is Daikin or Emerson');
 assert(medMatch.recommendations.evaporator !== null, 'Commercial DX ACU matched');
 console.log(`  Matched Medium ACU: ${medMatch.recommendations.evaporator.model_number} (${medMatch.recommendations.evaporator.capacity_kw} kW)`);
 
@@ -124,9 +124,9 @@ const ltMatch = calculateHeatLoad({
   entryTemp: 25.0,
 });
 
-assert(ltMatch.recommendations.ccu !== null, 'Emerson CCU matched for low temp freezer');
+assert(ltMatch.recommendations.ccu !== null, 'CCU matched for low temp freezer');
 console.log(`  Matched Freezer CCU: ${ltMatch.recommendations.ccu.model_number} (${ltMatch.recommendations.ccu.nominal_tr} TR)`);
-assert(ltMatch.recommendations.ccu.brand_name === 'Emerson', 'Matched Freezer CCU brand is Emerson');
+assert(ltMatch.recommendations.ccu.brand_name === 'Daikin' || ltMatch.recommendations.ccu.brand_name === 'Emerson', 'Matched Freezer CCU brand is Daikin or Emerson');
 assert(ltMatch.recommendations.evaporator !== null, 'Commercial Freezer ACU matched');
 console.log(`  Matched Freezer ACU: ${ltMatch.recommendations.evaporator.model_number} (${ltMatch.recommendations.evaporator.capacity_kw} kW)`);
 

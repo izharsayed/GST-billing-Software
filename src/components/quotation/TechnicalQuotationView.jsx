@@ -13,6 +13,7 @@ import { formatCurrency } from '../../utils';
 import { toast } from '../Toast';
 import { confirmAction } from '../ConfirmModal';
 import TechnoCommercialProposalModal from './TechnoCommercialProposalModal';
+import { normalizeChamberResult } from './chamberUtils';
 
 export default function TechnicalQuotationView({ onNavigateToInvoice }) {
   const [tab, setTab] = useState('new'); // 'new' | 'list'
@@ -35,6 +36,7 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
     length: 12.0,
     width: 8.0,
     height: 4.5,
+    numRooms: 1, // Multi-chamber partition count (default 1)
     pufThicknessMm: 100, // 60, 100, 120, 150
     ambientTemp: 42.0,
     roomTemp: 2.0,
@@ -43,7 +45,7 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
     entryTemp: 28.0,
     compressorRunHours: 16.0,
     safetyFactor: 0.10,
-    brand: 'Emerson',
+    brand: 'Daikin',
     compressorPreference: 'any',
     refrigerant: 'R404A',
     lightsKw: '',
@@ -77,14 +79,31 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
     const l = Number(heatLoadForm.length) || 0;
     const w = Number(heatLoadForm.width) || 0;
     const h = Number(heatLoadForm.height) || 0;
+    const n = Math.max(1, Math.round(Number(heatLoadForm.numRooms) || 1));
     const isM = heatLoadForm.unit === 'm';
     const lM = isM ? l : l * 0.3048;
     const wM = isM ? w : w * 0.3048;
     const hM = isM ? h : h * 0.3048;
     const volM3 = Math.round(lM * wM * hM * 10) / 10;
-    const areaM2 = Math.round(2 * (lM * wM + lM * hM + wM * hM) * 10) / 10;
-    return { volM3, areaM2 };
-  }, [heatLoadForm.length, heatLoadForm.width, heatLoadForm.height, heatLoadForm.unit]);
+    const outerAreaM2 = Math.round(2 * (lM * wM + lM * hM + wM * hM) * 10) / 10;
+    const partitionCount = Math.max(0, n - 1);
+    const partitionAreaM2 = Math.round(partitionCount * (wM * hM) * 10) / 10;
+    const totalPufAreaM2 = Math.round((outerAreaM2 + partitionAreaM2) * 10) / 10;
+    const chamberLM = Math.round((lM / n) * 10) / 10;
+    const chamberVolM3 = Math.round((volM3 / n) * 10) / 10;
+    return {
+      volM3,
+      outerAreaM2,
+      areaM2: outerAreaM2,
+      partitionCount,
+      partitionAreaM2,
+      totalPufAreaM2,
+      chamberLM,
+      chamberVolM3,
+      numRooms: n,
+      doorsCount: n,
+    };
+  }, [heatLoadForm.length, heatLoadForm.width, heatLoadForm.height, heatLoadForm.unit, heatLoadForm.numRooms]);
 
   // Reckoner Form State
   const [calcForm, setCalcForm] = useState({
@@ -96,7 +115,7 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
     ambientTemp: 43,
     refrigerant: 'R404A',
     compressorType: 'scroll',
-    brand: 'Emerson',
+    brand: 'Daikin',
     dailyMilkLiters: 1000,
   });
 
@@ -151,58 +170,43 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
     if (e) e.preventDefault();
     setCalculating(true);
     try {
-      const res = await calculateHeatLoad(heatLoadForm);
+      const rawRes = await calculateHeatLoad(heatLoadForm);
+      const res = normalizeChamberResult(rawRes, heatLoadForm);
       setHeatLoadResult(res);
 
       const rec = res.recommendations || {};
       const newItems = [];
+      const isMultiChamber = Array.isArray(res.chambers) && res.chambers.length > 1;
+      const chamberCount = res.chambers?.length || 1;
 
-      // 1. Daikin Condensing Unit (CCU)
-      if (rec.multiUnitCcu) {
-        const mu = rec.multiUnitCcu;
-        const price = Number(mu.unit.selling_price) || 0;
-        newItems.push({
-          product_id: mu.unit.product_id,
-          model_id: mu.unit.id,
-          item_type: 'equipment',
-          description: `${mu.unit.brand_name || "Emerson"} ${mu.unit.model_number} Outdoor Condensing Unit (${mu.unit.nominal_tr} TR each, ${mu.count} Sets = ${mu.totalCapacityTr} TR)`,
-          hsn_sac: '84189900',
-          quantity: mu.count,
-          unit: 'Set',
-          unit_price: price,
-          discount_percent: 0,
-          tax_percent: 18.0,
-          tax_amount: price * mu.count * 0.18,
-          total_amount: price * mu.count * 1.18,
+      // 1. Dedicated Indoor Evaporators (1 per chamber)
+      if (isMultiChamber) {
+        res.chambers.forEach(ch => {
+          const chEvap = ch.evaporator || rec.evaporator;
+          const price = Number(chEvap?.selling_price) || 0;
+          newItems.push({
+            product_id: chEvap?.product_id,
+            model_id: chEvap?.id,
+            item_type: 'equipment',
+            description: `${ch.name} – Daikin ${chEvap?.model_number || 'DX Evaporator'} Air Cooling Unit (${ch.dimensions.lengthM}m × ${ch.dimensions.widthM}m × ${ch.dimensions.heightM}m, ${ch.dimensions.volumeM3} m³ - ${ch.capacityTr} TR / ${ch.capacityKw} kW)`,
+            hsn_sac: '84189900',
+            quantity: 1,
+            unit: 'Nos',
+            unit_price: price,
+            discount_percent: 0,
+            tax_percent: 18.0,
+            tax_amount: price * 0.18,
+            total_amount: price * 1.18,
+          });
         });
-      } else if (rec.ccu) {
-        const ccu = rec.ccu;
-        const price = Number(ccu.selling_price) || 0;
-        newItems.push({
-          product_id: ccu.product_id,
-          model_id: ccu.id,
-          item_type: 'equipment',
-          description: `${ccu.brand_name || "Emerson"} ${ccu.model_number} Outdoor Condensing Unit (${ccu.nominal_tr} TR / ${ccu.capacity} kW @ ${res.inputs.temperatures.roomTempC}°C)`,
-          hsn_sac: '84189900',
-          quantity: 1,
-          unit: 'Set',
-          unit_price: price,
-          discount_percent: 0,
-          tax_percent: 18.0,
-          tax_amount: price * 0.18,
-          total_amount: price * 1.18,
-        });
-      }
-
-      // 2. Daikin Air Cooling Unit (ACU)
-      if (rec.multiUnitAcu) {
+      } else if (rec.multiUnitAcu) {
         const muA = rec.multiUnitAcu;
         const price = Number(muA.unit.selling_price) || 0;
         newItems.push({
           product_id: muA.unit.product_id,
           model_id: muA.unit.id,
           item_type: 'equipment',
-          description: `${muA.unit.model_number} DX Air Cooling Unit (${muA.unit.capacity_kw} kW each, ${muA.count} Nos = ${muA.totalCapacityKw} kW)`,
+          description: `Daikin ${muA.unit.model_number} DX Air Cooling Unit (${muA.unit.capacity_kw} kW each, ${muA.count} Nos = ${muA.totalCapacityKw} kW)`,
           hsn_sac: '84189900',
           quantity: muA.count,
           unit: 'Nos',
@@ -219,7 +223,7 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
           product_id: evap.product_id,
           model_id: evap.id,
           item_type: 'equipment',
-          description: `${evap.model_number} DX Air Cooling Unit Evaporator (${evap.capacity_kw} kW) - ${evap.defrost_type}`,
+          description: `Daikin ${evap.model_number} DX Air Cooling Unit Evaporator (${evap.capacity_kw} kW) - ${evap.defrost_type}`,
           hsn_sac: '84189900',
           quantity: 1,
           unit: 'Nos',
@@ -231,37 +235,110 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
         });
       }
 
-      // 3. Refrigeration Kit & Controller
+      // 2. Central Daikin Condensing Unit (CCU)
+      if (rec.multiUnitCcu) {
+        const mu = rec.multiUnitCcu;
+        const price = Number(mu.unit.selling_price) || 0;
+        newItems.push({
+          product_id: mu.unit.product_id,
+          model_id: mu.unit.id,
+          item_type: 'equipment',
+          description: `Central Daikin ${mu.unit.model_number} Outdoor Condensing Unit (${mu.unit.nominal_tr} TR each, ${mu.count} Sets = ${mu.totalCapacityTr} TR)${isMultiChamber ? ` (Central Combined - ${chamberCount} Chambers)` : ''}`,
+          hsn_sac: '84189900',
+          quantity: mu.count,
+          unit: 'Set',
+          unit_price: price,
+          discount_percent: 0,
+          tax_percent: 18.0,
+          tax_amount: price * mu.count * 0.18,
+          total_amount: price * mu.count * 1.18,
+        });
+      } else if (rec.ccu) {
+        const ccu = rec.ccu;
+        const price = Number(ccu.selling_price) || 0;
+        newItems.push({
+          product_id: ccu.product_id,
+          model_id: ccu.id,
+          item_type: 'equipment',
+          description: `Central Daikin ${ccu.model_number} Outdoor Condensing Unit (${ccu.nominal_tr || ccu.capacity} TR @ ${res.inputs?.temperatures?.roomTempC || 2}°C)${isMultiChamber ? ` (Central Combined - ${chamberCount} Chambers)` : ''}`,
+          hsn_sac: '84189900',
+          quantity: 1,
+          unit: 'Set',
+          unit_price: price,
+          discount_percent: 0,
+          tax_percent: 18.0,
+          tax_amount: price * 0.18,
+          total_amount: price * 1.18,
+        });
+      }
+
+      // 3. Cold Room Swing Doors (1 per chamber)
+      const doorCount = res.doors?.totalDoors || chamberCount;
+      newItems.push({
+        item_type: 'door',
+        description: `Heavy-Duty PUF Insulated Cold Room Swing Doors (with Positive Seal Gasket, Frame Heater & Safety Release)${isMultiChamber ? ` - 1 Door per Chamber (${doorCount} Chambers)` : ''}`,
+        hsn_sac: '73083000',
+        quantity: doorCount,
+        unit: 'Nos',
+        unit_price: 28500,
+        discount_percent: 0,
+        tax_percent: 18.0,
+        tax_amount: 28500 * doorCount * 0.18,
+        total_amount: 28500 * doorCount * 1.18,
+      });
+
+      // 4. Refrigeration Kits & Controllers (1 set per chamber)
       const vr = rec.valveRecommendations || {};
       newItems.push({
         item_type: 'component',
-        description: `Commercial Refrigeration Kit: ${vr.expansionValve} Expansion Valve + ${vr.orifice} Orifice + ${vr.solenoidValve} Solenoid + ${vr.controller}`,
+        description: `Daikin Refrigeration Kit: ${vr.expansionValve || 'TXV'} + ${vr.orifice || 'Orifice'} + ${vr.solenoidValve || 'Solenoid'} + ${vr.controller || 'Dixell Controller'}${isMultiChamber ? ` - 1 Set per Chamber (${chamberCount} Chambers)` : ''}`,
         hsn_sac: '84189900',
-        quantity: 1,
+        quantity: chamberCount,
         unit: 'Set',
         unit_price: 14500,
         discount_percent: 0,
         tax_percent: 18.0,
-        tax_amount: 14500 * 0.18,
-        total_amount: 14500 * 1.18,
+        tax_amount: 14500 * chamberCount * 0.18,
+        total_amount: 14500 * chamberCount * 1.18,
       });
 
-      // 4. Installation & Commissioning
+      // 5. PUF Sandwich Panels (Includes Partition Walls)
+      const pufMm = Number(heatLoadForm.pufThicknessMm) || 100;
+      const pufRate = pufMm === 60 ? 1350 : (pufMm === 100 ? 1550 : (pufMm === 120 ? 1850 : 2150));
+      const totalPufArea = res.inputs?.dimensions?.totalPufSurfaceAreaM2 || res.inputs?.dimensions?.surfaceAreaM2 || 0;
+      const outerArea = res.inputs?.dimensions?.surfaceAreaM2 || 0;
+      const partitionArea = res.partitionWalls?.totalAreaM2 || 0;
+      const partitionCount = res.partitionWalls?.count || 0;
+      newItems.push({
+        item_type: 'puf',
+        description: `PUF Insulated Sandwich Panels (${pufMm}mm, k=0.023) - ${totalPufArea} sq.m${isMultiChamber ? ` (Includes ${outerArea} sq.m Outer + ${partitionCount} Partitions: ${partitionArea} sq.m)` : ' (Outer Thermal Envelope)'}`,
+        hsn_sac: '94069090',
+        quantity: totalPufArea,
+        unit: 'sq.m',
+        unit_price: pufRate,
+        discount_percent: 0,
+        tax_percent: 18.0,
+        tax_amount: pufRate * totalPufArea * 0.18,
+        total_amount: pufRate * totalPufArea * 1.18,
+      });
+
+      // 6. Installation & Commissioning
+      const installPrice = isMultiChamber ? 18000 + (chamberCount - 1) * 8000 : 18000;
       newItems.push({
         item_type: 'installation',
-        description: 'Complete Site Installation, Refrigerant Copper Piping, Pressure Testing & Commissioning',
+        description: `Cold-Room Installation, ${isMultiChamber ? 'Multi-Chamber Refrigerant Piping' : 'Refrigerant Copper Piping'}, Pressure Testing & Commissioning`,
         hsn_sac: '9987',
         quantity: 1,
         unit: 'Job',
-        unit_price: 18000,
+        unit_price: installPrice,
         discount_percent: 0,
         tax_percent: 18.0,
-        tax_amount: 18000 * 0.18,
-        total_amount: 18000 * 1.18,
+        tax_amount: installPrice * 0.18,
+        total_amount: installPrice * 1.18,
       });
 
       setItems(newItems);
-      toast('Heat load calculated & Emerson equipment added to quotation!', 'success');
+      toast('Heat load calculated & Daikin equipment added to quotation!', 'success');
     } catch {
       toast('Failed to calculate refrigeration heat load', 'error');
     } finally {
@@ -325,7 +402,7 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
           product_id: evap.product_id,
           model_id: evap.id,
           item_type: 'equipment',
-          description: `${evap.model_number} Air Cooling Unit Evaporator (${evap.capacity} kW)`,
+          description: `Daikin ${evap.model_number} Air Cooling Unit Evaporator (${evap.capacity} kW)`,
           hsn_sac: '84189900',
           quantity: 1,
           unit: 'Nos',
@@ -534,11 +611,7 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
 
   // Convert to Invoice
   const handleConvert = async (quotationId) => {
-    confirmAction({
-      title: 'Convert to Tax Invoice?',
-      message: 'This will convert the technical quotation into an active Tax Invoice without having to re-enter line items.',
-      confirmLabel: 'Convert to Invoice',
-    }, async () => {
+    confirmAction('Convert this quotation to a Tax Invoice? This will make it an active invoice without re-entering line items.', async () => {
       try {
         const res = await convertQuotationToInvoice(quotationId);
         toast(`Quotation converted to Invoice #${res.invoiceNumber}!`, 'success');
@@ -655,7 +728,7 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
                       </button>
                     </div>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.4rem' }}>
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.4rem' }}>
                     <div>
                       <span style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>Length ({heatLoadForm.unit})</span>
                       <input
@@ -680,9 +753,45 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
                         style={{ width: '100%' }} required
                       />
                     </div>
+                    <div>
+                      <span style={{ fontSize: '0.72rem', color: '#0369a1', fontWeight: 700 }}>Chambers</span>
+                      <input
+                        type="number" min="1" step="1" className="form-input" value={heatLoadForm.numRooms || 1}
+                        onChange={e => setHeatLoadForm(prev => ({ ...prev, numRooms: Math.max(1, parseInt(e.target.value) || 1) }))}
+                        style={{ width: '100%', borderColor: '#93c5fd', fontWeight: 700, color: '#0369a1' }} required
+                      />
+                    </div>
                   </div>
-                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '2px' }}>
-                    Volume: <strong>{liveDimensions.volM3} m³</strong> • Surface Area: <strong>{liveDimensions.areaM2} m²</strong>
+                  <div style={{
+                    fontSize: '0.72rem',
+                    color: '#0369a1',
+                    marginTop: '4px',
+                    background: 'rgba(2, 132, 199, 0.08)',
+                    padding: '4px 8px',
+                    borderRadius: 4,
+                    display: 'flex',
+                    flexWrap: 'wrap',
+                    gap: '6px'
+                  }}>
+                    <span>Facility: <strong>{liveDimensions.volM3} m³</strong></span>
+                    <span>•</span>
+                    {liveDimensions.numRooms > 1 ? (
+                      <>
+                        <span>{liveDimensions.numRooms} Chambers: <strong>{liveDimensions.chamberLM}m × {heatLoadForm.width}m ({liveDimensions.chamberVolM3} m³ each)</strong></span>
+                        <span>•</span>
+                        <span>Partitions: <strong>{liveDimensions.partitionCount} ({liveDimensions.partitionAreaM2} m²)</strong></span>
+                        <span>•</span>
+                        <span>Doors: <strong>{liveDimensions.doorsCount} Nos</strong></span>
+                        <span>•</span>
+                        <span>Total PUF: <strong>{liveDimensions.totalPufAreaM2} m²</strong></span>
+                      </>
+                    ) : (
+                      <>
+                        <span>Envelope: <strong>{liveDimensions.areaM2} m²</strong></span>
+                        <span>•</span>
+                        <span>1 Door</span>
+                      </>
+                    )}
                   </div>
                 </div>
 
@@ -839,9 +948,9 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
                       onChange={e => setHeatLoadForm(p => ({ ...p, brand: e.target.value }))}
                       style={{ width: '100%' }}
                     >
-                      <option value="Daikin">Daikin (Authorized Service Dealer)</option>
-                      <option value="Emerson">Emerson Climate Technologies</option>
-                      <option value="any">Compare All Brands (Daikin &amp; Emerson)</option>
+                      <option value="Daikin">Daikin (Authorized Dealer)</option>
+                      <option value="Emerson">Emerson</option>
+                      <option value="any">Compare All Brands</option>
                     </select>
                   </div>
                   <div>
@@ -927,17 +1036,74 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
                   </div>
                 </div>
 
+                {/* Chamber-Wise Independent Breakdown (When Multi-Chamber N > 1) */}
+                {heatLoadResult.chambers && heatLoadResult.chambers.length > 1 && (
+                  <div style={{
+                    background: '#ffffff',
+                    border: '1px solid #bfdbfe',
+                    borderRadius: 6,
+                    padding: '0.65rem',
+                    marginBottom: '0.75rem'
+                  }}>
+                    <div style={{
+                      display: 'flex',
+                      justifyContent: 'space-between',
+                      alignItems: 'center',
+                      marginBottom: '0.5rem',
+                      borderBottom: '1px solid #e2e8f0',
+                      paddingBottom: '0.35rem'
+                    }}>
+                      <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0369a1' }}>
+                        Room-wise Breakdown ({heatLoadResult.chambers.length} Chambers)
+                      </div>
+                      <div style={{ fontSize: '0.68rem', color: '#64748b' }}>
+                        Partitions: {heatLoadResult.partitionWalls?.count} ({heatLoadResult.partitionWalls?.totalAreaM2} m²) • Doors: {heatLoadResult.doors?.totalDoors} Nos (Automatic 1/Room)
+                      </div>
+                    </div>
+
+                    <div style={{
+                      display: 'grid',
+                      gridTemplateColumns: `repeat(${Math.min(heatLoadResult.chambers.length, 3)}, 1fr)`,
+                      gap: '0.5rem'
+                    }}>
+                      {heatLoadResult.chambers.map(ch => (
+                        <div key={ch.chamberNumber} style={{
+                          background: '#f8fafc',
+                          border: '1px solid #cbd5e1',
+                          borderRadius: 4,
+                          padding: '0.5rem',
+                          fontSize: '0.72rem'
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontWeight: 700, marginBottom: '2px' }}>
+                            <span>{ch.name}</span>
+                            <span style={{ fontSize: '0.65rem', background: '#dbeafe', color: '#1e40af', padding: '1px 4px', borderRadius: 3 }}>🚪 1 Door</span>
+                          </div>
+                          <div style={{ color: '#64748b', fontSize: '0.68rem' }}>
+                            {ch.dimensions.lengthM}m × {ch.dimensions.widthM}m × {ch.dimensions.heightM}m ({ch.dimensions.volumeM3} m³)
+                          </div>
+                          <div style={{ fontWeight: 600, color: '#0369a1', margin: '3px 0' }}>
+                            Load: {ch.capacityTr} TR ({ch.capacityKw} kW)
+                          </div>
+                          <div style={{ fontSize: '0.68rem', color: '#334155' }}>
+                            ACU: {ch.evaporator ? ch.evaporator.model_number : 'Standard DX'}
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Daikin Matched Models */}
                 <div style={{ background: '#fff', padding: '0.75rem', borderRadius: 6, border: '1px solid #93c5fd', fontSize: '0.82rem', lineHeight: 1.6 }}>
                   <div>
                     <strong>Outdoor CCU: </strong>
                     {heatLoadResult.recommendations.multiUnitCcu ? (
                       <span style={{ color: '#b45309', fontWeight: 700 }}>
-                        {heatLoadResult.recommendations.multiUnitCcu.count} × Emerson {heatLoadResult.recommendations.multiUnitCcu.unit.model_number} ({heatLoadResult.recommendations.multiUnitCcu.totalCapacityTr} TR)
+                        {heatLoadResult.recommendations.multiUnitCcu.count} × Daikin {heatLoadResult.recommendations.multiUnitCcu.unit.model_number} ({heatLoadResult.recommendations.multiUnitCcu.totalCapacityTr} TR)
                       </span>
                     ) : (
                       <span style={{ color: '#0369a1', fontWeight: 700 }}>
-                        Emerson {heatLoadResult.recommendations.ccu?.model_number} ({heatLoadResult.recommendations.ccu?.nominal_tr} TR)
+                        Daikin {heatLoadResult.recommendations.ccu?.model_number} ({heatLoadResult.recommendations.ccu?.nominal_tr} TR)
                       </span>
                     )}
                   </div>
@@ -945,11 +1111,11 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
                     <strong>Indoor ACU: </strong>
                     {heatLoadResult.recommendations.multiUnitAcu ? (
                       <span style={{ color: '#b45309', fontWeight: 700 }}>
-                        {heatLoadResult.recommendations.multiUnitAcu.count} × {heatLoadResult.recommendations.multiUnitAcu.unit.model_number} ({heatLoadResult.recommendations.multiUnitAcu.totalCapacityKw} kW)
+                        {heatLoadResult.recommendations.multiUnitAcu.count} × Daikin {heatLoadResult.recommendations.multiUnitAcu.unit.model_number} ({heatLoadResult.recommendations.multiUnitAcu.totalCapacityKw} kW)
                       </span>
                     ) : (
                       <span style={{ color: '#0369a1', fontWeight: 700 }}>
-                        {heatLoadResult.recommendations.evaporator?.model_number} ({heatLoadResult.recommendations.evaporator?.capacity_kw} kW)
+                        Daikin {heatLoadResult.recommendations.evaporator?.model_number} ({heatLoadResult.recommendations.evaporator?.capacity_kw} kW)
                       </span>
                     )}
                   </div>
@@ -1101,9 +1267,9 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
                       onChange={e => setCalcForm(prev => ({ ...prev, brand: e.target.value }))}
                       style={{ width: '100%' }}
                     >
-                      <option value="Daikin">Daikin (Authorized Service Dealer)</option>
-                      <option value="Emerson">Emerson Climate Technologies</option>
-                      <option value="any">Compare All (Daikin &amp; Emerson)</option>
+                      <option value="Daikin">Daikin (Authorized Dealer)</option>
+                      <option value="Emerson">Emerson Climate</option>
+                      <option value="any">Compare All (Daikin & Emerson)</option>
                     </select>
                   </div>
                   <div>
@@ -1427,10 +1593,10 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
                       modelRecommendation: sizerMode === 'heatload' && heatLoadResult ? {
                         catalogue_ref: heatLoadResult.equipmentRecommendation?.ccu?.modelNumber
                           ? `${heatLoadResult.equipmentRecommendation.ccu.modelNumber} (${heatLoadResult.equipmentRecommendation.ccu.nominal_tr} TR)`
-                          : 'Emerson CCU',
+                          : 'Daikin CCU',
                         evaporator_model: heatLoadResult.equipmentRecommendation?.acu?.modelNumber
                           ? `${heatLoadResult.equipmentRecommendation.acu.modelNumber} (${heatLoadResult.equipmentRecommendation.acu.capacity_kw} kW)`
-                          : 'Commercial ACU',
+                          : 'Daikin ACU',
                       } : (recommendation?.recommendations ? {
                         catalogue_ref: recommendation.recommendations.cdu ? `${recommendation.recommendations.cdu.brand_name || 'Daikin'} ${recommendation.recommendations.cdu.model_number}` : '',
                       } : null)
@@ -1438,7 +1604,7 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
                     setProposalQuotation(mockQuotation);
                   }}
                   style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#0284c7', borderColor: '#bae6fd', background: '#f0f9ff', fontWeight: 600 }}
-                  title="Preview 5-Page Techno-Commercial Project Proposal (MIF Style)"
+                  title="Preview 5-Page Techno-Commercial Project Proposal (Cool Era Style)"
                 >
                   <FileText size={15} /> Preview 5-Page Proposal
                 </button>
@@ -1529,7 +1695,7 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
                           padding: '4px 8px', fontSize: '0.8rem', marginRight: '0.4rem',
                           color: '#0284c7', borderColor: '#bae6fd', background: '#f0f9ff', fontWeight: 600
                         }}
-                        title="Detailed 5-Page Techno-Commercial Project Proposal (MIF Style)"
+                        title="Detailed 5-Page Techno-Commercial Project Proposal (Cool Era Style)"
                       >
                         <FileText size={13} /> 5-Page Proposal
                       </button>
@@ -1583,7 +1749,7 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
                   }}
                   title="Switch to Full 5-Page Proposal with all 4 Annexures"
                 >
-                  <FileText size={14} /> 5-Page Proposal (MIF Style)
+                  <FileText size={14} /> 5-Page Proposal (Cool Era Style)
                 </button>
                 <button className="btn btn-secondary" onClick={() => window.print()} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                   <Printer size={15} /> Print
@@ -1712,7 +1878,7 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
       )}
 
       {/* ------------------------------------------------------------- */}
-      {/* MODAL: 5-PAGE TECHNO-COMMERCIAL PROPOSAL (MIF STYLE) */}
+      {/* MODAL: 5-PAGE TECHNO-COMMERCIAL PROPOSAL (COOL ERA STYLE) */}
       {/* ------------------------------------------------------------- */}
       {proposalQuotation && (
         <TechnoCommercialProposalModal

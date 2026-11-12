@@ -1373,7 +1373,7 @@ const InvoicePreview = React.forwardRef(({ profile: profileProp, client, details
       {technicalSpecs && (
         <div data-pdf-page-boundary="" style={{
           margin: pdfStyle === 'classic' ? '0.5rem 0' : '0 2rem 0.5rem',
-          padding: '0.6rem 0.8rem',
+          padding: '0.65rem 0.85rem',
           background: '#f8fafc',
           border: `1px solid ${accent || '#2563eb'}40`,
           borderRadius: '6px',
@@ -1387,40 +1387,142 @@ const InvoicePreview = React.forwardRef(({ profile: profileProp, client, details
             alignItems: 'center',
             borderBottom: '1px solid #e2e8f0',
             paddingBottom: '0.3rem',
-            marginBottom: '0.4rem',
+            marginBottom: '0.45rem',
             fontWeight: 700,
             color: accent || '#1e40af'
           }}>
-            <span>❄️ REFRIGERATION DESIGN & TECHNICAL SPECIFICATIONS</span>
+            <span>
+              ❄️ {technicalSpecs.chambers && technicalSpecs.chambers.length > 1
+                ? `MULTI-CHAMBER REFRIGERATION DESIGN & TECHNICAL SPECIFICATIONS (${technicalSpecs.chambers.length} CHAMBERS)`
+                : 'REFRIGERATION DESIGN & TECHNICAL SPECIFICATIONS'}
+            </span>
             <span style={{ fontSize: '0.68rem', fontWeight: 500, color: '#64748b' }}>
-              Ref: {technicalSpecs.catalogueSource || 'Emerson Ready Reckoner / Daikin Catalogue'}
+              Ref: {technicalSpecs.catalogueSource || 'ASHRAE / USDA Standards • Daikin Commercial Catalogue'}
             </span>
           </div>
-          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.4rem' }}>
+
+          {technicalSpecs.chambers && technicalSpecs.chambers.length > 1 ? (
             <div>
-              <strong>Application:</strong> {technicalSpecs.application === 'bmc' ? 'Bulk Milk Chiller (BMC)' : technicalSpecs.application === 'freezer' ? 'Freezer (-18°C to -25°C)' : 'Chiller (+2°C to +8°C)'}
-            </div>
-            <div>
-              <strong>Room Dimensions:</strong> {technicalSpecs.length} × {technicalSpecs.width} × {technicalSpecs.height} {technicalSpecs.unit} ({technicalSpecs.volume} {technicalSpecs.unit === 'm' ? 'm³' : 'cu.ft'})
-            </div>
-            <div>
-              <strong>Operating Ambient:</strong> {technicalSpecs.ambientTemp || 43}°C
-            </div>
-            <div>
-              <strong>Calculated Load:</strong> <strong>{technicalSpecs.estimatedLoadKw || technicalSpecs.estimatedKw || '—'} kW</strong>
-            </div>
-          </div>
-          {(technicalSpecs.cdu || technicalSpecs.evaporator || technicalSpecs.expansionValve) && (
-            <div style={{ marginTop: '0.4rem', paddingTop: '0.4rem', borderTop: '1px dashed #cbd5e1', fontSize: '0.72rem' }}>
-              {technicalSpecs.cdu && (
-                <div><strong>Condensing Unit (CDU):</strong> {technicalSpecs.cdu?.model_number ? `${technicalSpecs.cdu.brand_name || 'Emerson'} ${technicalSpecs.cdu.model_number} (${technicalSpecs.cdu.capacity} kW)` : (typeof technicalSpecs.cdu === 'string' ? technicalSpecs.cdu : '')}</div>
-              )}
-              {technicalSpecs.evaporator && (
-                <div><strong>Evaporator Unit:</strong> {technicalSpecs.evaporator?.model_number ? `${technicalSpecs.evaporator.brand_name || 'Daikin'} ${technicalSpecs.evaporator.model_number} (${technicalSpecs.evaporator.capacity} kW)` : (typeof technicalSpecs.evaporator === 'string' ? technicalSpecs.evaporator : '')}</div>
-              )}
-              {(technicalSpecs.expansionValve || technicalSpecs.orifice || technicalSpecs.solenoidValve || technicalSpecs.controller) && (
+              {/* Multi-Chamber Summary Strip */}
+              <div style={{
+                display: 'grid',
+                gridTemplateColumns: 'repeat(auto-fit, minmax(130px, 1fr))',
+                gap: '0.4rem',
+                background: '#eff6ff',
+                border: '1px solid #bfdbfe',
+                borderRadius: '5px',
+                padding: '0.45rem 0.6rem',
+                marginBottom: '0.5rem',
+                textAlign: 'center'
+              }}>
                 <div>
-                  <strong>Controls & Refrigeration Kit:</strong> TXV: {technicalSpecs.expansionValve || 'TIE-SW'} | Orifice: {technicalSpecs.orifice || 'TIO'} | Solenoid: {technicalSpecs.solenoidValve || '200RB'} | Controller: {technicalSpecs.controller?.model || (typeof technicalSpecs.controller === 'string' ? technicalSpecs.controller : 'Dixell XR02CX')}
+                  <div style={{ fontSize: '0.65rem', color: '#1e40af', fontWeight: 600 }}>TOTAL CHAMBERS</div>
+                  <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#0369a1' }}>{technicalSpecs.numRooms || technicalSpecs.chambers.length} Chambers</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.65rem', color: '#1e40af', fontWeight: 600 }}>TOTAL DOORS</div>
+                  <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#0369a1' }}>{technicalSpecs.doors?.totalDoors || technicalSpecs.chambers.length} Nos (1/Room)</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.65rem', color: '#1e40af', fontWeight: 600 }}>PARTITION WALLS</div>
+                  <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#0369a1' }}>
+                    {technicalSpecs.partitionWalls?.count || 0} Walls ({technicalSpecs.partitionWalls?.totalAreaM2 || 0} m²)
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.65rem', color: '#1e40af', fontWeight: 600 }}>FACILITY VOLUME</div>
+                  <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#0369a1' }}>{technicalSpecs.volume || technicalSpecs.dimensions?.volumeM3} m³</div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.65rem', color: '#1e40af', fontWeight: 600 }}>TOTAL PUF AREA</div>
+                  <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#0369a1' }}>
+                    {technicalSpecs.totalPufSurfaceAreaM2 || technicalSpecs.dimensions?.totalPufSurfaceAreaM2} m²
+                  </div>
+                </div>
+                <div>
+                  <div style={{ fontSize: '0.65rem', color: '#1e40af', fontWeight: 600 }}>COMBINED LOAD</div>
+                  <div style={{ fontSize: '0.88rem', fontWeight: 800, color: '#b45309' }}>
+                    {technicalSpecs.estimatedLoadKw} kW ({technicalSpecs.capacityTr || (Math.round(technicalSpecs.estimatedLoadKw / 3.517 * 10) / 10)} TR)
+                  </div>
+                </div>
+              </div>
+
+              {/* Chamber-Wise Details Table */}
+              <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.72rem', marginBottom: '0.45rem' }}>
+                <thead>
+                  <tr style={{ background: '#e2e8f0', color: '#334155', borderBottom: '1px solid #cbd5e1' }}>
+                    <th style={{ padding: '0.3rem 0.5rem', textAlign: 'left', fontWeight: 700 }}>Chamber</th>
+                    <th style={{ padding: '0.3rem 0.5rem', textAlign: 'center', fontWeight: 700 }}>Size (L × W × H)</th>
+                    <th style={{ padding: '0.3rem 0.5rem', textAlign: 'center', fontWeight: 700 }}>Volume</th>
+                    <th style={{ padding: '0.3rem 0.5rem', textAlign: 'center', fontWeight: 700 }}>Assigned Door</th>
+                    <th style={{ padding: '0.3rem 0.5rem', textAlign: 'right', fontWeight: 700 }}>Chamber Load</th>
+                    <th style={{ padding: '0.3rem 0.5rem', textAlign: 'left', fontWeight: 700 }}>Dedicated Evaporator</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {technicalSpecs.chambers.map(ch => (
+                    <tr key={ch.chamberNumber} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                      <td style={{ padding: '0.3rem 0.5rem', fontWeight: 700, color: '#0369a1' }}>{ch.name}</td>
+                      <td style={{ padding: '0.3rem 0.5rem', textAlign: 'center' }}>
+                        {ch.dimensions.lengthM}m × {ch.dimensions.widthM}m × {ch.dimensions.heightM}m
+                      </td>
+                      <td style={{ padding: '0.3rem 0.5rem', textAlign: 'center' }}>{ch.dimensions.volumeM3} m³</td>
+                      <td style={{ padding: '0.3rem 0.5rem', textAlign: 'center' }}>1 Dedicated Swing Door</td>
+                      <td style={{ padding: '0.3rem 0.5rem', textAlign: 'right', fontWeight: 700, color: '#0f172a' }}>
+                        {ch.capacityTr} TR ({ch.capacityKw} kW)
+                      </td>
+                      <td style={{ padding: '0.3rem 0.5rem', color: '#1e40af', fontWeight: 600 }}>
+                        ❄️ Daikin {ch.evaporator?.model_number || 'DX Evaporator'} ({ch.evaporator?.capacity_kw || ch.capacityKw} kW)
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {/* Machinery & Controls Line */}
+              <div style={{ paddingTop: '0.35rem', borderTop: '1px dashed #cbd5e1', fontSize: '0.72rem' }}>
+                <div>
+                  <strong>Central Outdoor Unit (CCU):</strong> {technicalSpecs.cdu?.model_number
+                    ? `Daikin ${technicalSpecs.cdu.model_number} (${technicalSpecs.cdu.nominal_tr || technicalSpecs.cdu.capacity} TR @ ${technicalSpecs.targetTemp || 2}°C) — Central Outdoor Unit for ${technicalSpecs.chambers.length} Chambers`
+                    : (typeof technicalSpecs.cdu === 'string' ? technicalSpecs.cdu : 'Central Daikin Condensing Unit')}
+                </div>
+                <div>
+                  <strong>Panels & Insulation:</strong> {technicalSpecs.puf?.thicknessMm || 100}mm PUF Insulated Sandwich Panels (Total: {technicalSpecs.totalPufSurfaceAreaM2 || technicalSpecs.dimensions?.totalPufSurfaceAreaM2} m² including {technicalSpecs.partitionWalls?.count || 0} partition walls)
+                </div>
+                <div>
+                  <strong>Refrigeration Kits & Controls:</strong> 1 Set per Chamber ({technicalSpecs.chambers.length} Sets) — Expansion Valve, Orifice, Solenoid Valve & Dixell Digital Controller
+                </div>
+              </div>
+            </div>
+          ) : (
+            <div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: '0.4rem' }}>
+                <div>
+                  <strong>Application:</strong> {technicalSpecs.application === 'bmc' ? 'Bulk Milk Chiller (BMC)' : technicalSpecs.application === 'freezer' ? 'Freezer (-18°C to -25°C)' : 'Chiller (+2°C to +8°C)'}
+                </div>
+                <div>
+                  <strong>Room Dimensions:</strong> {technicalSpecs.length} × {technicalSpecs.width} × {technicalSpecs.height} {technicalSpecs.unit} ({technicalSpecs.volume} {technicalSpecs.unit === 'm' ? 'm³' : 'cu.ft'})
+                </div>
+                <div>
+                  <strong>Operating Ambient:</strong> {technicalSpecs.ambientTemp || 43}°C
+                </div>
+                <div>
+                  <strong>Calculated Load:</strong> <strong>{technicalSpecs.estimatedLoadKw || technicalSpecs.estimatedKw || '—'} kW</strong>
+                </div>
+              </div>
+              {(technicalSpecs.cdu || technicalSpecs.evaporator || technicalSpecs.expansionValve) && (
+                <div style={{ marginTop: '0.4rem', paddingTop: '0.4rem', borderTop: '1px dashed #cbd5e1', fontSize: '0.72rem' }}>
+                  {technicalSpecs.cdu && (
+                    <div><strong>Condensing Unit (CDU):</strong> {technicalSpecs.cdu?.model_number ? `${technicalSpecs.cdu.brand_name || 'Emerson'} ${technicalSpecs.cdu.model_number} (${technicalSpecs.cdu.capacity} kW)` : (typeof technicalSpecs.cdu === 'string' ? technicalSpecs.cdu : '')}</div>
+                  )}
+                  {technicalSpecs.evaporator && (
+                    <div><strong>Evaporator Unit:</strong> {technicalSpecs.evaporator?.model_number ? `${technicalSpecs.evaporator.brand_name || 'Daikin'} ${technicalSpecs.evaporator.model_number} (${technicalSpecs.evaporator.capacity} kW)` : (typeof technicalSpecs.evaporator === 'string' ? technicalSpecs.evaporator : '')}</div>
+                  )}
+                  {(technicalSpecs.expansionValve || technicalSpecs.orifice || technicalSpecs.solenoidValve || technicalSpecs.controller) && (
+                    <div>
+                      <strong>Controls & Refrigeration Kit:</strong> TXV: {technicalSpecs.expansionValve || 'TIE-SW'} | Orifice: {technicalSpecs.orifice || 'TIO'} | Solenoid: {technicalSpecs.solenoidValve || '200RB'} | Controller: {technicalSpecs.controller?.model || (typeof technicalSpecs.controller === 'string' ? technicalSpecs.controller : 'Dixell XR02CX')}
+                    </div>
+                  )}
                 </div>
               )}
             </div>

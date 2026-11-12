@@ -158,11 +158,15 @@ export default function TechnoCommercialProposalModal({
         room_title: `${appTitle} (${tempRange})`,
         application: appTitle.replace('Walk-In ', ''),
         room_temp: tempRange,
-        external_size: `${length} Ft × ${width} Ft × ${height} Ft`,
+        external_size: (tech.dimensions?.lengthM)
+          ? `${tech.dimensions.lengthM}m × ${tech.dimensions.widthM}m × ${tech.dimensions.heightM}m${(tech.chambersCount || tech.numRooms || 1) > 1 ? ` (${tech.chambersCount || tech.numRooms} Equal Chambers)` : ''}`
+          : `${length} Ft × ${width} Ft × ${height} Ft${(tech.chambersCount || tech.numRooms || 1) > 1 ? ` (${tech.chambersCount || tech.numRooms} Equal Chambers)` : ''}`,
         ambient_temp: `${ambient}°C Design Ambient`,
         panel_thickness: panelThk,
-        refrigerant: `${tech.refrigerant_preference || 'R-404A'} Eco-Friendly`,
-        door_spec: '1 No. Swing Flush Type (34" × 78")',
+        refrigerant: `${tech.refrigerant_preference || tech.refrigerant || 'R-404A'} Eco-Friendly`,
+        door_spec: (tech.doors?.totalDoors || tech.chambersCount || tech.numRooms || 1) > 1
+          ? `${tech.doors?.totalDoors || tech.chambersCount || tech.numRooms} Nos. Heavy-Duty Swing Flush Type (1 per Chamber)`
+          : '1 No. Swing Flush Type (34" × 78")',
         refrigeration_capacity: capacityStr,
         condensing_unit: cduStr,
         evaporator_model: evapStr,
@@ -199,6 +203,10 @@ export default function TechnoCommercialProposalModal({
       heat_load_breakdown: tech.thermalBreakdown || null,
       machine_rating: tech.machineRating || null,
       commodity: tech.commodity || null,
+      chambers: tech.chambers || null,
+      doors: tech.doors || null,
+      partitionWalls: tech.partitionWalls || null,
+      totalPufSurfaceAreaM2: tech.totalPufSurfaceAreaM2 || tech.dimensions?.totalPufSurfaceAreaM2 || null,
     };
   };
 
@@ -886,6 +894,59 @@ export default function TechnoCommercialProposalModal({
                       </div>
                     );
                   })()}
+
+                  {/* Multi-Chamber Room-Wise Breakdown Table */}
+                  {proposalData.chambers && proposalData.chambers.length > 1 && (
+                    <div style={{
+                      background: '#fff',
+                      border: '1.5px solid #0284c7',
+                      borderRadius: 6,
+                      marginBottom: '1rem',
+                      overflow: 'hidden'
+                    }}>
+                      <div style={{
+                        background: '#0b2545',
+                        color: '#fff',
+                        padding: '0.45rem 0.8rem',
+                        fontSize: '0.78rem',
+                        fontWeight: 700,
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        alignItems: 'center'
+                      }}>
+                        <span>ROOM-WISE MULTI-CHAMBER PARTITIONING & DEDICATED EQUIPMENT</span>
+                        <span style={{ fontSize: '0.7rem', color: '#93c5fd' }}>
+                          {proposalData.chambers.length} Equal Chambers • {proposalData.doors?.totalDoors || proposalData.chambers.length} Doors • {proposalData.partitionWalls?.count || 0} Partition Walls ({proposalData.partitionWalls?.totalAreaM2 || 0} m²)
+                        </span>
+                      </div>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.74rem' }}>
+                        <thead>
+                          <tr style={{ background: '#f1f5f9', borderBottom: '1px solid #cbd5e1', color: '#475569' }}>
+                            <th style={{ padding: '0.35rem 0.6rem', textAlign: 'left' }}>Chamber</th>
+                            <th style={{ padding: '0.35rem 0.6rem', textAlign: 'center' }}>Dimensions (L×W×H)</th>
+                            <th style={{ padding: '0.35rem 0.6rem', textAlign: 'center' }}>Volume</th>
+                            <th style={{ padding: '0.35rem 0.6rem', textAlign: 'center' }}>Assigned Door</th>
+                            <th style={{ padding: '0.35rem 0.6rem', textAlign: 'right' }}>Heat Load</th>
+                            <th style={{ padding: '0.35rem 0.6rem', textAlign: 'left' }}>Dedicated Evaporator</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {proposalData.chambers.map(ch => (
+                            <tr key={ch.chamberNumber} style={{ borderBottom: '1px solid #e2e8f0' }}>
+                              <td style={{ padding: '0.4rem 0.6rem', fontWeight: 700, color: '#0369a1' }}>{ch.name}</td>
+                              <td style={{ padding: '0.4rem 0.6rem', textAlign: 'center' }}>{ch.dimensions.lengthM}m × {ch.dimensions.widthM}m × {ch.dimensions.heightM}m</td>
+                              <td style={{ padding: '0.4rem 0.6rem', textAlign: 'center' }}>{ch.dimensions.volumeM3} m³</td>
+                              <td style={{ padding: '0.4rem 0.6rem', textAlign: 'center' }}>1 Dedicated Swing Door</td>
+                              <td style={{ padding: '0.4rem 0.6rem', textAlign: 'right', fontWeight: 700 }}>{ch.capacityTr} TR ({ch.capacityKw} kW)</td>
+                              <td style={{ padding: '0.4rem 0.6rem', color: '#1e40af', fontWeight: 600 }}>
+                                Daikin {ch.evaporator?.model_number || 'DX Unit'} ({ch.evaporator?.capacity_kw || ch.capacityKw} kW)
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  )}
 
                   {/* Included Accessories Badges */}
                   <div style={{ marginBottom: '1.25rem' }}>

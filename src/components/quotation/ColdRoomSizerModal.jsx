@@ -7,6 +7,7 @@ import {
 import { calculateColdRoom, calculateHeatLoad, getThermalCommodities } from '../../store';
 import { formatCurrency } from '../../utils';
 import { toast } from '../Toast';
+import { normalizeChamberResult, buildColdRoomInvoiceItems } from './chamberUtils';
 
 export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialSpecs = null }) {
   // Sizing Mode: 'heatload' (ASHRAE / USDA Thermodynamic Engine) | 'reckoner' (Standard Volume Reckoner)
@@ -24,7 +25,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
     ambientTemp: 43,
     refrigerant: 'R404A',
     compressorType: 'scroll',
-    brand: 'Emerson',
+    brand: 'Daikin',
     dailyMilkLiters: 1000,
   });
   const [recommendation, setRecommendation] = useState(null);
@@ -38,6 +39,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
     length: 12.0,
     width: 8.0,
     height: 4.5,
+    numRooms: 1, // Multi-chamber partition count (default 1)
     pufThicknessMm: 100, // 60, 100, 120, 150
     ambientTemp: 42.0,
     roomTemp: 2.0,
@@ -46,7 +48,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
     entryTemp: 28.0,
     compressorRunHours: 16.0,
     safetyFactor: 0.10,
-    brand: 'Emerson',
+    brand: 'Daikin',
     compressorPreference: 'any',
     refrigerant: 'R404A',
     // Optional internal loads
@@ -71,14 +73,18 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
   const [selectedLines, setSelectedLines] = useState({
     cdu: true,
     evaporator: true,
+    doors: true,
     kit: true,
+    puf: true,
     installation: true,
   });
 
   const [customRates, setCustomRates] = useState({
     cdu: 0,
     evaporator: 0,
+    doors: 28500,
     kit: 14500,
+    puf: 1550,
     installation: 18000,
   });
 
@@ -137,14 +143,31 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
     const l = Number(heatLoadForm.length) || 0;
     const w = Number(heatLoadForm.width) || 0;
     const h = Number(heatLoadForm.height) || 0;
+    const n = Math.max(1, Math.round(Number(heatLoadForm.numRooms) || 1));
     const isM = heatLoadForm.unit === 'm';
     const lM = isM ? l : l * 0.3048;
     const wM = isM ? w : w * 0.3048;
     const hM = isM ? h : h * 0.3048;
     const volM3 = Math.round(lM * wM * hM * 10) / 10;
-    const areaM2 = Math.round(2 * (lM * wM + lM * hM + wM * hM) * 10) / 10;
-    return { volM3, areaM2 };
-  }, [heatLoadForm.length, heatLoadForm.width, heatLoadForm.height, heatLoadForm.unit]);
+    const outerAreaM2 = Math.round(2 * (lM * wM + lM * hM + wM * hM) * 10) / 10;
+    const partitionCount = Math.max(0, n - 1);
+    const partitionAreaM2 = Math.round(partitionCount * (wM * hM) * 10) / 10;
+    const totalPufAreaM2 = Math.round((outerAreaM2 + partitionAreaM2) * 10) / 10;
+    const chamberLM = Math.round((lM / n) * 10) / 10;
+    const chamberVolM3 = Math.round((volM3 / n) * 10) / 10;
+    return {
+      volM3,
+      outerAreaM2,
+      areaM2: outerAreaM2,
+      partitionCount,
+      partitionAreaM2,
+      totalPufAreaM2,
+      chamberLM,
+      chamberVolM3,
+      numRooms: n,
+      doorsCount: n,
+    };
+  }, [heatLoadForm.length, heatLoadForm.width, heatLoadForm.height, heatLoadForm.unit, heatLoadForm.numRooms]);
 
   // -------------------------------------------------------------
   // CALCULATE ACTIONS
@@ -153,7 +176,8 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
     if (e) e.preventDefault();
     setCalculating(true);
     try {
-      const res = await calculateHeatLoad(heatLoadForm);
+      const rawRes = await calculateHeatLoad(heatLoadForm);
+      const res = normalizeChamberResult(rawRes, heatLoadForm);
       setHeatLoadResult(res);
 
       const defaultCdu = res.recommendations?.ccu || null;
@@ -161,12 +185,19 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
 
       const cduPrice = defaultCdu?.selling_price || 0;
       const evapPrice = res.recommendations?.evaporator?.selling_price || 0;
+      const pufMm = Number(heatLoadForm.pufThicknessMm) || 100;
+      const defaultPufRate = pufMm === 60 ? 1350 : (pufMm === 100 ? 1550 : (pufMm === 120 ? 1850 : 2150));
+      const chamberCount = res.chambers?.length || 1;
+      const defaultInstallRate = chamberCount > 1 ? 18000 + (chamberCount - 1) * 8000 : 18000;
+
       setCustomRates(prev => ({
         ...prev,
         cdu: cduPrice,
         evaporator: evapPrice,
+        puf: defaultPufRate,
+        installation: defaultInstallRate,
       }));
-      toast('Heat load calculated & Emerson equipment matched!', 'success');
+      toast('Heat load calculated & Daikin equipment matched!', 'success');
     } catch {
       toast('Failed to calculate refrigeration heat load', 'error');
     } finally {
@@ -232,120 +263,20 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
   // APPLY / INSERT INTO INVOICE OR QUOTATION
   // -------------------------------------------------------------
   const handleApplyToInvoice = () => {
-    const itemsToInsert = [];
-
     if (sizerMode === 'heatload') {
       if (!heatLoadResult) {
-        toast('Please run "Calculate Heat Load & Match Equipment" first.', 'error');
+        toast('Please run "Calculate Heat Load & Match Daikin Units" first.', 'error');
         return;
       }
 
-      const rec = heatLoadResult.recommendations || {};
-      const mr = heatLoadResult.machineRating || {};
-
-      // 1. Condensing Unit (Single or Multi-Unit)
-      if (selectedLines.cdu) {
-        if (rec.multiUnitCcu) {
-          const mu = rec.multiUnitCcu;
-          itemsToInsert.push({
-            name: `${mu.unit.brand_name || "Emerson"} ${mu.unit.model_number} Outdoor Condensing Unit (${mu.unit.nominal_tr} TR each, ${mu.count} Sets = ${mu.totalCapacityTr} TR)`,
-            hsn: '84189900',
-            quantity: mu.count,
-            unit: 'Set',
-            rate: Number(customRates.cdu) || Number(mu.unit.selling_price) || 0,
-            taxPercent: 18,
-            discount: 0,
-            product_id: mu.unit.product_id,
-            model_id: mu.unit.id,
-          });
-        } else if (rec.ccu) {
-          const ccu = rec.ccu;
-          itemsToInsert.push({
-            name: `${ccu.brand_name || "Emerson"} ${ccu.model_number} Outdoor Condensing Unit (${ccu.nominal_tr || ccu.capacity} TR @ ${heatLoadResult.inputs.temperatures.roomTempC}°C)`,
-            hsn: '84189900',
-            quantity: 1,
-            unit: 'Set',
-            rate: Number(customRates.cdu) || Number(ccu.selling_price) || 0,
-            taxPercent: 18,
-            discount: 0,
-            product_id: ccu.product_id,
-            model_id: ccu.id,
-          });
-        }
-      }
-
-      // 2. Indoor Evaporator Unit (ACU)
-      if (selectedLines.evaporator) {
-        if (rec.multiUnitAcu) {
-          const muA = rec.multiUnitAcu;
-          itemsToInsert.push({
-            name: `${muA.unit.model_number} DX Air Cooling Unit (${muA.unit.capacity_kw} kW each, ${muA.count} Nos = ${muA.totalCapacityKw} kW)`,
-            hsn: '84189900',
-            quantity: muA.count,
-            unit: 'Nos',
-            rate: Number(customRates.evaporator) || Number(muA.unit.selling_price) || 0,
-            taxPercent: 18,
-            discount: 0,
-            product_id: muA.unit.product_id,
-            model_id: muA.unit.id,
-          });
-        } else if (rec.evaporator) {
-          const evap = rec.evaporator;
-          itemsToInsert.push({
-            name: `${evap.model_number} DX Air Cooling Unit (${evap.capacity_kw || evap.capacity} kW) - ${evap.defrost_type || 'Auto Defrost'}`,
-            hsn: '84189900',
-            quantity: 1,
-            unit: 'Nos',
-            rate: Number(customRates.evaporator) || Number(evap.selling_price) || 0,
-            taxPercent: 18,
-            discount: 0,
-            product_id: evap.product_id,
-            model_id: evap.id,
-          });
-        }
-      }
-
-      // 3. Refrigeration Kit & Controller
-      if (selectedLines.kit) {
-        const vr = rec.valveRecommendations || {};
-        itemsToInsert.push({
-          name: `Commercial Cold-Room Refrigeration Kit (${vr.expansionValve} TXV + ${vr.orifice} Orifice + ${vr.solenoidValve} Solenoid + ${vr.controller})`,
-          hsn: '84189900',
-          quantity: 1,
-          unit: 'Set',
-          rate: Number(customRates.kit) || 14500,
-          taxPercent: 18,
-          discount: 0,
-        });
-      }
-
-      // 4. Installation & Commissioning
-      if (selectedLines.installation) {
-        itemsToInsert.push({
-          name: 'Cold-Room Installation, Refrigerant Copper Piping, Pressure Testing & Commissioning',
-          hsn: '9987',
-          quantity: 1,
-          unit: 'Job',
-          rate: Number(customRates.installation) || 18000,
-          taxPercent: 18,
-          discount: 0,
-        });
-      }
-
-      const technicalSpecs = {
-        calculationEngine: 'ASHRAE / USDA Refrigeration Heat Load Engine (Daikin Commercial)',
-        dimensions: heatLoadResult.inputs.dimensions,
-        puf: heatLoadResult.inputs.puf,
-        temperatures: heatLoadResult.inputs.temperatures,
-        commodity: heatLoadResult.inputs.commodity,
-        brandPreference: heatLoadForm.brand,
-        compressorTechnology: heatLoadForm.compressorPreference,
-        refrigerant: heatLoadForm.refrigerant,
-        thermalBreakdown: heatLoadResult.thermalBreakdown,
-        machineRating: heatLoadResult.machineRating,
-        recommendations: heatLoadResult.recommendations,
-        calculatedAt: new Date().toISOString(),
-      };
+      const { itemsToInsert, technicalSpecs } = buildColdRoomInvoiceItems({
+        result: heatLoadResult,
+        form: heatLoadForm,
+        customRates,
+        selectedLines,
+        activeCcu: activeHeatLoadCcu,
+        activeEvap: activeHeatLoadEvap,
+      });
 
       onInsert(itemsToInsert, technicalSpecs);
     } else {
@@ -374,7 +305,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
       if (selectedLines.evaporator && rec.evaporator) {
         const evap = rec.evaporator;
         itemsToInsert.push({
-          name: `${evap.model_number} Air Cooling Unit Evaporator (${evap.capacity} kW)`,
+          name: `Daikin ${evap.model_number} Air Cooling Unit Evaporator (${evap.capacity} kW)`,
           hsn: '84189900',
           quantity: 1,
           unit: 'Set',
@@ -453,7 +384,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                 Refrigeration Heat Load &amp; Sizing Engine
               </h3>
               <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                ASHRAE / USDA Thermodynamic Engine • Emerson Commercial Equipment Matcher
+                ASHRAE / USDA Thermodynamic Engine • Daikin Commercial Equipment Matcher
               </p>
             </div>
           </div>
@@ -476,7 +407,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
             style={{ fontSize: '0.82rem', padding: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', fontWeight: 600 }}
             onClick={() => setSizerMode('heatload')}
           >
-            <Cpu size={15} /> Advanced Heat Load Engine (ASHRAE / Emerson)
+            <Cpu size={15} /> Advanced Heat Load Engine (ASHRAE / Daikin)
           </button>
           <button
             type="button"
@@ -542,7 +473,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                       </div>
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.4rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.4rem' }}>
                       <div>
                         <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Length ({heatLoadForm.unit})</span>
                         <input
@@ -582,23 +513,54 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                           onChange={e => setHeatLoadForm(p => ({ ...p, height: Number(e.target.value) }))}
                         />
                       </div>
+                      <div>
+                        <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#0369a1', display: 'block', marginBottom: 2 }}>Chambers (Rooms)</span>
+                        <input
+                          type="number"
+                          min="1"
+                          step="1"
+                          className="form-input"
+                          style={{ height: '36px', borderColor: '#93c5fd', fontWeight: 700, color: '#0369a1' }}
+                          title="Number of Chambers (Equal Partitions)"
+                          placeholder="1"
+                          value={heatLoadForm.numRooms || 1}
+                          onChange={e => setHeatLoadForm(p => ({ ...p, numRooms: Math.max(1, parseInt(e.target.value) || 1) }))}
+                        />
+                      </div>
                     </div>
 
                     <div style={{
-                      display: 'inline-flex',
+                      display: 'flex',
+                      flexWrap: 'wrap',
                       alignItems: 'center',
-                      gap: '0.5rem',
-                      fontSize: '0.73rem',
+                      gap: '0.4rem',
+                      fontSize: '0.72rem',
                       color: '#0369a1',
                       background: 'rgba(2, 132, 199, 0.08)',
-                      padding: '0.2rem 0.55rem',
+                      padding: '0.3rem 0.55rem',
                       borderRadius: '5px',
                       marginTop: '0.45rem',
                       fontWeight: 600
                     }}>
-                      <span>Volume: {liveDimensions.volM3} m³</span>
+                      <span>Facility: {liveDimensions.volM3} m³</span>
                       <span>•</span>
-                      <span>Surface Area: {liveDimensions.areaM2} m²</span>
+                      {liveDimensions.numRooms > 1 ? (
+                        <>
+                          <span style={{ color: '#0284c7' }}>{liveDimensions.numRooms} Chambers: {liveDimensions.chamberLM}m × {heatLoadForm.width}m ({liveDimensions.chamberVolM3} m³ each)</span>
+                          <span>•</span>
+                          <span>Partitions: {liveDimensions.partitionCount} ({liveDimensions.partitionAreaM2} m²)</span>
+                          <span>•</span>
+                          <span>Doors: {liveDimensions.doorsCount} Nos</span>
+                          <span>•</span>
+                          <span style={{ color: '#0f172a' }}>Total PUF: {liveDimensions.totalPufAreaM2} m²</span>
+                        </>
+                      ) : (
+                        <>
+                          <span>Envelope: {liveDimensions.areaM2} m²</span>
+                          <span>•</span>
+                          <span>1 Door</span>
+                        </>
+                      )}
                     </div>
                   </div>
 
@@ -869,9 +831,9 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                         else setCduBrandFilter('all');
                       }}
                     >
-                      <option value="Daikin">Daikin (Authorized Service Dealer)</option>
-                      <option value="Emerson">Emerson Climate Technologies</option>
-                      <option value="any">Compare All Brands (Daikin &amp; Emerson)</option>
+                      <option value="Daikin">Daikin (Authorized Dealer)</option>
+                      <option value="Emerson">Emerson</option>
+                      <option value="any">Compare All Brands</option>
                     </select>
                   </div>
 
@@ -929,7 +891,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                 disabled={calculating}
               >
                 {calculating ? <Loader2 size={18} className="animate-spin" /> : <Calculator size={18} />}
-                {calculating ? 'Running Thermodynamic Calculations...' : 'Calculate Heat Load & Match Equipment'}
+                {calculating ? 'Running Thermodynamic Calculations...' : 'Calculate Heat Load & Match Daikin Units'}
               </button>
             </div>
 
@@ -967,6 +929,57 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                     <div style={{ fontSize: '1.15rem', fontWeight: 700, color: '#b45309' }}>
                       {formatCurrency(heatLoadResult.thermalBreakdown.qTotalKj).replace('₹', '')} kJ/day
                     </div>
+                  </div>
+                </div>
+
+                {/* Combined Facility Metrics Strip */}
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(5, 1fr)',
+                  gap: '0.45rem',
+                  background: 'linear-gradient(135deg, #f0fdf4 0%, #e0f2fe 100%)',
+                  border: '1.5px solid #0284c7',
+                  borderRadius: '8px',
+                  padding: '0.65rem 0.75rem',
+                  marginBottom: '0.85rem',
+                  textAlign: 'center'
+                }}>
+                  <div>
+                    <div style={{ fontSize: '0.68rem', color: '#0369a1', fontWeight: 700, textTransform: 'uppercase' }}>Total Chambers</div>
+                    <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a', marginTop: '2px' }}>
+                      {heatLoadResult.chambers?.length || 1} Rooms
+                    </div>
+                    <div style={{ fontSize: '0.65rem', color: '#64748b' }}>Equal Divided</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.68rem', color: '#0369a1', fontWeight: 700, textTransform: 'uppercase' }}>Total Doors</div>
+                    <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a', marginTop: '2px' }}>
+                      {heatLoadResult.doors?.totalDoors || heatLoadResult.chambers?.length || 1} Nos
+                    </div>
+                    <div style={{ fontSize: '0.65rem', color: '#64748b' }}>Automatic 1/Room</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.68rem', color: '#0369a1', fontWeight: 700, textTransform: 'uppercase' }}>Partition Walls</div>
+                    <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a', marginTop: '2px' }}>
+                      {heatLoadResult.partitionWalls?.count || 0} Walls
+                    </div>
+                    <div style={{ fontSize: '0.65rem', color: '#64748b' }}>
+                      {heatLoadResult.partitionWalls?.totalAreaM2 || 0} m² Internal
+                    </div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.68rem', color: '#0369a1', fontWeight: 700, textTransform: 'uppercase' }}>Facility Volume</div>
+                    <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a', marginTop: '2px' }}>
+                      {heatLoadResult.inputs?.dimensions?.volumeM3 || 0} m³
+                    </div>
+                    <div style={{ fontSize: '0.65rem', color: '#64748b' }}>Combined Space</div>
+                  </div>
+                  <div>
+                    <div style={{ fontSize: '0.68rem', color: '#0369a1', fontWeight: 700, textTransform: 'uppercase' }}>Total PUF Area</div>
+                    <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a', marginTop: '2px' }}>
+                      {heatLoadResult.inputs?.dimensions?.totalPufSurfaceAreaM2 || heatLoadResult.inputs?.dimensions?.surfaceAreaM2 || 0} m²
+                    </div>
+                    <div style={{ fontSize: '0.65rem', color: '#64748b' }}>Outer + Partitions</div>
                   </div>
                 </div>
 
@@ -1033,74 +1046,166 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                   </div>
                 </div>
 
-                {/* Daikin Matching Output Cards */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem', marginBottom: '0.85rem' }}>
-                  {/* CCU Card */}
-                  <div style={{ background: '#fff', padding: '0.75rem', borderRadius: '6px', border: '1px solid #93c5fd' }}>
-                    <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0369a1', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <span>🏭</span> Emerson Outdoor Condensing Unit (CCU)
+                {/* Central Daikin Outdoor Condensing Unit (CCU) Card */}
+                <div style={{
+                  background: '#ffffff',
+                  padding: '0.85rem',
+                  borderRadius: '8px',
+                  border: '1.5px solid #0284c7',
+                  marginBottom: '0.85rem',
+                  boxShadow: '0 1px 3px rgba(0,0,0,0.06)'
+                }}>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#0369a1', marginBottom: '6px', display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '5px' }}>
+                      <span style={{ fontSize: '1.1rem' }}>🏭</span>
+                      CENTRAL DAIKIN OUTDOOR CONDENSING UNIT (CCU)
+                      {(heatLoadResult.chambers?.length || 1) > 1 && ` — SIZED FOR COMBINED ${heatLoadResult.chambers.length} CHAMBERS`}
+                    </span>
+                    <span style={{ fontSize: '0.7rem', background: '#dbeafe', color: '#1e40af', padding: '2px 8px', borderRadius: '4px', fontWeight: 700 }}>
+                      Combined Duty: {heatLoadResult.machineRating.capacityTr} TR ({heatLoadResult.machineRating.capacityKw} kW)
+                    </span>
+                  </div>
+                  {heatLoadResult.recommendations.multiUnitCcu ? (
+                    <div>
+                      <div style={{ fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
+                        {heatLoadResult.recommendations.multiUnitCcu.count} × Daikin {heatLoadResult.recommendations.multiUnitCcu.unit.model_number}
+                      </div>
+                      <div style={{ fontSize: '0.8rem', color: '#b45309', fontWeight: 700, marginTop: '2px' }}>
+                        Total Combined Capacity: {heatLoadResult.recommendations.multiUnitCcu.totalCapacityTr} TR ({heatLoadResult.recommendations.multiUnitCcu.totalCapacityKw} kW)
+                      </div>
+                      <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: '2px' }}>
+                        {heatLoadResult.recommendations.multiUnitCcu.note}
+                      </div>
                     </div>
-                    {heatLoadResult.recommendations.multiUnitCcu ? (
-                      <div>
-                        <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#0f172a' }}>
-                          {heatLoadResult.recommendations.multiUnitCcu.count} × {heatLoadResult.recommendations.multiUnitCcu.unit.model_number}
-                        </div>
-                        <div style={{ fontSize: '0.75rem', color: '#b45309', fontWeight: 600, marginTop: '2px' }}>
-                          Combined: {heatLoadResult.recommendations.multiUnitCcu.totalCapacityTr} TR ({heatLoadResult.recommendations.multiUnitCcu.totalCapacityKw} kW)
-                        </div>
-                        <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '2px' }}>
-                          {heatLoadResult.recommendations.multiUnitCcu.note}
-                        </div>
+                  ) : activeHeatLoadCcu ? (
+                    <div>
+                      <div style={{ fontSize: '1.05rem', fontWeight: 800, color: '#0f172a' }}>
+                        Daikin {activeHeatLoadCcu.model_number}
                       </div>
-                    ) : activeHeatLoadCcu ? (
-                      <div>
-                        <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#0f172a' }}>
-                          {activeHeatLoadCcu.model_number}
-                        </div>
-                        <div style={{ fontSize: '0.78rem', color: '#334155', marginTop: '2px' }}>
-                          {activeHeatLoadCcu.horse_power || 4} HP • {activeHeatLoadCcu.compressor_type || 'Scroll'} • {activeHeatLoadCcu.nominal_tr} TR ({activeHeatLoadCcu.capacity} kW)
-                        </div>
-                        <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '2px' }}>
-                          Airflow: {activeHeatLoadCcu.air_flow_m3h} m³/h • Power: {activeHeatLoadCcu.power_input_watts} W
-                        </div>
+                      <div style={{ fontSize: '0.82rem', color: '#334155', marginTop: '3px' }}>
+                        {activeHeatLoadCcu.horse_power || 4} HP • {activeHeatLoadCcu.compressor_type || 'Scroll'} Compressor • Nominal Rating: {activeHeatLoadCcu.nominal_tr} TR ({activeHeatLoadCcu.capacity} kW)
                       </div>
-                    ) : (
-                      <div style={{ fontSize: '0.8rem', color: '#ef4444' }}>No matching CCU found</div>
-                    )}
+                      <div style={{ fontSize: '0.74rem', color: '#64748b', marginTop: '3px' }}>
+                        Airflow: {activeHeatLoadCcu.air_flow_m3h} m³/h • Power Input: {activeHeatLoadCcu.power_input_watts} W • Refrigerant: {heatLoadForm.refrigerant}
+                      </div>
+                    </div>
+                  ) : (
+                    <div style={{ fontSize: '0.8rem', color: '#ef4444' }}>No matching CCU found in catalog</div>
+                  )}
+                </div>
+
+                {/* Separate Result Cards for EVERY Chamber */}
+                <div style={{ marginBottom: '0.85rem' }}>
+                  <div style={{
+                    fontSize: '0.82rem',
+                    fontWeight: 800,
+                    color: '#0f172a',
+                    textTransform: 'uppercase',
+                    letterSpacing: '0.3px',
+                    marginBottom: '0.5rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'space-between'
+                  }}>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <Layers size={15} style={{ color: '#0284c7' }} />
+                      Chamber-Wise Thermal Sizing & Dedicated Evaporators ({heatLoadResult.chambers?.length || 1} {heatLoadResult.chambers?.length === 1 ? 'Chamber' : 'Chambers'})
+                    </span>
+                    <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>
+                      1 Dedicated Evaporator + 1 Dedicated Door per Chamber
+                    </span>
                   </div>
 
-                  {/* ACU / Evaporator Card */}
-                  <div style={{ background: '#fff', padding: '0.75rem', borderRadius: '6px', border: '1px solid #93c5fd' }}>
-                    <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0369a1', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <span>❄️</span> Indoor DX Evaporator (ACU)
-                    </div>
-                    {heatLoadResult.recommendations.multiUnitAcu ? (
-                      <div>
-                        <div style={{ fontSize: '0.9rem', fontWeight: 800, color: '#0f172a' }}>
-                          {heatLoadResult.recommendations.multiUnitAcu.count} × {heatLoadResult.recommendations.multiUnitAcu.unit.model_number}
+                  <div style={{
+                    display: 'grid',
+                    gridTemplateColumns: `repeat(${Math.min(heatLoadResult.chambers?.length || 1, 3)}, 1fr)`,
+                    gap: '0.65rem'
+                  }}>
+                    {(heatLoadResult.chambers || []).map(ch => (
+                      <div key={ch.chamberNumber} style={{
+                        background: '#ffffff',
+                        border: '1.5px solid #93c5fd',
+                        borderRadius: '8px',
+                        padding: '0.75rem',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        gap: '0.45rem',
+                        boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
+                      }}>
+                        {/* Chamber Header & Door */}
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.35rem' }}>
+                          <span style={{ fontWeight: 800, fontSize: '0.9rem', color: '#0f172a' }}>{ch.name}</span>
+                          <span style={{
+                            fontSize: '0.68rem',
+                            background: '#dcfce7',
+                            color: '#15803d',
+                            border: '1px solid #86efac',
+                            padding: '2px 7px',
+                            borderRadius: '4px',
+                            fontWeight: 700
+                          }}>
+                            🚪 1 Door Assigned
+                          </span>
                         </div>
-                        <div style={{ fontSize: '0.75rem', color: '#b45309', fontWeight: 600, marginTop: '2px' }}>
-                          Combined: {heatLoadResult.recommendations.multiUnitAcu.totalCapacityKw} kW
+
+                        {/* Dimensions & Volume */}
+                        <div style={{ background: '#f8fafc', padding: '0.4rem 0.5rem', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
+                          <div style={{ fontSize: '0.75rem', color: '#334155', fontWeight: 600 }}>
+                            Size: {ch.dimensions.lengthM}m × {ch.dimensions.widthM}m × {ch.dimensions.heightM}m
+                          </div>
+                          <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: '1px' }}>
+                            Volume: <strong>{ch.dimensions.volumeM3} m³</strong> ({ch.dimensions.volumeFt3} cu.ft) • Floor: {ch.dimensions.floorAreaM2} m²
+                          </div>
                         </div>
-                        <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '2px' }}>
-                          {heatLoadResult.recommendations.multiUnitAcu.note}
+
+                        {/* Chamber Heat Load */}
+                        <div style={{
+                          background: '#eff6ff',
+                          padding: '0.45rem 0.55rem',
+                          borderRadius: '5px',
+                          border: '1px solid #bfdbfe'
+                        }}>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                            <span style={{ fontSize: '0.72rem', color: '#1e40af', fontWeight: 600 }}>Chamber Heat Load:</span>
+                            <strong style={{ fontSize: '0.85rem', color: '#0369a1' }}>{ch.capacityTr} TR ({ch.capacityKw} kW)</strong>
+                          </div>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.65rem', color: '#64748b', marginTop: '3px' }}>
+                            <span>Trans: {Math.round(ch.thermalBreakdown.qTransmissionKj / 1000)}k kJ</span>
+                            <span>Infil: {Math.round(ch.thermalBreakdown.qAirInfiltrationKj / 1000)}k kJ</span>
+                            <span>Prod: {Math.round(ch.thermalBreakdown.qProductKj / 1000)}k kJ</span>
+                          </div>
+                        </div>
+
+                        {/* Dedicated Indoor Daikin Evaporator */}
+                        <div style={{
+                          background: '#faf5ff',
+                          padding: '0.45rem 0.55rem',
+                          borderRadius: '5px',
+                          border: '1px solid #e9d5ff'
+                        }}>
+                          <div style={{ fontSize: '0.68rem', color: '#6b21a8', fontWeight: 700, textTransform: 'uppercase', marginBottom: '2px' }}>
+                            Dedicated Indoor Evaporator:
+                          </div>
+                          {ch.evaporator ? (
+                            <div>
+                              <div style={{ fontWeight: 800, fontSize: '0.82rem', color: '#581c87' }}>
+                                ❄️ Daikin {ch.evaporator.model_number}
+                              </div>
+                              <div style={{ fontSize: '0.7rem', color: '#7e22ce', marginTop: '1px' }}>
+                                Capacity: <strong>{ch.evaporator.capacity_kw || ch.capacityKw} kW</strong> ({Math.round(((ch.evaporator.capacity_kw || ch.capacityKw)/3.517)*100)/100} TR)
+                              </div>
+                              <div style={{ fontSize: '0.65rem', color: '#9333ea', marginTop: '1px' }}>
+                                Airflow: {ch.evaporator.air_flow_m3h || 'High CFM'} m³/h • Defrost: {ch.evaporator.defrost_type || 'Electric'}
+                              </div>
+                            </div>
+                          ) : (
+                            <div style={{ color: '#b45309', fontWeight: 600, fontSize: '0.75rem' }}>
+                              Matched DX Cooling Unit ({ch.capacityKw} kW)
+                            </div>
+                          )}
                         </div>
                       </div>
-                    ) : activeHeatLoadEvap ? (
-                      <div>
-                        <div style={{ fontSize: '0.92rem', fontWeight: 800, color: '#0f172a' }}>
-                          {activeHeatLoadEvap.model_number}
-                        </div>
-                        <div style={{ fontSize: '0.78rem', color: '#334155', marginTop: '2px' }}>
-                          Capacity: {activeHeatLoadEvap.capacity_kw || activeHeatLoadEvap.capacity} kW • Fans: {activeHeatLoadEvap.fan_configuration || 'Axial'}
-                        </div>
-                        <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '2px' }}>
-                          Airflow: {activeHeatLoadEvap.air_flow_m3h} m³/h • Defrost: {activeHeatLoadEvap.defrost_type || 'Electric'}
-                        </div>
-                      </div>
-                    ) : (
-                      <div style={{ fontSize: '0.8rem', color: '#ef4444' }}>No matching ACU found</div>
-                    )}
+                    ))}
                   </div>
                 </div>
 
@@ -1111,7 +1216,33 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                   </label>
 
                   <div style={{ display: 'flex', flexDirection: 'column', gap: '0.4rem' }}>
-                    {/* CCU Line */}
+                    {/* Dedicated Indoor Evaporators */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fff', padding: '0.4rem 0.6rem', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', cursor: 'pointer', margin: 0 }}>
+                        <input
+                          type="checkbox"
+                          checked={selectedLines.evaporator}
+                          onChange={e => setSelectedLines(p => ({ ...p, evaporator: e.target.checked }))}
+                        />
+                        <span>
+                          {heatLoadResult.chambers?.length > 1
+                            ? `${heatLoadResult.chambers.length} × Dedicated Daikin Evaporators (1 Dedicated per Chamber)`
+                            : `Daikin ${activeHeatLoadEvap?.model_number || 'ACU'} Air Cooling Unit`}
+                        </span>
+                      </label>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>₹/unit</span>
+                        <input
+                          type="number"
+                          className="form-input"
+                          style={{ width: '90px', padding: '0.2rem 0.4rem', fontSize: '0.8rem', textAlign: 'right' }}
+                          value={customRates.evaporator}
+                          onChange={e => setCustomRates(p => ({ ...p, evaporator: Number(e.target.value) }))}
+                        />
+                      </div>
+                    </div>
+
+                    {/* Central Outdoor CCU Line */}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fff', padding: '0.4rem 0.6rem', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
                       <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', cursor: 'pointer', margin: 0 }}>
                         <input
@@ -1121,8 +1252,8 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                         />
                         <span>
                           {heatLoadResult.recommendations.multiUnitCcu
-                            ? `${heatLoadResult.recommendations.multiUnitCcu.count} × Emerson ${heatLoadResult.recommendations.multiUnitCcu.unit.model_number} Condensing Unit`
-                            : `${activeHeatLoadCcu?.brand_name || "Emerson"} ${activeHeatLoadCcu?.model_number || 'CCU'} Condensing Unit`}
+                            ? `${heatLoadResult.recommendations.multiUnitCcu.count} × Daikin ${heatLoadResult.recommendations.multiUnitCcu.unit.model_number} Condensing Unit`
+                            : `Central Daikin ${activeHeatLoadCcu?.model_number || 'CCU'} Condensing Unit${heatLoadResult.chambers?.length > 1 ? ` (Central Combined - ${heatLoadResult.chambers.length} Chambers)` : ''}`}
                         </span>
                       </label>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -1137,33 +1268,33 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                       </div>
                     </div>
 
-                    {/* ACU Line */}
+                    {/* Cold Room Doors Line (Automatic 1 per chamber) */}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fff', padding: '0.4rem 0.6rem', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
                       <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', cursor: 'pointer', margin: 0 }}>
                         <input
                           type="checkbox"
-                          checked={selectedLines.evaporator}
-                          onChange={e => setSelectedLines(p => ({ ...p, evaporator: e.target.checked }))}
+                          checked={selectedLines.doors}
+                          onChange={e => setSelectedLines(p => ({ ...p, doors: e.target.checked }))}
                         />
                         <span>
-                          {heatLoadResult.recommendations.multiUnitAcu
-                            ? `${heatLoadResult.recommendations.multiUnitAcu.count} × ${heatLoadResult.recommendations.multiUnitAcu.unit.model_number} Evaporator`
-                            : `${activeHeatLoadEvap?.model_number || 'ACU'} Air Cooling Unit`}
+                          {(heatLoadResult.doors?.totalDoors || heatLoadResult.chambers?.length || 1) > 1
+                            ? `${heatLoadResult.doors?.totalDoors || heatLoadResult.chambers.length} × Heavy-Duty PUF Cold Room Swing Doors (1 per Chamber)`
+                            : 'Heavy-Duty PUF Insulated Cold Room Swing Door'}
                         </span>
                       </label>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>₹</span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>₹/door</span>
                         <input
                           type="number"
                           className="form-input"
                           style={{ width: '90px', padding: '0.2rem 0.4rem', fontSize: '0.8rem', textAlign: 'right' }}
-                          value={customRates.evaporator}
-                          onChange={e => setCustomRates(p => ({ ...p, evaporator: Number(e.target.value) }))}
+                          value={customRates.doors}
+                          onChange={e => setCustomRates(p => ({ ...p, doors: Number(e.target.value) }))}
                         />
                       </div>
                     </div>
 
-                    {/* Refrigeration Kit */}
+                    {/* Refrigeration Kits (1 per Chamber) */}
                     <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fff', padding: '0.4rem 0.6rem', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
                       <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', cursor: 'pointer', margin: 0 }}>
                         <input
@@ -1171,16 +1302,45 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                           checked={selectedLines.kit}
                           onChange={e => setSelectedLines(p => ({ ...p, kit: e.target.checked }))}
                         />
-                        <span>Commercial Refrigeration Kit (TXV + Orifice + Solenoid + Dixell Controller)</span>
+                        <span>
+                          {(heatLoadResult.chambers?.length || 1) > 1
+                            ? `${heatLoadResult.chambers.length} × Daikin Cold-Room Refrigeration Kits (1 Set per Chamber)`
+                            : 'Daikin Refrigeration Kit (TXV + Orifice + Solenoid + Dixell Controller)'}
+                        </span>
                       </label>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>₹</span>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>₹/set</span>
                         <input
                           type="number"
                           className="form-input"
                           style={{ width: '90px', padding: '0.2rem 0.4rem', fontSize: '0.8rem', textAlign: 'right' }}
                           value={customRates.kit}
                           onChange={e => setCustomRates(p => ({ ...p, kit: Number(e.target.value) }))}
+                        />
+                      </div>
+                    </div>
+
+                    {/* PUF Insulated Sandwich Panels Line */}
+                    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#fff', padding: '0.4rem 0.6rem', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.82rem', cursor: 'pointer', margin: 0 }}>
+                        <input
+                          type="checkbox"
+                          checked={selectedLines.puf}
+                          onChange={e => setSelectedLines(p => ({ ...p, puf: e.target.checked }))}
+                        />
+                        <span>
+                          PUF Insulated Panels ({heatLoadResult.inputs?.puf?.thicknessMm || 100}mm) — {heatLoadResult.inputs?.dimensions?.totalPufSurfaceAreaM2 || heatLoadResult.inputs?.dimensions?.surfaceAreaM2 || 0} sq.m
+                          {(heatLoadResult.chambers?.length || 1) > 1 && ` (Includes ${heatLoadResult.partitionWalls?.count || 0} Partition Walls)`}
+                        </span>
+                      </label>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
+                        <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>₹/m²</span>
+                        <input
+                          type="number"
+                          className="form-input"
+                          style={{ width: '90px', padding: '0.2rem 0.4rem', fontSize: '0.8rem', textAlign: 'right' }}
+                          value={customRates.puf}
+                          onChange={e => setCustomRates(p => ({ ...p, puf: Number(e.target.value) }))}
                         />
                       </div>
                     </div>
@@ -1193,7 +1353,9 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                           checked={selectedLines.installation}
                           onChange={e => setSelectedLines(p => ({ ...p, installation: e.target.checked }))}
                         />
-                        <span>Installation, Piping, Pressure Testing & Commissioning</span>
+                        <span>
+                          Cold-Room Installation, {heatLoadResult.chambers?.length > 1 ? 'Multi-Chamber Refrigerant Piping' : 'Refrigerant Copper Piping'}, Testing & Commissioning
+                        </span>
                       </label>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>₹</span>
@@ -1336,9 +1498,9 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                     value={calcForm.brand}
                     onChange={e => setCalcForm(p => ({ ...p, brand: e.target.value }))}
                   >
-                    <option value="Daikin">Daikin (Authorized Service Dealer)</option>
-                    <option value="Emerson">Emerson Climate Technologies</option>
-                    <option value="any">Compare All Brands (Daikin &amp; Emerson)</option>
+                    <option value="Daikin">Daikin (Authorized Dealer)</option>
+                    <option value="Emerson">Emerson</option>
+                    <option value="any">Compare All Brands</option>
                   </select>
                 </div>
                 <div className="form-group">
@@ -1502,7 +1664,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                           checked={selectedLines.evaporator}
                           onChange={e => setSelectedLines(p => ({ ...p, evaporator: e.target.checked }))}
                         />
-                        <span>{recommendation.recommendations?.evaporator?.model_number} Air Cooling Unit</span>
+                        <span>Daikin {recommendation.recommendations?.evaporator?.model_number} Air Cooling Unit</span>
                       </label>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>₹</span>

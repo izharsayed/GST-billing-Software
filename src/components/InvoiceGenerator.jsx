@@ -4985,12 +4985,24 @@ export default function InvoiceGenerator({ onBack, profile: profileProp, editing
               }}>
                 <div>
                   <div style={{ fontWeight: 600, color: 'var(--primary)', fontSize: '0.85rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                    <Snowflake size={16} style={{ color: 'var(--primary)' }} /> Cold-Room Sizing Attached ({technicalSpecs.application?.toUpperCase()})
+                    <Snowflake size={16} style={{ color: 'var(--primary)' }} />
+                    {technicalSpecs.chambers && technicalSpecs.chambers.length > 1
+                      ? `Multi-Chamber Cold Room Sizing Attached (${technicalSpecs.chambers.length} Equal Chambers - ${technicalSpecs.application?.toUpperCase() || 'CHILLER'})`
+                      : `Cold-Room Sizing Attached (${technicalSpecs.application?.toUpperCase() || 'CHILLER'})`}
                   </div>
                   <div style={{ fontSize: '0.78rem', color: 'var(--text-secondary)', marginTop: '2px' }}>
-                    {technicalSpecs.length}×{technicalSpecs.width}×{technicalSpecs.height} {technicalSpecs.unit} ({technicalSpecs.volume} {technicalSpecs.unit === 'm' ? 'm³' : 'cu.ft'}) | <strong>Load:</strong> {technicalSpecs.estimatedLoadKw} kW @ {technicalSpecs.ambientTemp}°C
-                    {technicalSpecs.cdu && ` | CDU: ${technicalSpecs.cdu?.model_number || (typeof technicalSpecs.cdu === 'string' ? technicalSpecs.cdu : '')}`}
-                    {technicalSpecs.evaporator && ` | Evap: ${technicalSpecs.evaporator?.model_number || (typeof technicalSpecs.evaporator === 'string' ? technicalSpecs.evaporator : '')}`}
+                    {technicalSpecs.chambers && technicalSpecs.chambers.length > 1 ? (
+                      <>
+                        <strong>Facility:</strong> {technicalSpecs.length}×{technicalSpecs.width}×{technicalSpecs.height} {technicalSpecs.unit} ({technicalSpecs.volume} m³) | <strong>Chambers:</strong> {technicalSpecs.chambers.length} | <strong>Doors:</strong> {technicalSpecs.doors?.totalDoors || technicalSpecs.chambers.length} Nos | <strong>PUF Area:</strong> {technicalSpecs.totalPufSurfaceAreaM2 || technicalSpecs.dimensions?.totalPufSurfaceAreaM2} m² | <strong>Combined Load:</strong> {technicalSpecs.estimatedLoadKw} kW ({technicalSpecs.capacityTr || (Math.round(technicalSpecs.estimatedLoadKw / 3.517 * 10) / 10)} TR)
+                        {technicalSpecs.cdu && ` | Central CCU: ${technicalSpecs.cdu?.model_number || (typeof technicalSpecs.cdu === 'string' ? technicalSpecs.cdu : '')}`}
+                      </>
+                    ) : (
+                      <>
+                        {technicalSpecs.length}×{technicalSpecs.width}×{technicalSpecs.height} {technicalSpecs.unit} ({technicalSpecs.volume} {technicalSpecs.unit === 'm' ? 'm³' : 'cu.ft'}) | <strong>Load:</strong> {technicalSpecs.estimatedLoadKw} kW @ {technicalSpecs.ambientTemp}°C
+                        {technicalSpecs.cdu && ` | CDU: ${technicalSpecs.cdu?.model_number || (typeof technicalSpecs.cdu === 'string' ? technicalSpecs.cdu : '')}`}
+                        {technicalSpecs.evaporator && ` | Evap: ${technicalSpecs.evaporator?.model_number || (typeof technicalSpecs.evaporator === 'string' ? technicalSpecs.evaporator : '')}`}
+                      </>
+                    )}
                   </div>
                 </div>
                 <div style={{ display: 'flex', gap: '0.4rem' }}>
