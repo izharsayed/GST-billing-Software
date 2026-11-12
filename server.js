@@ -87,7 +87,7 @@ const LOCAL_PREFS_ROUTE = '/api/local-prefs';
 // profile, logo and signature images included, so a few hundred invoices
 // with a logo passed 5mb and Restore failed with "Request body too large".
 const IMPORT_ROUTE = '/api/import';
-const jsonBody = express.json({ limit: '5mb' });
+const jsonBody = express.json({ limit: '50mb' });
 const importBody = express.json({ limit: '500mb' });
 app.use((req, res, next) => {
   if (req.path === LOCAL_PREFS_ROUTE) return next();

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Users, Search, FileText, ChevronDown, ChevronUp, Trash2, X, MessageCircle, Mail, Plus, Edit3, Copy, Upload, Download, Wrench, MapPin, Zap } from 'lucide-react';
+import { Users, Search, FileText, ChevronDown, ChevronUp, Trash2, X, MessageCircle, Mail, Plus, Edit3, Copy, Upload, Download, Wrench, MapPin, Zap, Paperclip, Eye, Folder, Image, File } from 'lucide-react';
 import HelpButton from './HelpButton';
 import { getAllClients, getAllBills, deleteClient, saveClient, deleteBill, saveBill, getProfile, deleteReceipt, applyStockChanges, trashSavedPdf, getAllServiceCertificates } from '../store';
 import ServiceCertificateModal from './ServiceCertificateModal';
@@ -55,6 +55,133 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert }) {
   const [proposalQuotation, setProposalQuotation] = useState(null);
   const [targetBillForProposal, setTargetBillForProposal] = useState(null);
   const [clientDocTabs, setClientDocTabs] = useState({});
+  const [filePreviewModal, setFilePreviewModal] = useState(null);
+  const [uploadModalClient, setUploadModalClient] = useState(null);
+  const [uploadCategory, setUploadCategory] = useState('PO');
+  const [uploadNotes, setUploadNotes] = useState('');
+  const [uploadFileObj, setUploadFileObj] = useState(null);
+  const [uploading, setUploading] = useState(false);
+  const [fileCategoryFilter, setFileCategoryFilter] = useState('all');
+  const fileUploadInputRef = useRef(null);
+
+  const FILE_CATEGORIES = [
+    { id: 'Drawing', label: 'Site Layout & CAD', icon: '📐', color: '#0369a1', bg: '#e0f2fe' },
+    { id: 'PO', label: 'Purchase Order (PO)', icon: '📋', color: '#15803d', bg: '#dcfce7' },
+    { id: 'GST', label: 'GST Certificate', icon: '📑', color: '#7c3aed', bg: '#ede9fe' },
+    { id: 'Agreement', label: 'Contract / AMC', icon: '🤝', color: '#b45309', bg: '#fef3c7' },
+    { id: 'Photo', label: 'Site Survey & Photos', icon: '📸', color: '#0891b2', bg: '#cffafe' },
+    { id: 'General', label: 'General Document', icon: '📄', color: '#475569', bg: '#f1f5f9' },
+  ];
+
+  const formatFileSize = (bytes) => {
+    if (!bytes || bytes === 0) return '0 B';
+    const k = 1024;
+    const sizes = ['B', 'KB', 'MB', 'GB'];
+    const i = Math.floor(Math.log(bytes) / Math.log(k));
+    return parseFloat((bytes / Math.pow(k, i)).toFixed(1)) + ' ' + sizes[i];
+  };
+
+  const handleDownloadFile = (file) => {
+    if (!file?.dataUrl) {
+      toast('File data is not available for download', 'error');
+      return;
+    }
+    const link = document.createElement('a');
+    link.href = file.dataUrl;
+    link.download = file.name || 'document';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
+  const handleDeleteFile = async (clientName, savedClient, fileId) => {
+    const confirmed = await confirmAction({
+      title: 'Delete Attached File',
+      message: 'Are you sure you want to delete this attached file? This cannot be undone.',
+      confirmText: 'Delete File',
+      danger: true,
+    });
+    if (!confirmed) return;
+
+    try {
+      const currentFiles = savedClient?.files || [];
+      const updatedFiles = currentFiles.filter(f => f.id !== fileId);
+      const updatedClient = {
+        ...(savedClient || { name: clientName }),
+        files: updatedFiles,
+      };
+      await saveClient(updatedClient);
+      toast('File deleted successfully', 'info');
+      loadData();
+      if (filePreviewModal?.id === fileId) {
+        setFilePreviewModal(null);
+      }
+    } catch (err) {
+      console.error(err);
+      toast('Failed to delete file', 'error');
+    }
+  };
+
+  const handleSaveUpload = async () => {
+    if (!uploadFileObj) {
+      toast('Please choose a file to upload', 'warning');
+      return;
+    }
+    if (!uploadModalClient) return;
+
+    if (uploadFileObj.size > 45 * 1024 * 1024) {
+      toast('File size exceeds the 45MB limit', 'warning');
+      return;
+    }
+
+    setUploading(true);
+    try {
+      const reader = new FileReader();
+      reader.onload = async (e) => {
+        try {
+          const dataUrl = e.target.result;
+          const newFile = {
+            id: 'file_' + Date.now() + '_' + Math.random().toString(36).substr(2, 6),
+            name: uploadFileObj.name,
+            size: uploadFileObj.size,
+            type: uploadFileObj.type || 'application/octet-stream',
+            category: uploadCategory || 'General',
+            notes: uploadNotes.trim(),
+            uploadedAt: new Date().toISOString(),
+            dataUrl: dataUrl,
+          };
+
+          const targetClient = uploadModalClient.savedClient || { name: uploadModalClient.clientName };
+          const updatedClient = {
+            ...targetClient,
+            files: [...(targetClient.files || []), newFile],
+          };
+
+          await saveClient(updatedClient);
+          toast(`File "${uploadFileObj.name}" attached successfully!`, 'success');
+          setUploadModalClient(null);
+          setUploadFileObj(null);
+          setUploadNotes('');
+          setUploadCategory('PO');
+          loadData();
+        } catch (err) {
+          console.error(err);
+          toast('Failed to save attached file', 'error');
+        } finally {
+          setUploading(false);
+        }
+      };
+      reader.onerror = () => {
+        toast('Failed to read file from disk', 'error');
+        setUploading(false);
+      };
+      reader.readAsDataURL(uploadFileObj);
+    } catch (err) {
+      console.error(err);
+      toast('Error preparing file upload', 'error');
+      setUploading(false);
+    }
+  };
 
   const handleOpenProposal = (bill) => {
     if (!bill) return;
@@ -241,6 +368,215 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert }) {
       )}
     </div>
   );
+
+  const renderFilesSection = (clientFiles, clientName, savedClient, showHeader = true) => {
+    const files = clientFiles || [];
+    const filteredFiles = fileCategoryFilter === 'all'
+      ? files
+      : files.filter(f => f.category === fileCategoryFilter);
+
+    return (
+      <div style={{ padding: '0.85rem 1.5rem', borderTop: showHeader ? '1px solid var(--border)' : 'none', background: 'var(--bg-secondary, #f8fafc)' }}>
+        {showHeader && (
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: files.length > 0 ? '0.75rem' : 0 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+              <Folder size={16} style={{ color: '#0284c7' }} />
+              <span style={{ fontWeight: 700, fontSize: '0.83rem', color: 'var(--text-color)' }}>
+                Client Document Vault & Attachments ({files.length})
+              </span>
+            </div>
+            <button
+              type="button"
+              className="btn btn-primary"
+              style={{ fontSize: '0.74rem', padding: '0.28rem 0.75rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}
+              onClick={() => {
+                setUploadModalClient({ clientName, savedClient });
+                setUploadCategory('PO');
+                setUploadNotes('');
+                setUploadFileObj(null);
+              }}
+            >
+              <Upload size={13} /> Attach File
+            </button>
+          </div>
+        )}
+
+        {files.length > 0 ? (
+          <>
+            {/* Category Filter Pills */}
+            <div style={{ display: 'flex', gap: '0.4rem', flexWrap: 'wrap', marginBottom: '0.75rem', alignItems: 'center' }}>
+              <button
+                type="button"
+                className={`btn ${fileCategoryFilter === 'all' ? 'btn-primary' : 'btn-secondary'}`}
+                style={{ fontSize: '0.72rem', padding: '0.18rem 0.55rem', borderRadius: '15px' }}
+                onClick={() => setFileCategoryFilter('all')}
+              >
+                All ({files.length})
+              </button>
+              {FILE_CATEGORIES.map(cat => {
+                const count = files.filter(f => f.category === cat.id).length;
+                if (count === 0) return null;
+                const active = fileCategoryFilter === cat.id;
+                return (
+                  <button
+                    key={cat.id}
+                    type="button"
+                    className={`btn ${active ? 'btn-primary' : 'btn-secondary'}`}
+                    style={{ fontSize: '0.72rem', padding: '0.18rem 0.55rem', borderRadius: '15px' }}
+                    onClick={() => setFileCategoryFilter(cat.id)}
+                  >
+                    {cat.icon} {cat.label} ({count})
+                  </button>
+                );
+              })}
+            </div>
+
+            {filteredFiles.length === 0 ? (
+              <div style={{ padding: '1.5rem', textAlign: 'center', background: 'var(--bg-primary)', borderRadius: '6px', border: '1px solid var(--border)' }}>
+                <p className="text-muted" style={{ fontSize: '0.82rem', margin: 0 }}>No files match the selected category filter.</p>
+              </div>
+            ) : (
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '0.75rem' }}>
+                {filteredFiles.map(file => {
+                  const catMeta = FILE_CATEGORIES.find(c => c.id === file.category) || { label: file.category || 'Document', icon: '📄', color: '#475569', bg: '#f1f5f9' };
+                  const isImage = file.type?.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(file.name);
+                  const isPdf = file.type === 'application/pdf' || /\.pdf$/i.test(file.name);
+
+                  return (
+                    <div
+                      key={file.id}
+                      style={{
+                        background: 'var(--bg-primary)',
+                        border: '1px solid var(--border)',
+                        borderRadius: '8px',
+                        padding: '0.75rem',
+                        display: 'flex',
+                        flexDirection: 'column',
+                        justifyContent: 'space-between',
+                        gap: '0.5rem',
+                        boxShadow: '0 1px 2px rgba(0,0,0,0.04)'
+                      }}
+                    >
+                      <div style={{ display: 'flex', gap: '0.65rem', alignItems: 'flex-start' }}>
+                        {isImage && file.dataUrl ? (
+                          <div
+                            onClick={() => setFilePreviewModal(file)}
+                            style={{ width: '46px', height: '46px', borderRadius: '6px', overflow: 'hidden', cursor: 'pointer', flexShrink: 0, border: '1px solid var(--border)', background: '#f8fafc' }}
+                            title="Click to preview image"
+                          >
+                            <img src={file.dataUrl} alt={file.name} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                          </div>
+                        ) : (
+                          <div
+                            onClick={() => setFilePreviewModal(file)}
+                            style={{
+                              width: '46px',
+                              height: '46px',
+                              borderRadius: '6px',
+                              background: isPdf ? '#fee2e2' : catMeta.bg,
+                              color: isPdf ? '#dc2626' : catMeta.color,
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              cursor: 'pointer',
+                              flexShrink: 0
+                            }}
+                            title="Click to preview file"
+                          >
+                            {isPdf ? <FileText size={22} /> : <File size={22} />}
+                          </div>
+                        )}
+
+                        <div style={{ flex: 1, minWidth: 0 }}>
+                          <div
+                            onClick={() => setFilePreviewModal(file)}
+                            style={{ fontWeight: 600, fontSize: '0.82rem', color: 'var(--text-color)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', cursor: 'pointer' }}
+                            title={file.name}
+                          >
+                            {file.name}
+                          </div>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', marginTop: '0.2rem', flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: '0.68rem', fontWeight: 600, padding: '1px 5px', borderRadius: 3, background: catMeta.bg, color: catMeta.color }}>
+                              {catMeta.icon} {catMeta.label}
+                            </span>
+                            <span style={{ fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                              {formatFileSize(file.size)}
+                            </span>
+                          </div>
+                          {file.notes && (
+                            <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '0.25rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={file.notes}>
+                              💬 {file.notes}
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderTop: '1px solid var(--border)', paddingTop: '0.4rem', fontSize: '0.7rem', color: 'var(--text-muted)' }}>
+                        <span>{file.uploadedAt ? new Date(file.uploadedAt).toLocaleDateString('en-IN') : 'Attached'}</span>
+                        <div style={{ display: 'flex', gap: '0.25rem' }}>
+                          <button
+                            type="button"
+                            className="icon-btn icon-btn-blue"
+                            style={{ padding: '3px' }}
+                            onClick={() => setFilePreviewModal(file)}
+                            title="Preview Document"
+                            aria-label="Preview Document"
+                          >
+                            <Eye size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            className="icon-btn icon-btn-green"
+                            style={{ padding: '3px' }}
+                            onClick={() => handleDownloadFile(file)}
+                            title="Download File"
+                            aria-label="Download File"
+                          >
+                            <Download size={13} />
+                          </button>
+                          <button
+                            type="button"
+                            className="icon-btn icon-btn-red"
+                            style={{ padding: '3px' }}
+                            onClick={() => handleDeleteFile(clientName, savedClient, file.id)}
+                            title="Delete File"
+                            aria-label="Delete File"
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </>
+        ) : (
+          <div style={{ padding: '2rem 1.5rem', textAlign: 'center', background: 'var(--bg-primary)', borderRadius: '8px', border: '1px dashed var(--border)' }}>
+            <Folder size={36} style={{ color: '#94a3b8', margin: '0 auto 0.5rem' }} />
+            <h4 style={{ margin: '0 0 0.3rem', fontSize: '0.9rem', color: 'var(--text-color)' }}>No Files Attached Yet</h4>
+            <p className="text-muted" style={{ fontSize: '0.78rem', marginBottom: '0.85rem', maxWidth: '380px', marginInline: 'auto' }}>
+              Upload customer Purchase Orders, Site Layout drawings, GST Registration certificates, AMC contracts, or site survey photos.
+            </p>
+            <button
+              type="button"
+              className="btn btn-primary"
+              style={{ fontSize: '0.8rem', padding: '0.4rem 1rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+              onClick={() => {
+                setUploadModalClient({ clientName, savedClient });
+                setUploadCategory('PO');
+                setUploadNotes('');
+                setUploadFileObj(null);
+              }}
+            >
+              <Upload size={14} /> Attach First File
+            </button>
+          </div>
+        )}
+      </div>
+    );
+  };
 
   const openServiceModal = (clientObj, equipmentObj = null, certObj = null) => {
     setServiceClient(clientObj);
@@ -1569,6 +1905,8 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert }) {
                         return (cert.customer_name || '').trim().toLowerCase() === clientName.trim().toLowerCase();
                       });
 
+                      const clientFiles = savedClient?.files || [];
+
                       let displayedBills = clientBills;
                       if (activeTab === 'invoices') displayedBills = taxInvoices;
                       else if (activeTab === 'quotations') displayedBills = quotations;
@@ -1599,7 +1937,7 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert }) {
                                 }}
                                 onClick={() => setActiveTab('all')}
                               >
-                                All Documents ({clientBills.length + clientCerts.length})
+                                All Documents ({clientBills.length + clientCerts.length + clientFiles.length})
                               </button>
                               <button
                                 type="button"
@@ -1657,10 +1995,38 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert }) {
                               >
                                 🛠️ Service Certificates ({clientCerts.length})
                               </button>
+                              <button
+                                type="button"
+                                className={`btn ${activeTab === 'files' ? 'btn-primary' : 'btn-secondary'}`}
+                                style={{
+                                  fontSize: '0.75rem',
+                                  padding: '0.25rem 0.65rem',
+                                  borderRadius: '20px',
+                                  fontWeight: activeTab === 'files' ? 700 : 500,
+                                  cursor: 'pointer'
+                                }}
+                                onClick={() => setActiveTab('files')}
+                              >
+                                📁 Files & Vault ({clientFiles.length})
+                              </button>
                             </div>
 
                             <div>
-                              {activeTab === 'quotations' ? (
+                              {activeTab === 'files' ? (
+                                <button
+                                  type="button"
+                                  className="btn btn-primary"
+                                  style={{ fontSize: '0.75rem', padding: '0.28rem 0.75rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                                  onClick={() => {
+                                    setUploadModalClient({ clientName, savedClient });
+                                    setUploadCategory('PO');
+                                    setUploadNotes('');
+                                    setUploadFileObj(null);
+                                  }}
+                                >
+                                  <Upload size={13} /> Attach File
+                                </button>
+                              ) : activeTab === 'quotations' ? (
                                 <button
                                   type="button"
                                   className="btn btn-primary"
@@ -1702,6 +2068,8 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert }) {
 
                           {activeTab === 'service' ? (
                             renderServiceCertificatesTable(clientCerts, clientName, savedClient, false)
+                          ) : activeTab === 'files' ? (
+                            renderFilesSection(clientFiles, clientName, savedClient, false)
                           ) : (
                             <>
                               {displayedBills.length === 0 ? (
@@ -1830,6 +2198,11 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert }) {
                               {activeTab === 'all' && clientCerts.length > 0 && (
                                 renderServiceCertificatesTable(clientCerts, clientName, savedClient, true)
                               )}
+
+                              {/* In 'all' tab, also display files and attachments below service certificates */}
+                              {activeTab === 'all' && clientFiles.length > 0 && (
+                                renderFilesSection(clientFiles, clientName, savedClient, true)
+                              )}
                             </>
                           )}
                         </>
@@ -1891,6 +2264,242 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert }) {
           profile={profileForStatement || {}}
           onProposalSaved={handleProposalSaved}
         />
+      )}
+
+      {/* Client File Preview Modal */}
+      {filePreviewModal && (
+        <div className="modal-overlay" onClick={() => setFilePreviewModal(null)} style={{ zIndex: 1100 }}>
+          <div
+            className="modal-content"
+            onClick={e => e.stopPropagation()}
+            style={{
+              maxWidth: filePreviewModal.type === 'application/pdf' ? '920px' : '780px',
+              width: '95%',
+              padding: 0,
+              borderRadius: '8px',
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+              maxHeight: '92vh'
+            }}
+          >
+            {/* Modal Header */}
+            <div style={{ padding: '0.75rem 1.25rem', borderBottom: '1px solid var(--border)', background: 'var(--bg-secondary, #f8fafc)', display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', minWidth: 0 }}>
+                <FileText size={18} style={{ color: 'var(--primary)', flexShrink: 0 }} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontWeight: 700, fontSize: '0.88rem', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }} title={filePreviewModal.name}>
+                    {filePreviewModal.name}
+                  </div>
+                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)' }}>
+                    {formatFileSize(filePreviewModal.size)} • {filePreviewModal.category || 'General'}
+                  </div>
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  style={{ fontSize: '0.76rem', padding: '0.28rem 0.65rem', display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+                  onClick={() => handleDownloadFile(filePreviewModal)}
+                >
+                  <Download size={13} /> Download
+                </button>
+                <button
+                  type="button"
+                  className="icon-btn"
+                  onClick={() => setFilePreviewModal(null)}
+                  title="Close Preview"
+                >
+                  <X size={16} />
+                </button>
+              </div>
+            </div>
+
+            {/* Modal Body */}
+            <div style={{ flex: 1, padding: '1rem', overflowY: 'auto', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'var(--bg-primary)' }}>
+              {filePreviewModal.type?.startsWith('image/') || /\.(jpg|jpeg|png|webp|gif|svg)$/i.test(filePreviewModal.name) ? (
+                <img
+                  src={filePreviewModal.dataUrl}
+                  alt={filePreviewModal.name}
+                  style={{ maxWidth: '100%', maxHeight: '70vh', objectFit: 'contain', borderRadius: '4px' }}
+                />
+              ) : filePreviewModal.type === 'application/pdf' || /\.pdf$/i.test(filePreviewModal.name) ? (
+                <iframe
+                  src={filePreviewModal.dataUrl}
+                  style={{ width: '100%', height: '70vh', border: 'none', borderRadius: '4px' }}
+                  title={filePreviewModal.name}
+                />
+              ) : (
+                <div style={{ padding: '3rem 2rem', textAlign: 'center' }}>
+                  <File size={48} style={{ color: 'var(--primary)', margin: '0 auto 1rem' }} />
+                  <h3 style={{ margin: '0 0 0.5rem', fontSize: '1.05rem' }}>{filePreviewModal.name}</h3>
+                  <p className="text-muted" style={{ fontSize: '0.85rem', marginBottom: '1.25rem', maxWidth: '400px', marginInline: 'auto' }}>
+                    This file format cannot be rendered inline inside the browser. Click below to download and view it with your default desktop program.
+                  </p>
+                  <button
+                    type="button"
+                    className="btn btn-primary"
+                    style={{ fontSize: '0.85rem', padding: '0.5rem 1.25rem', display: 'inline-flex', alignItems: 'center', gap: '0.4rem', margin: '0 auto' }}
+                    onClick={() => handleDownloadFile(filePreviewModal)}
+                  >
+                    <Download size={15} /> Download {formatFileSize(filePreviewModal.size)}
+                  </button>
+                </div>
+              )}
+            </div>
+
+            {/* Modal Footer */}
+            {filePreviewModal.notes && (
+              <div style={{ padding: '0.6rem 1.25rem', borderTop: '1px solid var(--border)', background: 'var(--bg-secondary, #f8fafc)', fontSize: '0.76rem', color: 'var(--text-muted)' }}>
+                <strong>Notes:</strong> {filePreviewModal.notes}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* Attach File Modal */}
+      {uploadModalClient && (
+        <div className="modal-overlay" onClick={() => !uploading && setUploadModalClient(null)} style={{ zIndex: 1100 }}>
+          <div
+            className="modal-content"
+            onClick={e => e.stopPropagation()}
+            style={{ maxWidth: '520px', width: '95%', padding: '1.25rem', borderRadius: '8px' }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                <Upload size={18} style={{ color: 'var(--primary)' }} />
+                <h3 style={{ margin: 0, fontSize: '1rem' }}>
+                  Attach Document to {uploadModalClient.clientName}
+                </h3>
+              </div>
+              <button
+                type="button"
+                className="icon-btn"
+                onClick={() => !uploading && setUploadModalClient(null)}
+                disabled={uploading}
+              >
+                <X size={16} />
+              </button>
+            </div>
+
+            {/* Dropzone */}
+            <div
+              onDragOver={e => { e.preventDefault(); e.stopPropagation(); }}
+              onDrop={e => {
+                e.preventDefault();
+                e.stopPropagation();
+                if (e.dataTransfer.files && e.dataTransfer.files[0]) {
+                  setUploadFileObj(e.dataTransfer.files[0]);
+                }
+              }}
+              onClick={() => fileUploadInputRef.current?.click()}
+              style={{
+                border: '2px dashed var(--border, #cbd5e1)',
+                borderRadius: '8px',
+                padding: '1.5rem',
+                textAlign: 'center',
+                cursor: 'pointer',
+                background: uploadFileObj ? '#f0fdf4' : 'var(--bg-secondary, #f8fafc)',
+                transition: 'all 0.2s',
+                marginBottom: '1rem'
+              }}
+            >
+              <input
+                type="file"
+                ref={fileUploadInputRef}
+                style={{ display: 'none' }}
+                onChange={e => {
+                  if (e.target.files && e.target.files[0]) {
+                    setUploadFileObj(e.target.files[0]);
+                  }
+                }}
+              />
+              {uploadFileObj ? (
+                <div>
+                  <div style={{ fontSize: '1.5rem', marginBottom: '0.2rem' }}>✅</div>
+                  <div style={{ fontWeight: 700, color: '#15803d', fontSize: '0.88rem' }}>{uploadFileObj.name}</div>
+                  <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '0.15rem' }}>
+                    {formatFileSize(uploadFileObj.size)} • Click to choose a different file
+                  </div>
+                </div>
+              ) : (
+                <div>
+                  <Upload size={28} style={{ color: 'var(--primary)', margin: '0 auto 0.4rem' }} />
+                  <div style={{ fontWeight: 600, fontSize: '0.88rem', color: 'var(--text-color)' }}>
+                    Click to select or drag & drop file here
+                  </div>
+                  <div style={{ fontSize: '0.74rem', color: 'var(--text-muted)', marginTop: '0.25rem' }}>
+                    Supports PDFs, CAD Drawings (.dwg), Images, POs, Contracts (up to 45 MB)
+                  </div>
+                </div>
+              )}
+            </div>
+
+            {/* Category Selection */}
+            <div className="form-group" style={{ marginBottom: '0.85rem' }}>
+              <label style={{ fontSize: '0.78rem', fontWeight: 600, display: 'block', marginBottom: '0.3rem' }}>
+                Document Category
+              </label>
+              <select
+                value={uploadCategory}
+                onChange={e => setUploadCategory(e.target.value)}
+                className="form-control"
+                style={{ fontSize: '0.82rem', width: '100%' }}
+              >
+                {FILE_CATEGORIES.map(cat => (
+                  <option key={cat.id} value={cat.id}>
+                    {cat.icon} {cat.label}
+                  </option>
+                ))}
+              </select>
+            </div>
+
+            {/* Notes / Description */}
+            <div className="form-group" style={{ marginBottom: '1.25rem' }}>
+              <label style={{ fontSize: '0.78rem', fontWeight: 600, display: 'block', marginBottom: '0.3rem' }}>
+                Notes / Remarks <span style={{ fontWeight: 400, color: 'var(--text-muted)' }}>(Optional)</span>
+              </label>
+              <input
+                type="text"
+                value={uploadNotes}
+                onChange={e => setUploadNotes(e.target.value)}
+                placeholder="e.g. Revision 2 site layout, customer signed PO #8821"
+                className="form-control"
+                style={{ fontSize: '0.82rem', width: '100%' }}
+              />
+            </div>
+
+            {/* Actions */}
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem' }}>
+              <button
+                type="button"
+                className="btn btn-secondary"
+                onClick={() => setUploadModalClient(null)}
+                disabled={uploading}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="btn btn-primary"
+                onClick={handleSaveUpload}
+                disabled={!uploadFileObj || uploading}
+                style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem' }}
+              >
+                {uploading ? (
+                  <>Uploading & Attaching...</>
+                ) : (
+                  <>
+                    <Upload size={14} /> Attach File
+                  </>
+                )}
+              </button>
+            </div>
+          </div>
+        </div>
       )}
     </div>
   );
