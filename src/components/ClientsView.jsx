@@ -36,7 +36,7 @@ const STATUS_COLORS = {
   cancelled: { label: 'Cancelled', color: '#64748b', bg: '#f1f5f9' },
 };
 
-export default function ClientsView({ onEdit, onDuplicate, onNew }) {
+export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert }) {
   const [clients, setClients] = useState([]);
   const [bills, setBills] = useState([]);
   const [search, setSearch] = useState('');
@@ -1412,6 +1412,11 @@ export default function ClientsView({ onEdit, onDuplicate, onNew }) {
                                   </td>
                                   <td>
                                     <div className="table-actions">
+                                      {onConvert && ['quotation', 'proforma', 'delivery-challan'].includes(bill.invoiceType) && !bill.convertedTo && (
+                                        <button className="icon-btn icon-btn-green" onClick={() => onConvert(bill)} title="Convert to Tax Invoice" aria-label="Convert to Tax Invoice">
+                                          <FileText size={14} />
+                                        </button>
+                                      )}
                                       {bill.data && (
                                         <button className="icon-btn icon-btn-blue" onClick={() => onEdit(bill)} title="Edit Invoice">
                                           <Edit3 size={14} />

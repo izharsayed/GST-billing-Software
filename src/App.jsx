@@ -1022,7 +1022,7 @@ function App() {
              matched view's chunk actually loads; others stay unfetched. */}
         <Suspense fallback={<ViewLoading />}>
         {currentView === 'clients' && (
-          <ClientsView onNew={handleNewInvoice} onEdit={handleEditInvoice} onDuplicate={handleDuplicateInvoice} />
+          <ClientsView onNew={handleNewInvoice} onEdit={handleEditInvoice} onDuplicate={handleDuplicateInvoice} onConvert={handleConvertToInvoice} />
         )}
         {currentView === 'inventory' && (
           <InventoryView />
