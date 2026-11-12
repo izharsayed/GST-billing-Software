@@ -829,12 +829,12 @@ function App() {
       {navOpen && <div className="sidebar-backdrop" onClick={() => setNavOpen(false)} aria-hidden="true" />}
       <div className={`sidebar${navOpen ? ' sidebar-open' : ''}`} onClick={closeNavAfterPick}>
         <div className="sidebar-brand">
-          <div className="sidebar-logo" style={{ background: 'transparent', padding: 0, overflow: 'hidden' }}>
-            <img src={mifLogo} alt="MIF Logo" style={{ width: 40, height: 40, borderRadius: 10, objectFit: 'cover', display: 'block' }} />
+          <div className="sidebar-logo">
+            <img src={mifLogo} alt="MIF Logo" className="sidebar-logo-img" />
           </div>
-          <div>
+          <div className="sidebar-brand-text">
             <h2 className="sidebar-title">MIF CoolERP</h2>
-            <p className="sidebar-subtitle">Cold Room & GST Suite</p>
+            <p className="sidebar-subtitle">Cold Room &amp; GST Suite</p>
           </div>
           {/* Auto-hide as a ☰ button (was a text checkbox): pressed = the menu
               shrinks to icons and opens when pointed at. */}
@@ -897,7 +897,7 @@ function App() {
               <item.icon size={18} /> {item.label}
             </button>
           ))}
-          <div style={{ marginTop: 'auto', display: 'flex', flexDirection: 'column', gap: '0.25rem' }}>
+          <div className="sidebar-bottom">
             {/* Update-available banner — only shows when GitHub has a newer version
                 AND the user hasn't already dismissed THIS specific version. New
                 releases re-show the banner. Click to view notes + update. */}

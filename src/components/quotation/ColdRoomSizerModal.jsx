@@ -1,7 +1,8 @@
 import React, { useState, useEffect, useMemo } from 'react';
 import {
   X, Calculator, CheckCircle2, AlertTriangle, Layers, Plus, Loader2,
-  Filter, ChevronDown, ChevronUp, Cpu, Flame, Wind, User, Settings2
+  Filter, ChevronDown, ChevronUp, Cpu, Flame, Wind, User, Settings2,
+  Snowflake, Zap
 } from 'lucide-react';
 import { calculateColdRoom, calculateHeatLoad, getThermalCommodities } from '../../store';
 import { formatCurrency } from '../../utils';
@@ -45,7 +46,9 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
     entryTemp: 28.0,
     compressorRunHours: 16.0,
     safetyFactor: 0.10,
+    brand: 'Daikin',
     compressorPreference: 'any',
+    refrigerant: 'R404A',
     // Optional internal loads
     lightsKw: '',
     lightsHours: 8,
@@ -98,6 +101,9 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
             width: initialSpecs.width,
             height: initialSpecs.height,
             unit: initialSpecs.unit || 'm',
+            ...(initialSpecs.brand ? { brand: initialSpecs.brand } : {}),
+            ...(initialSpecs.refrigerant ? { refrigerant: initialSpecs.refrigerant } : {}),
+            ...(initialSpecs.compressorPreference ? { compressorPreference: initialSpecs.compressorPreference } : {}),
           }));
           setCalcForm(p => ({
             ...p,
@@ -332,6 +338,9 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
         puf: heatLoadResult.inputs.puf,
         temperatures: heatLoadResult.inputs.temperatures,
         commodity: heatLoadResult.inputs.commodity,
+        brandPreference: heatLoadForm.brand,
+        compressorTechnology: heatLoadForm.compressorPreference,
+        refrigerant: heatLoadForm.refrigerant,
         thermalBreakdown: heatLoadResult.thermalBreakdown,
         machineRating: heatLoadResult.machineRating,
         recommendations: heatLoadResult.recommendations,
@@ -434,14 +443,14 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
 
   return (
     <div className="modal-overlay" style={{ zIndex: 1100 }}>
-      <div className="modal-content" style={{ maxWidth: '900px', maxHeight: '92vh', overflowY: 'auto' }}>
+      <div className="modal-content" style={{ maxWidth: '980px', maxHeight: '92vh', overflowY: 'auto' }}>
         {/* Header */}
         <div className="flex justify-between items-center mb-3 pb-2" style={{ borderBottom: '1px solid var(--border-color)' }}>
           <div className="flex items-center gap-2">
-            <span style={{ fontSize: '1.4rem' }}>❄️</span>
+            <Snowflake size={24} style={{ color: '#0284c7', flexShrink: 0 }} />
             <div>
-              <h3 className="section-title" style={{ margin: 0, fontSize: '1.1rem' }}>
-                Refrigeration Heat Load & Sizing Engine
+              <h3 className="section-title" style={{ margin: 0, fontSize: '1.15rem', fontWeight: 700 }}>
+                Refrigeration Heat Load &amp; Sizing Engine
               </h3>
               <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-muted)' }}>
                 ASHRAE / USDA Thermodynamic Engine • Daikin Commercial Equipment Matcher
@@ -467,7 +476,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
             style={{ fontSize: '0.82rem', padding: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', fontWeight: 600 }}
             onClick={() => setSizerMode('heatload')}
           >
-            <Cpu size={15} /> 🔬 Advanced Heat Load Engine (ASHRAE / Daikin)
+            <Cpu size={15} /> Advanced Heat Load Engine (ASHRAE / Daikin)
           </button>
           <button
             type="button"
@@ -475,7 +484,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
             style={{ fontSize: '0.82rem', padding: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', fontWeight: 600 }}
             onClick={() => setSizerMode('reckoner')}
           >
-            <Layers size={15} /> ⚡ Quick Volume Sizer (Emerson / Ready Reckoner)
+            <Zap size={15} /> Quick Volume Sizer (Emerson / Ready Reckoner)
           </button>
         </div>
 
@@ -484,251 +493,438 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
         {/* ========================================================= */}
         {sizerMode === 'heatload' && (
           <div>
-            <div style={{ background: 'var(--bg-secondary)', padding: '1rem', borderRadius: '8px', marginBottom: '1rem' }}>
-              {/* Room Dimensions & PUF */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: '0.75rem', marginBottom: '0.75rem' }}>
-                <div>
-                  <div className="flex justify-between items-center mb-1">
-                    <label className="form-label" style={{ margin: 0, fontWeight: 600, fontSize: '0.82rem' }}>Dimensions</label>
-                    <div style={{ display: 'flex', gap: '3px' }}>
-                      <button
-                        type="button"
-                        className={`btn btn-sm ${heatLoadForm.unit === 'm' ? 'btn-primary' : 'btn-secondary'}`}
-                        style={{ padding: '0.1rem 0.4rem', fontSize: '0.72rem' }}
-                        onClick={() => setHeatLoadForm(p => ({ ...p, unit: 'm' }))}
-                      >
-                        Meters (m)
-                      </button>
-                      <button
-                        type="button"
-                        className={`btn btn-sm ${heatLoadForm.unit === 'ft' ? 'btn-primary' : 'btn-secondary'}`}
-                        style={{ padding: '0.1rem 0.4rem', fontSize: '0.72rem' }}
-                        onClick={() => setHeatLoadForm(p => ({ ...p, unit: 'ft' }))}
-                      >
-                        Feet (ft)
-                      </button>
+            <div style={{
+              background: 'var(--bg-secondary, #f8fafc)',
+              padding: '1rem',
+              borderRadius: '10px',
+              border: '1px solid var(--border-color, #e2e8f0)',
+              marginBottom: '1rem',
+              display: 'flex',
+              flexDirection: 'column',
+              gap: '0.85rem'
+            }}>
+
+              {/* CARD 1: Chamber Geometry & PUF Insulation */}
+              <div style={{
+                background: 'var(--bg-primary, #ffffff)',
+                border: '1px solid var(--border-color, #e2e8f0)',
+                borderRadius: '8px',
+                padding: '0.85rem 1rem'
+              }}>
+                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0369a1', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.65rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                  <Layers size={14} /> Chamber Dimensions &amp; PUF Insulation
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 1fr', gap: '1rem', alignItems: 'start' }}>
+                  {/* Left: Dimensions */}
+                  <div>
+                    <div className="flex justify-between items-center mb-1">
+                      <label className="form-label" style={{ margin: 0, fontWeight: 600, fontSize: '0.8rem' }}>
+                        Dimensions ({heatLoadForm.unit === 'm' ? 'Meters' : 'Feet'})
+                      </label>
+                      <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-secondary)', padding: '2px', borderRadius: '6px' }}>
+                        <button
+                          type="button"
+                          className={`btn btn-sm ${heatLoadForm.unit === 'm' ? 'btn-primary' : 'btn-ghost'}`}
+                          style={{ padding: '0.15rem 0.5rem', fontSize: '0.72rem', height: 'auto', lineHeight: 1.2 }}
+                          onClick={() => setHeatLoadForm(p => ({ ...p, unit: 'm' }))}
+                        >
+                          Meters (m)
+                        </button>
+                        <button
+                          type="button"
+                          className={`btn btn-sm ${heatLoadForm.unit === 'ft' ? 'btn-primary' : 'btn-ghost'}`}
+                          style={{ padding: '0.15rem 0.5rem', fontSize: '0.72rem', height: 'auto', lineHeight: 1.2 }}
+                          onClick={() => setHeatLoadForm(p => ({ ...p, unit: 'ft' }))}
+                        >
+                          Feet (ft)
+                        </button>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.4rem' }}>
+                      <div>
+                        <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Length ({heatLoadForm.unit})</span>
+                        <input
+                          type="number"
+                          step="0.1"
+                          className="form-input"
+                          style={{ height: '36px' }}
+                          title="Length"
+                          placeholder="L"
+                          value={heatLoadForm.length}
+                          onChange={e => setHeatLoadForm(p => ({ ...p, length: Number(e.target.value) }))}
+                        />
+                      </div>
+                      <div>
+                        <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Width ({heatLoadForm.unit})</span>
+                        <input
+                          type="number"
+                          step="0.1"
+                          className="form-input"
+                          style={{ height: '36px' }}
+                          title="Width"
+                          placeholder="W"
+                          value={heatLoadForm.width}
+                          onChange={e => setHeatLoadForm(p => ({ ...p, width: Number(e.target.value) }))}
+                        />
+                      </div>
+                      <div>
+                        <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Height ({heatLoadForm.unit})</span>
+                        <input
+                          type="number"
+                          step="0.1"
+                          className="form-input"
+                          style={{ height: '36px' }}
+                          title="Height"
+                          placeholder="H"
+                          value={heatLoadForm.height}
+                          onChange={e => setHeatLoadForm(p => ({ ...p, height: Number(e.target.value) }))}
+                        />
+                      </div>
+                    </div>
+
+                    <div style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.5rem',
+                      fontSize: '0.73rem',
+                      color: '#0369a1',
+                      background: 'rgba(2, 132, 199, 0.08)',
+                      padding: '0.2rem 0.55rem',
+                      borderRadius: '5px',
+                      marginTop: '0.45rem',
+                      fontWeight: 600
+                    }}>
+                      <span>Volume: {liveDimensions.volM3} m³</span>
+                      <span>•</span>
+                      <span>Surface Area: {liveDimensions.areaM2} m²</span>
                     </div>
                   </div>
-                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '0.35rem' }}>
-                    <input
-                      type="number"
-                      step="0.1"
+
+                  {/* Right: PUF Panel Thickness */}
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8rem', marginBottom: '0.35rem' }}>
+                      PUF Panel Thickness (k = 0.023 W/m·K)
+                    </label>
+                    <select
                       className="form-input"
-                      title="Length"
-                      placeholder="L"
-                      value={heatLoadForm.length}
-                      onChange={e => setHeatLoadForm(p => ({ ...p, length: Number(e.target.value) }))}
-                    />
-                    <input
-                      type="number"
-                      step="0.1"
-                      className="form-input"
-                      title="Width"
-                      placeholder="W"
-                      value={heatLoadForm.width}
-                      onChange={e => setHeatLoadForm(p => ({ ...p, width: Number(e.target.value) }))}
-                    />
-                    <input
-                      type="number"
-                      step="0.1"
-                      className="form-input"
-                      title="Height"
-                      placeholder="H"
-                      value={heatLoadForm.height}
-                      onChange={e => setHeatLoadForm(p => ({ ...p, height: Number(e.target.value) }))}
-                    />
-                  </div>
-                  <div style={{ fontSize: '0.72rem', color: 'var(--text-muted)', marginTop: '3px' }}>
-                    Vol: <strong>{liveDimensions.volM3} m³</strong> • Area: <strong>{liveDimensions.areaM2} m²</strong>
+                      style={{ height: '36px', fontSize: '0.82rem' }}
+                      value={heatLoadForm.pufThicknessMm}
+                      onChange={e => setHeatLoadForm(p => ({ ...p, pufThicknessMm: Number(e.target.value) }))}
+                    >
+                      <option value={60}>60 mm (U = 0.383 W/m²·K) — Ante-rooms &amp; Process Areas</option>
+                      <option value={100}>100 mm (U = 0.230 W/m²·K) — Standard Chiller (+2°C to +8°C)</option>
+                      <option value={120}>120 mm (U = 0.192 W/m²·K) — Low Temp Freezer (-18°C)</option>
+                      <option value={150}>150 mm (U = 0.153 W/m²·K) — Deep Freezer (-25°C to -30°C)</option>
+                    </select>
+                    <div style={{ fontSize: '0.71rem', color: 'var(--text-muted)', marginTop: '0.35rem', lineHeight: 1.3 }}>
+                      Governs heat ingress through walls and ceiling based on temperature gradient.
+                    </div>
                   </div>
                 </div>
+              </div>
 
-                {/* PUF Insulation Thickness */}
-                <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.82rem' }}>
-                    PUF Panel Thickness (k = 0.023 W/m·K)
+              {/* CARD 2: Stored Commodity & Thermal Targets */}
+              <div style={{
+                background: 'var(--bg-primary, #ffffff)',
+                border: '1px solid var(--border-color, #e2e8f0)',
+                borderRadius: '8px',
+                padding: '0.85rem 1rem'
+              }}>
+                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0369a1', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.65rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                  <Flame size={14} /> Stored Commodity &amp; Operating Temperatures
+                </div>
+
+                <div style={{ marginBottom: '0.75rem' }}>
+                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8rem', marginBottom: '0.25rem' }}>
+                    Stored Commodity (ASHRAE Handbooks Database)
                   </label>
                   <select
                     className="form-input"
-                    value={heatLoadForm.pufThicknessMm}
-                    onChange={e => setHeatLoadForm(p => ({ ...p, pufThicknessMm: Number(e.target.value) }))}
-                  >
-                    <option value={60}>60 mm (U = 0.383 W/m²·K) — Ante-rooms & Process Areas</option>
-                    <option value={100}>100 mm (U = 0.230 W/m²·K) — Standard Chiller (+2°C to +8°C)</option>
-                    <option value={120}>120 mm (U = 0.192 W/m²·K) — Low Temp Freezer (-18°C)</option>
-                    <option value={150}>150 mm (U = 0.153 W/m²·K) — Deep Freezer (-25°C to -30°C)</option>
-                  </select>
-                </div>
-
-                {/* Commodity Selection */}
-                <div className="form-group">
-                  <label className="form-label" style={{ fontWeight: 600, fontSize: '0.82rem' }}>
-                    Stored Commodity (ASHRAE Handbooks)
-                  </label>
-                  <select
-                    className="form-input"
+                    style={{ height: '36px', fontSize: '0.83rem' }}
                     value={heatLoadForm.commodityId}
                     onChange={e => handleCommodityChange(e.target.value)}
                   >
                     {commodities.map(c => (
                       <option key={c.id} value={c.id}>
-                        [{c.category}] {c.name} ({c.storage_temp_min}°C to {c.storage_temp_max}°C)
+                        [{c.category}] {c.name} (Design: {c.storage_temp_min}°C to {c.storage_temp_max}°C)
                       </option>
                     ))}
                   </select>
                   {selectedCommodity && (
-                    <div style={{ fontSize: '0.72rem', color: '#0369a1', marginTop: '3px' }}>
-                      Freezing: <strong>{selectedCommodity.freezing_point_c}°C</strong> | Cp: <strong>{selectedCommodity.cp_above}</strong> kJ/kg·K | Resp: <strong>{selectedCommodity.respiration_rate_mw_kg || 0}</strong> mW/kg
+                    <div style={{
+                      display: 'flex',
+                      gap: '0.85rem',
+                      flexWrap: 'wrap',
+                      alignItems: 'center',
+                      background: 'rgba(2, 132, 199, 0.06)',
+                      border: '1px solid rgba(2, 132, 199, 0.18)',
+                      borderRadius: '6px',
+                      padding: '0.3rem 0.65rem',
+                      marginTop: '0.4rem',
+                      fontSize: '0.73rem',
+                      color: '#0369a1'
+                    }}>
+                      <span>Freezing Point: <strong>{selectedCommodity.freezing_point_c}°C</strong></span>
+                      <span>•</span>
+                      <span>Specific Heat (Cp): <strong>{selectedCommodity.cp_above}</strong> kJ/kg·K</span>
+                      <span>•</span>
+                      <span>Respiration Heat: <strong>{selectedCommodity.respiration_rate_mw_kg || 0}</strong> mW/kg</span>
+                    </div>
+                  )}
+                </div>
+
+                {/* Temperatures & Product Inflow */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.65rem' }}>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 600 }}>Daily Inflow (kg/day)</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      style={{ height: '36px' }}
+                      value={heatLoadForm.dailyMassKg}
+                      onChange={e => setHeatLoadForm(p => ({ ...p, dailyMassKg: Number(e.target.value) }))}
+                    />
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 600 }}>Product Entry Temp (°C)</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      style={{ height: '36px' }}
+                      value={heatLoadForm.entryTemp}
+                      onChange={e => setHeatLoadForm(p => ({ ...p, entryTemp: Number(e.target.value) }))}
+                    />
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 600 }}>Ambient Max (°C)</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      style={{ height: '36px' }}
+                      value={heatLoadForm.ambientTemp}
+                      onChange={e => setHeatLoadForm(p => ({ ...p, ambientTemp: Number(e.target.value) }))}
+                    />
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 600 }}>Room Design Temp (°C)</label>
+                    <input
+                      type="number"
+                      className="form-input"
+                      style={{ height: '36px' }}
+                      value={heatLoadForm.roomTemp}
+                      onChange={e => setHeatLoadForm(p => ({ ...p, roomTemp: Number(e.target.value) }))}
+                    />
+                  </div>
+                </div>
+              </div>
+
+              {/* CARD 3: Machinery Sizing & Safety Parameters */}
+              <div style={{
+                background: 'var(--bg-primary, #ffffff)',
+                border: '1px solid var(--border-color, #e2e8f0)',
+                borderRadius: '8px',
+                padding: '0.85rem 1rem'
+              }}>
+                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0369a1', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.65rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                  <Cpu size={14} /> Equipment Running Duty &amp; Safety Factors
+                </div>
+
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.65rem' }}>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 600 }}>Compressor Run Target</label>
+                    <select
+                      className="form-input"
+                      style={{ height: '36px', fontSize: '0.82rem' }}
+                      value={heatLoadForm.compressorRunHours}
+                      onChange={e => setHeatLoadForm(p => ({ ...p, compressorRunHours: Number(e.target.value) }))}
+                    >
+                      <option value={16.0}>16.0 Hours / Day (Standard Cold Storage)</option>
+                      <option value={18.0}>18.0 Hours / Day (Heavy Duty Pull-down)</option>
+                      <option value={20.0}>20.0 Hours / Day (Continuous Process)</option>
+                    </select>
+                  </div>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 600 }}>Safety Factor</label>
+                    <select
+                      className="form-input"
+                      style={{ height: '36px', fontSize: '0.82rem' }}
+                      value={heatLoadForm.safetyFactor}
+                      onChange={e => setHeatLoadForm(p => ({ ...p, safetyFactor: Number(e.target.value) }))}
+                    >
+                      <option value={0.10}>10% Allowance (Recommended)</option>
+                      <option value={0.15}>15% Heavy Duty Allowance</option>
+                      <option value={0.05}>5% Minimal Safety Factor</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Collapsible Advanced Internal & Defrost Loads */}
+                <div style={{ marginTop: '0.75rem' }}>
+                  <button
+                    type="button"
+                    className="btn btn-ghost btn-sm"
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: '0.4rem',
+                      fontSize: '0.74rem',
+                      fontWeight: 600,
+                      color: '#0369a1',
+                      padding: '0.25rem 0.55rem',
+                      background: 'rgba(2, 132, 199, 0.06)',
+                      borderRadius: '6px'
+                    }}
+                    onClick={() => setShowAdvancedParams(!showAdvancedParams)}
+                  >
+                    <Settings2 size={13} />
+                    <span>{showAdvancedParams ? 'Hide Internal & Equipment Loads' : 'Adjust Internal Lighting, People & Defrost Loads...'}</span>
+                    {showAdvancedParams ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
+                  </button>
+
+                  {showAdvancedParams && (
+                    <div style={{
+                      background: 'var(--bg-secondary, #f8fafc)',
+                      padding: '0.75rem',
+                      borderRadius: '6px',
+                      marginTop: '0.5rem',
+                      border: '1px solid var(--border-color, #e2e8f0)',
+                      display: 'grid',
+                      gridTemplateColumns: 'repeat(4, 1fr)',
+                      gap: '0.6rem'
+                    }}>
+                      <div>
+                        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Lighting (kW)</span>
+                        <input
+                          type="number"
+                          step="0.1"
+                          placeholder="Auto (10W/m²)"
+                          className="form-input"
+                          style={{ height: '34px', fontSize: '0.82rem' }}
+                          value={heatLoadForm.lightsKw}
+                          onChange={e => setHeatLoadForm(p => ({ ...p, lightsKw: e.target.value }))}
+                        />
+                      </div>
+                      <div>
+                        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Occupants (count)</span>
+                        <input
+                          type="number"
+                          className="form-input"
+                          style={{ height: '34px', fontSize: '0.82rem' }}
+                          value={heatLoadForm.peopleCount}
+                          onChange={e => setHeatLoadForm(p => ({ ...p, peopleCount: Number(e.target.value) }))}
+                        />
+                      </div>
+                      <div>
+                        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Fan Motor (kW)</span>
+                        <input
+                          type="number"
+                          step="0.1"
+                          className="form-input"
+                          style={{ height: '34px', fontSize: '0.82rem' }}
+                          value={heatLoadForm.fanMotorKw}
+                          onChange={e => setHeatLoadForm(p => ({ ...p, fanMotorKw: Number(e.target.value) }))}
+                        />
+                      </div>
+                      <div>
+                        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Defrost Heater (kW)</span>
+                        <input
+                          type="number"
+                          step="0.5"
+                          placeholder="Auto"
+                          className="form-input"
+                          style={{ height: '34px', fontSize: '0.82rem' }}
+                          value={heatLoadForm.defrostHeaterKw}
+                          onChange={e => setHeatLoadForm(p => ({ ...p, defrostHeaterKw: e.target.value }))}
+                        />
+                      </div>
                     </div>
                   )}
                 </div>
               </div>
 
-              {/* Temperatures & Product Inflow */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem', marginBottom: '0.75rem' }}>
-                <div className="form-group">
-                  <label className="form-label" style={{ fontSize: '0.78rem' }}>Daily Inflow (kg/day)</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={heatLoadForm.dailyMassKg}
-                    onChange={e => setHeatLoadForm(p => ({ ...p, dailyMassKg: Number(e.target.value) }))}
-                  />
+              {/* CARD 4: Equipment Brand, Technology & Refrigerant Preference */}
+              <div style={{
+                background: 'var(--bg-primary, #ffffff)',
+                border: '1px solid var(--border-color, #e2e8f0)',
+                borderRadius: '8px',
+                padding: '0.85rem 1rem'
+              }}>
+                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0369a1', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.65rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                  <Snowflake size={14} /> Equipment Brand, Technology &amp; Refrigerant
                 </div>
-                <div className="form-group">
-                  <label className="form-label" style={{ fontSize: '0.78rem' }}>Product Entry Temp (°C)</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={heatLoadForm.entryTemp}
-                    onChange={e => setHeatLoadForm(p => ({ ...p, entryTemp: Number(e.target.value) }))}
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" style={{ fontSize: '0.78rem' }}>Ambient Max (°C)</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={heatLoadForm.ambientTemp}
-                    onChange={e => setHeatLoadForm(p => ({ ...p, ambientTemp: Number(e.target.value) }))}
-                  />
-                </div>
-                <div className="form-group">
-                  <label className="form-label" style={{ fontSize: '0.78rem' }}>Room Design Temp (°C)</label>
-                  <input
-                    type="number"
-                    className="form-input"
-                    value={heatLoadForm.roomTemp}
-                    onChange={e => setHeatLoadForm(p => ({ ...p, roomTemp: Number(e.target.value) }))}
-                  />
-                </div>
-              </div>
 
-              {/* Machine Parameters */}
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.5rem' }}>
-                <div className="form-group">
-                  <label className="form-label" style={{ fontSize: '0.78rem' }}>Compressor Run Target</label>
-                  <select
-                    className="form-input"
-                    value={heatLoadForm.compressorRunHours}
-                    onChange={e => setHeatLoadForm(p => ({ ...p, compressorRunHours: Number(e.target.value) }))}
-                  >
-                    <option value={16.0}>16.0 Hours / Day (Standard Cold Storage)</option>
-                    <option value={18.0}>18.0 Hours / Day (Heavy Duty Pull-down)</option>
-                    <option value={20.0}>20.0 Hours / Day (Continuous Process)</option>
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label className="form-label" style={{ fontSize: '0.78rem' }}>Safety Factor</label>
-                  <select
-                    className="form-input"
-                    value={heatLoadForm.safetyFactor}
-                    onChange={e => setHeatLoadForm(p => ({ ...p, safetyFactor: Number(e.target.value) }))}
-                  >
-                    <option value={0.10}>10% Allowance (Recommended)</option>
-                    <option value={0.15}>15% Heavy Duty Allowance</option>
-                    <option value={0.05}>5% Minimal Safety Factor</option>
-                  </select>
-                </div>
-                <div className="form-group">
-                  <label className="form-label" style={{ fontSize: '0.78rem' }}>Compressor Technology</label>
-                  <select
-                    className="form-input"
-                    value={heatLoadForm.compressorPreference}
-                    onChange={e => setHeatLoadForm(p => ({ ...p, compressorPreference: e.target.value }))}
-                  >
-                    <option value="any">Compare Scroll & Reciprocating</option>
-                    <option value="scroll">Scroll Compressor (CCMS / CCLS)</option>
-                    <option value="reciprocating">Reciprocating (CCMR / CCLR)</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Collapsible Advanced Internal & Defrost Loads */}
-              <div style={{ marginTop: '0.5rem' }}>
-                <button
-                  type="button"
-                  className="btn btn-ghost btn-sm"
-                  style={{ display: 'flex', alignItems: 'center', gap: '0.3rem', fontSize: '0.75rem', padding: '0.2rem 0' }}
-                  onClick={() => setShowAdvancedParams(!showAdvancedParams)}
-                >
-                  <Settings2 size={13} />
-                  {showAdvancedParams ? 'Hide Internal & Equipment Loads' : 'Adjust Internal Lighting, People & Defrost Loads...'}
-                  {showAdvancedParams ? <ChevronUp size={13} /> : <ChevronDown size={13} />}
-                </button>
-
-                {showAdvancedParams && (
-                  <div style={{ background: 'var(--bg-primary)', padding: '0.75rem', borderRadius: '6px', marginTop: '0.4rem', border: '1px solid var(--border-color)', display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.5rem', fontSize: '0.75rem' }}>
-                    <div>
-                      <span style={{ color: 'var(--text-muted)' }}>Lighting (kW)</span>
-                      <input
-                        type="number"
-                        step="0.1"
-                        placeholder="Auto (10W/m²)"
-                        className="form-input"
-                        value={heatLoadForm.lightsKw}
-                        onChange={e => setHeatLoadForm(p => ({ ...p, lightsKw: e.target.value }))}
-                      />
-                    </div>
-                    <div>
-                      <span style={{ color: 'var(--text-muted)' }}>Occupants (count)</span>
-                      <input
-                        type="number"
-                        className="form-input"
-                        value={heatLoadForm.peopleCount}
-                        onChange={e => setHeatLoadForm(p => ({ ...p, peopleCount: Number(e.target.value) }))}
-                      />
-                    </div>
-                    <div>
-                      <span style={{ color: 'var(--text-muted)' }}>Fan Motor (kW)</span>
-                      <input
-                        type="number"
-                        step="0.1"
-                        className="form-input"
-                        value={heatLoadForm.fanMotorKw}
-                        onChange={e => setHeatLoadForm(p => ({ ...p, fanMotorKw: Number(e.target.value) }))}
-                      />
-                    </div>
-                    <div>
-                      <span style={{ color: 'var(--text-muted)' }}>Defrost Heater (kW)</span>
-                      <input
-                        type="number"
-                        step="0.5"
-                        placeholder="Auto"
-                        className="form-input"
-                        value={heatLoadForm.defrostHeaterKw}
-                        onChange={e => setHeatLoadForm(p => ({ ...p, defrostHeaterKw: e.target.value }))}
-                      />
-                    </div>
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.65rem' }}>
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 600 }}>Brand Preference</label>
+                    <select
+                      className="form-input"
+                      style={{ height: '36px', fontSize: '0.82rem' }}
+                      value={heatLoadForm.brand}
+                      onChange={e => {
+                        const val = e.target.value;
+                        setHeatLoadForm(p => ({ ...p, brand: val }));
+                        if (val !== 'any') setCduBrandFilter(val);
+                        else setCduBrandFilter('all');
+                      }}
+                    >
+                      <option value="Daikin">Daikin (Authorized Dealer)</option>
+                      <option value="Emerson">Emerson</option>
+                      <option value="any">Compare All Brands</option>
+                    </select>
                   </div>
-                )}
+
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 600 }}>Compressor Technology</label>
+                    <select
+                      className="form-input"
+                      style={{ height: '36px', fontSize: '0.82rem' }}
+                      value={heatLoadForm.compressorPreference}
+                      onChange={e => setHeatLoadForm(p => ({ ...p, compressorPreference: e.target.value }))}
+                    >
+                      <option value="any">Compare Scroll &amp; Reciprocating</option>
+                      <option value="scroll">Scroll (High Efficiency)</option>
+                      <option value="reciprocating">Reciprocating</option>
+                    </select>
+                  </div>
+
+                  <div className="form-group" style={{ margin: 0 }}>
+                    <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 600 }}>Refrigerant</label>
+                    <select
+                      className="form-input"
+                      style={{ height: '36px', fontSize: '0.82rem' }}
+                      value={heatLoadForm.refrigerant}
+                      onChange={e => setHeatLoadForm(p => ({ ...p, refrigerant: e.target.value }))}
+                    >
+                      <option value="R404A">R404A (Eco-blend)</option>
+                      <option value="R22">R22</option>
+                      <option value="R134a">R134a</option>
+                      <option value="R410A">R410A</option>
+                    </select>
+                  </div>
+                </div>
               </div>
 
               {/* Action Button */}
               <button
                 type="button"
-                className="btn btn-primary w-full mt-3"
-                style={{ fontWeight: 600, display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.5rem', padding: '0.65rem' }}
+                className="btn btn-primary w-full"
+                style={{
+                  fontWeight: 700,
+                  fontSize: '0.92rem',
+                  display: 'flex',
+                  justifyContent: 'center',
+                  alignItems: 'center',
+                  gap: '0.5rem',
+                  padding: '0.75rem',
+                  borderRadius: '8px',
+                  background: 'linear-gradient(135deg, #0284c7 0%, #0369a1 100%)',
+                  boxShadow: '0 4px 14px rgba(2, 132, 199, 0.28)',
+                  cursor: 'pointer',
+                  border: 'none',
+                  color: '#ffffff'
+                }}
                 onClick={handleCalculateHeatLoad}
                 disabled={calculating}
               >

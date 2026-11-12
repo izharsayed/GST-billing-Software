@@ -43,7 +43,9 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
     entryTemp: 28.0,
     compressorRunHours: 16.0,
     safetyFactor: 0.10,
+    brand: 'Daikin',
     compressorPreference: 'any',
+    refrigerant: 'R404A',
     lightsKw: '',
     lightsHours: 8,
     peopleCount: 1,
@@ -823,9 +825,53 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
                   )}
                 </div>
 
+                {/* Equipment Brand, Technology & Refrigerant Preference */}
+                <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.6rem', marginBottom: '1rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, marginBottom: '0.2rem' }}>Brand Preference</label>
+                    <select
+                      className="form-input"
+                      value={heatLoadForm.brand}
+                      onChange={e => setHeatLoadForm(p => ({ ...p, brand: e.target.value }))}
+                      style={{ width: '100%' }}
+                    >
+                      <option value="Daikin">Daikin (Authorized Dealer)</option>
+                      <option value="Emerson">Emerson</option>
+                      <option value="any">Compare All Brands</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, marginBottom: '0.2rem' }}>Compressor Technology</label>
+                    <select
+                      className="form-input"
+                      value={heatLoadForm.compressorPreference}
+                      onChange={e => setHeatLoadForm(p => ({ ...p, compressorPreference: e.target.value }))}
+                      style={{ width: '100%' }}
+                    >
+                      <option value="any">Compare Scroll &amp; Reciprocating</option>
+                      <option value="scroll">Scroll (High Efficiency)</option>
+                      <option value="reciprocating">Reciprocating</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.78rem', fontWeight: 600, marginBottom: '0.2rem' }}>Refrigerant</label>
+                    <select
+                      className="form-input"
+                      value={heatLoadForm.refrigerant}
+                      onChange={e => setHeatLoadForm(p => ({ ...p, refrigerant: e.target.value }))}
+                      style={{ width: '100%' }}
+                    >
+                      <option value="R404A">R404A (Eco-blend)</option>
+                      <option value="R22">R22</option>
+                      <option value="R134a">R134a</option>
+                      <option value="R410A">R410A</option>
+                    </select>
+                  </div>
+                </div>
+
                 <button type="submit" className="btn btn-primary" disabled={calculating} style={{ width: '100%', padding: '10px', display: 'flex', justifyContent: 'center', alignItems: 'center', gap: '0.4rem' }}>
                   {calculating ? <Loader2 size={16} className="animate-spin" /> : <Calculator size={16} />}
-                  {calculating ? 'Calculating Thermodynamic Loads...' : 'Calculate Heat Load & Match Daikin Units'}
+                  {calculating ? 'Calculating Thermodynamic Loads...' : (heatLoadForm.brand === 'Daikin' ? 'Calculate Heat Load & Match Daikin Units' : `Calculate Heat Load & Match ${heatLoadForm.brand === 'any' ? 'Equipment' : heatLoadForm.brand} Units`)}
                 </button>
               </form>
             )}

@@ -13,7 +13,7 @@ export default function ClientModal({ show, onClose, onSave, client, isEditing, 
     // invoiceOptions when the user creates a new invoice for this client.
     // Left blank = use app-wide defaults.
     preferredPaperSize: '',   // '' | 'a4' | 'a5' | 'thermal80' | ...
-    preferredCurrency: '',    // '' | 'INR' | 'USD' | ...
+    preferredCurrency: 'INR',
     autoPrint: false,          // per-client auto-print override
     sites: [],                   // project sites / delivery addresses
     equipment: [],               // installed equipment, models, parts
@@ -27,9 +27,9 @@ export default function ClientModal({ show, onClose, onSave, client, isEditing, 
         name: client.name || '', contactPerson: client.contactPerson || '', amcExpiry: client.amcExpiry || '', address: client.address || '', city: client.city || '',
         pin: client.pin || '', state: client.state || '', gstin: client.gstin || '',
         email: client.email || '', phone: client.phone || '', country: client.country || fallbackCountry,
-        isSEZ: !!client.isSEZ,
+        isSEZ: false,
         preferredPaperSize: client.preferredPaperSize || '',
-        preferredCurrency: client.preferredCurrency || '',
+        preferredCurrency: 'INR',
         autoPrint: !!client.autoPrint,
         sites: Array.isArray(client.sites) ? client.sites : [],
         equipment: Array.isArray(client.equipment) ? client.equipment : [],
@@ -70,7 +70,7 @@ export default function ClientModal({ show, onClose, onSave, client, isEditing, 
 
   const handleSave = () => {
     if (!form.name.trim()) return;
-    onSave(form);
+    onSave({ ...form, isSEZ: false, preferredCurrency: 'INR' });
   };
 
   const sitesList = Array.isArray(form.sites) ? form.sites : [];
@@ -149,16 +149,7 @@ export default function ClientModal({ show, onClose, onSave, client, isEditing, 
             <label className="form-label">AMC / Warranty Contract Expiry (Overall)</label>
             <input type="text" className="form-input" value={form.amcExpiry || ''} onChange={e => setForm(prev => ({ ...prev, amcExpiry: e.target.value }))} placeholder="e.g. 31-Dec-2027 (AMC Active)" />
           </div>
-          {form.country === 'India' && (
-            <div className="form-group" style={{ gridColumn: 'span 2' }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.85rem', cursor: 'pointer' }}>
-                <input type="checkbox" checked={!!form.isSEZ}
-                  onChange={e => setForm(prev => ({ ...prev, isSEZ: e.target.checked }))}
-                  style={{ width: 16, height: 16, accentColor: 'var(--primary)' }} />
-                <span><strong>SEZ unit / Developer</strong> — supplies will be charged IGST regardless of state (Section 16, IGST Act).</span>
-              </label>
-            </div>
-          )}
+          {/* SEZ checkbox removed */}
 
           {/* Project Sites / Delivery Addresses */}
           <div className="form-group" style={{ gridColumn: 'span 2', paddingTop: '0.5rem', borderTop: '1px solid var(--border)', marginTop: '0.5rem' }}>
@@ -307,16 +298,9 @@ export default function ClientModal({ show, onClose, onSave, client, isEditing, 
               <div>
                 <label style={{ display: 'block', fontSize: '0.75rem', fontWeight: 600, marginBottom: 3 }}>Preferred currency</label>
                 <select className="form-input" style={{ fontSize: '0.8rem', padding: '0.35rem' }}
-                  value={form.preferredCurrency}
+                  value={form.preferredCurrency || 'INR'}
                   onChange={e => setForm(prev => ({ ...prev, preferredCurrency: e.target.value }))}>
-                  <option value="">Use invoice default</option>
                   <option value="INR">INR (₹)</option>
-                  <option value="USD">USD ($)</option>
-                  <option value="EUR">EUR (€)</option>
-                  <option value="GBP">GBP (£)</option>
-                  <option value="AED">AED (د.إ)</option>
-                  <option value="SGD">SGD (S$)</option>
-                  <option value="AUD">AUD (A$)</option>
                 </select>
               </div>
               <label style={{ gridColumn: 'span 2', display: 'flex', alignItems: 'center', gap: '0.5rem', fontSize: '0.8rem', cursor: 'pointer', marginTop: '0.2rem' }}>
