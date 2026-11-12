@@ -3805,7 +3805,7 @@ export default function InvoiceGenerator({ onBack, profile: profileProp, editing
             title={showOptions ? 'Hide the layout and column options' : 'Choose columns, sections, paper size and PDF style'}>
             <Settings size={18} /> {showOptions ? 'Hide Options' : 'Customize'}
           </button>
-          <button className="btn btn-secondary" type="button" onClick={() => setShowProposalModal(true)} title="Open 5-Page Techno-Commercial Cold Room Proposal (Cool Era CER/CR-6856 Template)" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: '#0284c7', borderColor: 'rgba(2, 132, 199, 0.35)', background: 'rgba(2, 132, 199, 0.08)', fontWeight: 600 }}>
+          <button className="btn btn-secondary" type="button" onClick={() => setShowProposalModal(true)} title="Open 5-Page Techno-Commercial Cold Room Proposal (MIF Project Template)" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: '#0284c7', borderColor: 'rgba(2, 132, 199, 0.35)', background: 'rgba(2, 132, 199, 0.08)', fontWeight: 600 }}>
             <FileText size={16} /> 5-Page Proposal
           </button>
           <button className="btn btn-secondary" type="button"
@@ -5217,7 +5217,7 @@ export default function InvoiceGenerator({ onBack, profile: profileProp, editing
               <button
                 type="button"
                 onClick={() => setShowProposalModal(true)}
-                title="View / Print 5-Page Techno-Commercial Project Proposal (Cool Era CER/CR-6856 Template)"
+                title="View / Print 5-Page Techno-Commercial Project Proposal (MIF Project Template)"
                 style={{
                   display: 'inline-flex',
                   alignItems: 'center',

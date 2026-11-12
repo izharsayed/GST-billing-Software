@@ -1438,7 +1438,7 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
                     setProposalQuotation(mockQuotation);
                   }}
                   style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#0284c7', borderColor: '#bae6fd', background: '#f0f9ff', fontWeight: 600 }}
-                  title="Preview 5-Page Techno-Commercial Project Proposal (Cool Era Style)"
+                  title="Preview 5-Page Techno-Commercial Project Proposal (MIF Style)"
                 >
                   <FileText size={15} /> Preview 5-Page Proposal
                 </button>
@@ -1529,7 +1529,7 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
                           padding: '4px 8px', fontSize: '0.8rem', marginRight: '0.4rem',
                           color: '#0284c7', borderColor: '#bae6fd', background: '#f0f9ff', fontWeight: 600
                         }}
-                        title="Detailed 5-Page Techno-Commercial Project Proposal (Cool Era Style)"
+                        title="Detailed 5-Page Techno-Commercial Project Proposal (MIF Style)"
                       >
                         <FileText size={13} /> 5-Page Proposal
                       </button>
@@ -1583,7 +1583,7 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
                   }}
                   title="Switch to Full 5-Page Proposal with all 4 Annexures"
                 >
-                  <FileText size={14} /> 5-Page Proposal (Cool Era Style)
+                  <FileText size={14} /> 5-Page Proposal (MIF Style)
                 </button>
                 <button className="btn btn-secondary" onClick={() => window.print()} style={{ display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
                   <Printer size={15} /> Print
@@ -1712,7 +1712,7 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
       )}
 
       {/* ------------------------------------------------------------- */}
-      {/* MODAL: 5-PAGE TECHNO-COMMERCIAL PROPOSAL (COOL ERA STYLE) */}
+      {/* MODAL: 5-PAGE TECHNO-COMMERCIAL PROPOSAL (MIF STYLE) */}
       {/* ------------------------------------------------------------- */}
       {proposalQuotation && (
         <TechnoCommercialProposalModal

@@ -148,10 +148,10 @@ export default function TechnoCommercialProposalModal({
     return {
       // General & Transmittal
       subject: `Proposal for Supply & Installation of ${appTitle}`,
-      kind_attn: quotation?.site_contact || quotation?.customer_name || 'Mr. Rizwan Sayyad',
+      kind_attn: quotation?.site_contact || quotation?.customer_name || 'Valued Customer',
       site_location: quotation?.site_address || quotation?.site_name || 'Site Facility',
       transmittal_body: `This is with reference to your subject requirement. As desired, we are pleased to submit our comprehensive techno-commercial proposal comprising the Supply & Installation of Pre-Fabricated PUF Insulated Panels along with Complete Refrigeration System for your facility.\n\nOur offer is detailed in the following annexures enclosed herewith for your kind perusal and evaluation:`,
-      office_coordinates: `${profile.businessName || 'COOL ERA REFRIGERATION'} • ${profile.city || 'Ahmednagar'}, ${profile.state || 'Maharashtra'}\nWorks & Services India`,
+      office_coordinates: `${profile.businessName || 'MIF REFRIGERATION'} • ${profile.city || 'Ahmednagar'}, ${profile.state || 'Maharashtra'}\nWorks & Services India`,
 
       // Annexure I: Technical Specifications
       annexure_i: {
@@ -450,102 +450,111 @@ export default function TechnoCommercialProposalModal({
       backdropFilter: 'blur(4px)'
     }}>
       <div style={{
-        background: '#f8fafc', color: '#0f172a', borderRadius: 12, width: '100%', maxWidth: 1050, height: '94vh',
+        background: '#f8fafc', color: '#0f172a', borderRadius: 12, width: '100%', maxWidth: 'min(1180px, 96vw)', height: '94vh',
         display: 'flex', flexDirection: 'column', boxShadow: '0 25px 50px -12px rgba(0,0,0,0.35)', overflow: 'hidden'
       }}>
         {/* MODAL TOP TOOLBAR (HIDDEN IN PRINT) */}
         <div className="no-print" style={{
-          display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          padding: '0.85rem 1.5rem', background: '#0b2545', color: '#fff', borderBottom: '1px solid #1e3a5f'
+          display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap',
+          padding: '0.65rem 1.25rem', background: '#0b2545', color: '#fff', borderBottom: '1px solid #1e3a5f', gap: '0.6rem'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <FileText size={20} className="text-primary" style={{ color: '#38bdf8' }} />
-            <div>
-              <div style={{ fontWeight: 700, fontSize: '1.05rem', letterSpacing: '0.3px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.65rem', minWidth: 0, flexShrink: 1 }}>
+            <FileText size={18} style={{ color: '#38bdf8', flexShrink: 0 }} />
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontWeight: 700, fontSize: '0.98rem', letterSpacing: '0.2px', whiteSpace: 'nowrap' }}>
                 Techno-Commercial Project Proposal (5 Pages)
               </div>
-              <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                Ref: {quotation.quotation_number} • Cool Era 4-Annexure Standard Cold-Room Proposal
+              <div style={{ fontSize: '0.73rem', color: '#94a3b8', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                Ref: {quotation.quotation_number} • {profile.businessName || 'MIF'} 4-Annexure Cold-Room Proposal
               </div>
             </div>
           </div>
 
           {/* Mode Switcher Tabs */}
-          <div style={{ display: 'flex', background: 'rgba(255,255,255,0.1)', padding: 3, borderRadius: 8, gap: 4 }}>
+          <div style={{ display: 'flex', background: 'rgba(255,255,255,0.1)', padding: 3, borderRadius: 8, gap: 3, flexShrink: 0 }}>
             <button
+              type="button"
               onClick={() => setActiveTab('preview')}
               style={{
-                display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 6, border: 'none',
-                fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 6, border: 'none',
+                fontWeight: 600, fontSize: '0.78rem', cursor: 'pointer', whiteSpace: 'nowrap',
                 background: activeTab === 'preview' ? '#0284c7' : 'transparent',
                 color: '#fff'
               }}
             >
-              <Eye size={14} /> Print Preview (5 Pages)
+              <Eye size={13} /> Preview (5-Page)
             </button>
             <button
+              type="button"
               onClick={() => setActiveTab('customize')}
               style={{
-                display: 'flex', alignItems: 'center', gap: 6, padding: '6px 14px', borderRadius: 6, border: 'none',
-                fontWeight: 600, fontSize: '0.82rem', cursor: 'pointer',
+                display: 'flex', alignItems: 'center', gap: 5, padding: '5px 11px', borderRadius: 6, border: 'none',
+                fontWeight: 600, fontSize: '0.78rem', cursor: 'pointer', whiteSpace: 'nowrap',
                 background: activeTab === 'customize' ? '#0284c7' : 'transparent',
                 color: '#fff'
               }}
             >
-              <Edit3 size={14} /> Customize Annexures & Terms
+              <Edit3 size={13} /> Customize Terms
             </button>
           </div>
 
           {/* Action Buttons */}
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.6rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem', flexShrink: 0 }}>
             <button
+              type="button"
               className="btn btn-secondary"
               onClick={handleSaveProposal}
               disabled={isSaving || isGeneratingPdf}
               style={{
-                display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem', padding: '6px 12px',
-                background: '#1e293b', color: '#38bdf8', border: '1px solid #334155'
+                display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', padding: '5px 10px',
+                background: '#1e293b', color: '#38bdf8', border: '1px solid #334155', whiteSpace: 'nowrap'
               }}
+              title="Save custom changes to proposal annexures and terms"
             >
-              <Save size={14} /> {isSaving ? 'Saving...' : 'Save Proposal Changes'}
+              <Save size={13} /> {isSaving ? 'Saving...' : 'Save Changes'}
             </button>
 
             <button
+              type="button"
               className="btn btn-secondary"
               onClick={handleDownloadPdf}
               disabled={isGeneratingPdf}
               style={{
-                display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem', padding: '6px 14px',
-                background: '#047857', borderColor: '#059669', color: '#fff', fontWeight: 600, cursor: isGeneratingPdf ? 'wait' : 'pointer'
+                display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', padding: '5px 11px',
+                background: '#047857', borderColor: '#059669', color: '#fff', fontWeight: 600, whiteSpace: 'nowrap',
+                cursor: isGeneratingPdf ? 'wait' : 'pointer'
               }}
               title="Directly compile and download complete 5-Page Proposal PDF file"
             >
-              {isGeneratingPdf ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <Download size={15} />}
-              {isGeneratingPdf ? 'Generating PDF...' : 'Download PDF'}
+              {isGeneratingPdf ? <Loader2 size={13} style={{ animation: 'spin 1s linear infinite' }} /> : <Download size={13} />}
+              {isGeneratingPdf ? 'Generating...' : 'Download PDF'}
             </button>
 
             <button
+              type="button"
               className="btn btn-primary"
               onClick={handlePrint}
               disabled={isGeneratingPdf}
               style={{
-                display: 'flex', alignItems: 'center', gap: '0.4rem', fontSize: '0.82rem', padding: '6px 14px',
-                background: '#0284c7', borderColor: '#0284c7', color: '#fff', fontWeight: 600, cursor: 'pointer'
+                display: 'inline-flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.78rem', padding: '5px 11px',
+                background: '#0284c7', borderColor: '#0284c7', color: '#fff', fontWeight: 600, whiteSpace: 'nowrap',
+                cursor: 'pointer'
               }}
               title="Open browser print dialog (5 Pages A4 layout)"
             >
-              <Printer size={15} /> Print / Save as PDF
+              <Printer size={13} /> Print / PDF
             </button>
 
             <button
+              type="button"
               onClick={onClose}
               style={{
                 background: 'transparent', border: 'none', color: '#94a3b8', cursor: 'pointer',
-                padding: 4, display: 'flex', alignItems: 'center', borderRadius: 4
+                padding: '4px 6px', display: 'flex', alignItems: 'center', borderRadius: 4, marginLeft: '0.2rem'
               }}
               title="Close Proposal"
             >
-              <X size={20} />
+              <X size={18} />
             </button>
           </div>
         </div>
@@ -623,7 +632,7 @@ export default function TechnoCommercialProposalModal({
                   <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', borderBottom: '2.5px solid #0284c7', paddingBottom: '1rem', marginBottom: '1.5rem' }}>
                     <div style={{ flex: 1 }}>
                       <h1 style={{ margin: 0, fontSize: '1.75rem', fontWeight: 800, color: '#0369a1', letterSpacing: '0.5px' }}>
-                        {profile.businessName || 'COOL ERA REFRIGERATION'}
+                        {profile.businessName || 'MIF REFRIGERATION'}
                       </h1>
                       <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0284c7', textTransform: 'uppercase', letterSpacing: '0.5px', marginTop: '0.2rem' }}>
                         {profile.tagline || 'EXCELLENCE IN INDUSTRIAL & COMMERCIAL COOLING SOLUTIONS'}
@@ -724,7 +733,7 @@ export default function TechnoCommercialProposalModal({
                     </div>
                     <div style={{ textAlign: 'right' }}>
                       <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0f172a' }}>
-                        For {profile.businessName || 'COOL ERA REFRIGERATION'}
+                        For {profile.businessName || 'MIF REFRIGERATION'}
                       </div>
                       <div style={{ height: 45, borderBottom: '1px dashed #94a3b8', width: 220, margin: '0.5rem 0 0.3rem auto' }}></div>
                       <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#475569' }}>Authorized Signatory</div>
@@ -733,7 +742,7 @@ export default function TechnoCommercialProposalModal({
 
                   {/* Page 1 Footer */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e2e8f0', marginTop: '1.5rem', paddingTop: '0.5rem', fontSize: '0.72rem', color: '#94a3b8' }}>
-                    <div>{profile.businessName || 'Cool Era Refrigeration'} • Ref: {quotation.quotation_number}</div>
+                    <div>{profile.businessName || 'MIF Refrigeration'} • Ref: {quotation.quotation_number}</div>
                     <div>Offer for Walk-In Cold Rooms</div>
                     <div>Page 1 of 5</div>
                   </div>
@@ -752,7 +761,7 @@ export default function TechnoCommercialProposalModal({
                   {/* Page Header */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #cbd5e1', paddingBottom: '0.5rem', marginBottom: '1rem', fontSize: '0.82rem' }}>
                     <div style={{ fontWeight: 700, color: '#0369a1' }}>
-                      {profile.businessName || 'COOL ERA REFRIGERATION'} <span style={{ color: '#64748b', fontWeight: 400 }}>{profile.city || 'Ahmednagar'} – {profile.pin || '414003'}</span>
+                      {profile.businessName || 'MIF REFRIGERATION'} <span style={{ color: '#64748b', fontWeight: 400 }}>{profile.city || 'Ahmednagar'} – {profile.pin || '414003'}</span>
                     </div>
                     <div style={{ color: '#64748b' }}>
                       Ref: <strong>{quotation.quotation_number}</strong> | Date: {displayDate}
@@ -912,7 +921,7 @@ export default function TechnoCommercialProposalModal({
 
                 {/* Page 2 Footer */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e2e8f0', marginTop: '1.5rem', paddingTop: '0.5rem', fontSize: '0.72rem', color: '#94a3b8' }}>
-                  <div>{profile.businessName || 'Cool Era Refrigeration'} • Ref: {quotation.quotation_number}</div>
+                  <div>{profile.businessName || 'MIF Refrigeration'} • Ref: {quotation.quotation_number}</div>
                   <div>Annexure I: Technical Specifications</div>
                   <div>Page 2 of 5</div>
                 </div>
@@ -930,7 +939,7 @@ export default function TechnoCommercialProposalModal({
                   {/* Page Header */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #cbd5e1', paddingBottom: '0.5rem', marginBottom: '1rem', fontSize: '0.82rem' }}>
                     <div style={{ fontWeight: 700, color: '#0369a1' }}>
-                      {profile.businessName || 'COOL ERA REFRIGERATION'} <span style={{ color: '#64748b', fontWeight: 400 }}>{profile.city || 'Ahmednagar'} – {profile.pin || '414003'}</span>
+                      {profile.businessName || 'MIF REFRIGERATION'} <span style={{ color: '#64748b', fontWeight: 400 }}>{profile.city || 'Ahmednagar'} – {profile.pin || '414003'}</span>
                     </div>
                     <div style={{ color: '#64748b' }}>
                       Ref: <strong>{quotation.quotation_number}</strong> | Date: {displayDate}
@@ -1050,7 +1059,7 @@ export default function TechnoCommercialProposalModal({
                   <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid #e2e8f0', paddingTop: '1rem' }}>
                     <div style={{ textAlign: 'center', width: 220 }}>
                       <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#0f172a' }}>
-                        For {profile.businessName || 'COOL ERA REFRIGERATION'}
+                        For {profile.businessName || 'MIF REFRIGERATION'}
                       </div>
                       <div style={{ height: 40, borderBottom: '1px dashed #94a3b8', margin: '0.5rem 0 0.3rem' }}></div>
                       <div style={{ fontSize: '0.76rem', fontWeight: 700, color: '#475569' }}>Authorized Signatory</div>
@@ -1059,7 +1068,7 @@ export default function TechnoCommercialProposalModal({
 
                   {/* Page 3 Footer */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e2e8f0', marginTop: '1.5rem', paddingTop: '0.5rem', fontSize: '0.72rem', color: '#94a3b8' }}>
-                    <div>{profile.businessName || 'Cool Era Refrigeration'} • Ref: {quotation.quotation_number}</div>
+                    <div>{profile.businessName || 'MIF Refrigeration'} • Ref: {quotation.quotation_number}</div>
                     <div>Annexure II: Schedule of Prices</div>
                     <div>Page 3 of 5</div>
                   </div>
@@ -1078,7 +1087,7 @@ export default function TechnoCommercialProposalModal({
                   {/* Page Header */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #cbd5e1', paddingBottom: '0.5rem', marginBottom: '1rem', fontSize: '0.82rem' }}>
                     <div style={{ fontWeight: 700, color: '#0369a1' }}>
-                      {profile.businessName || 'COOL ERA REFRIGERATION'} <span style={{ color: '#64748b', fontWeight: 400 }}>{profile.city || 'Ahmednagar'} – {profile.pin || '414003'}</span>
+                      {profile.businessName || 'MIF REFRIGERATION'} <span style={{ color: '#64748b', fontWeight: 400 }}>{profile.city || 'Ahmednagar'} – {profile.pin || '414003'}</span>
                     </div>
                     <div style={{ color: '#64748b' }}>
                       Ref: <strong>{quotation.quotation_number}</strong> | Date: {displayDate}
@@ -1127,7 +1136,7 @@ export default function TechnoCommercialProposalModal({
 
                 {/* Page 4 Footer */}
                 <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e2e8f0', marginTop: '1.5rem', paddingTop: '0.5rem', fontSize: '0.72rem', color: '#94a3b8' }}>
-                  <div>{profile.businessName || 'Cool Era Refrigeration'} • Ref: {quotation.quotation_number}</div>
+                  <div>{profile.businessName || 'MIF Refrigeration'} • Ref: {quotation.quotation_number}</div>
                   <div>Annexure III: Excluded Works</div>
                   <div>Page 4 of 5</div>
                 </div>
@@ -1145,7 +1154,7 @@ export default function TechnoCommercialProposalModal({
                   {/* Page Header */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid #cbd5e1', paddingBottom: '0.5rem', marginBottom: '1rem', fontSize: '0.82rem' }}>
                     <div style={{ fontWeight: 700, color: '#0369a1' }}>
-                      {profile.businessName || 'COOL ERA REFRIGERATION'} <span style={{ color: '#64748b', fontWeight: 400 }}>{profile.city || 'Ahmednagar'} – {profile.pin || '414003'}</span>
+                      {profile.businessName || 'MIF REFRIGERATION'} <span style={{ color: '#64748b', fontWeight: 400 }}>{profile.city || 'Ahmednagar'} – {profile.pin || '414003'}</span>
                     </div>
                     <div style={{ color: '#64748b' }}>
                       Ref: <strong>{quotation.quotation_number}</strong> | Date: {displayDate}
@@ -1194,7 +1203,7 @@ export default function TechnoCommercialProposalModal({
                     {/* Company Signatory */}
                     <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', justifyContent: 'flex-end', padding: '0.8rem' }}>
                       <div style={{ fontSize: '0.85rem', fontWeight: 800, color: '#0f172a' }}>
-                        For {profile.businessName || 'COOL ERA REFRIGERATION'}
+                        For {profile.businessName || 'MIF REFRIGERATION'}
                       </div>
                       <div style={{ borderBottom: '1px dashed #94a3b8', height: 35, width: 220, margin: '0.5rem 0 0.3rem auto' }}></div>
                       <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#475569' }}>Authorized Signatory</div>
@@ -1203,7 +1212,7 @@ export default function TechnoCommercialProposalModal({
 
                   {/* Page 5 Footer */}
                   <div style={{ display: 'flex', justifyContent: 'space-between', borderTop: '1px solid #e2e8f0', marginTop: '1.5rem', paddingTop: '0.5rem', fontSize: '0.72rem', color: '#94a3b8' }}>
-                    <div>{profile.businessName || 'Cool Era Refrigeration'} • Ref: {quotation.quotation_number}</div>
+                    <div>{profile.businessName || 'MIF Refrigeration'} • Ref: {quotation.quotation_number}</div>
                     <div>Annexure IV: Contract Conditions</div>
                     <div>Page 5 of 5</div>
                   </div>
