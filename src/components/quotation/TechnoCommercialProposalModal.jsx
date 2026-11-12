@@ -79,6 +79,7 @@ export default function TechnoCommercialProposalModal({
 
   // Initialize or generate proposal data
   const getInitialProposalData = () => {
+    if (!quotation) return null;
     if (quotation?.proposal_data && typeof quotation.proposal_data === 'object' && Object.keys(quotation.proposal_data).length > 0) {
       return quotation.proposal_data;
     }
@@ -186,6 +187,7 @@ export default function TechnoCommercialProposalModal({
       : (doorsCount > 1 ? `${doorsCount} Nos. ${doorLabel} (1 per Chamber)` : `1 No. ${doorLabel}`);
 
     const ambientVal = tech.ambient_temp_c || tech.ambientTemp || tech.temperatures?.ambientTempC || 43;
+    const ambientStr = `${ambientVal}°C Design Ambient`;
     const roomTempVal = tech.room_temp || tech.target_temp_c || (tech.temperatures?.roomTempC !== undefined ? `${tech.temperatures.roomTempC}°C` : tempRange);
     const sheetMat = tech.sheetMaterial || tech.sheet_material || '0.5 mm PPGI (Inner & Outer)';
 
@@ -263,7 +265,7 @@ export default function TechnoCommercialProposalModal({
     };
   };
 
-  const [proposalData, setProposalData] = useState(getInitialProposalData());
+  const [proposalData, setProposalData] = useState(() => getInitialProposalData());
 
   useEffect(() => {
     if (quotation) {
@@ -271,7 +273,7 @@ export default function TechnoCommercialProposalModal({
     }
   }, [quotation]);
 
-  if (!isOpen || !quotation) return null;
+  if (!isOpen || !quotation || !proposalData) return null;
 
   // Financial calculations
   const basicCost = (Number(quotation.equipment_subtotal) || 0) + (Number(quotation.charges_subtotal) || 0);
