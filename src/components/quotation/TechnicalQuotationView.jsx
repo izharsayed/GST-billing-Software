@@ -43,7 +43,7 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
     entryTemp: 28.0,
     compressorRunHours: 16.0,
     safetyFactor: 0.10,
-    brand: 'Daikin',
+    brand: 'Emerson',
     compressorPreference: 'any',
     refrigerant: 'R404A',
     lightsKw: '',
@@ -96,7 +96,7 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
     ambientTemp: 43,
     refrigerant: 'R404A',
     compressorType: 'scroll',
-    brand: 'Daikin',
+    brand: 'Emerson',
     dailyMilkLiters: 1000,
   });
 
@@ -165,7 +165,7 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
           product_id: mu.unit.product_id,
           model_id: mu.unit.id,
           item_type: 'equipment',
-          description: `Daikin ${mu.unit.model_number} Outdoor Condensing Unit (${mu.unit.nominal_tr} TR each, ${mu.count} Sets = ${mu.totalCapacityTr} TR)`,
+          description: `${mu.unit.brand_name || "Emerson"} ${mu.unit.model_number} Outdoor Condensing Unit (${mu.unit.nominal_tr} TR each, ${mu.count} Sets = ${mu.totalCapacityTr} TR)`,
           hsn_sac: '84189900',
           quantity: mu.count,
           unit: 'Set',
@@ -182,7 +182,7 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
           product_id: ccu.product_id,
           model_id: ccu.id,
           item_type: 'equipment',
-          description: `Daikin ${ccu.model_number} Outdoor Condensing Unit (${ccu.nominal_tr} TR / ${ccu.capacity} kW @ ${res.inputs.temperatures.roomTempC}°C)`,
+          description: `${ccu.brand_name || "Emerson"} ${ccu.model_number} Outdoor Condensing Unit (${ccu.nominal_tr} TR / ${ccu.capacity} kW @ ${res.inputs.temperatures.roomTempC}°C)`,
           hsn_sac: '84189900',
           quantity: 1,
           unit: 'Set',
@@ -202,7 +202,7 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
           product_id: muA.unit.product_id,
           model_id: muA.unit.id,
           item_type: 'equipment',
-          description: `Daikin ${muA.unit.model_number} DX Air Cooling Unit (${muA.unit.capacity_kw} kW each, ${muA.count} Nos = ${muA.totalCapacityKw} kW)`,
+          description: `${muA.unit.model_number} DX Air Cooling Unit (${muA.unit.capacity_kw} kW each, ${muA.count} Nos = ${muA.totalCapacityKw} kW)`,
           hsn_sac: '84189900',
           quantity: muA.count,
           unit: 'Nos',
@@ -219,7 +219,7 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
           product_id: evap.product_id,
           model_id: evap.id,
           item_type: 'equipment',
-          description: `Daikin ${evap.model_number} DX Air Cooling Unit Evaporator (${evap.capacity_kw} kW) - ${evap.defrost_type}`,
+          description: `${evap.model_number} DX Air Cooling Unit Evaporator (${evap.capacity_kw} kW) - ${evap.defrost_type}`,
           hsn_sac: '84189900',
           quantity: 1,
           unit: 'Nos',
@@ -235,7 +235,7 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
       const vr = rec.valveRecommendations || {};
       newItems.push({
         item_type: 'component',
-        description: `Daikin Refrigeration Kit: ${vr.expansionValve} Expansion Valve + ${vr.orifice} Orifice + ${vr.solenoidValve} Solenoid + ${vr.controller}`,
+        description: `Commercial Refrigeration Kit: ${vr.expansionValve} Expansion Valve + ${vr.orifice} Orifice + ${vr.solenoidValve} Solenoid + ${vr.controller}`,
         hsn_sac: '84189900',
         quantity: 1,
         unit: 'Set',
@@ -261,7 +261,7 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
       });
 
       setItems(newItems);
-      toast('Heat load calculated & Daikin equipment added to quotation!', 'success');
+      toast('Heat load calculated & Emerson equipment added to quotation!', 'success');
     } catch {
       toast('Failed to calculate refrigeration heat load', 'error');
     } finally {
@@ -325,7 +325,7 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
           product_id: evap.product_id,
           model_id: evap.id,
           item_type: 'equipment',
-          description: `Daikin ${evap.model_number} Air Cooling Unit Evaporator (${evap.capacity} kW)`,
+          description: `${evap.model_number} Air Cooling Unit Evaporator (${evap.capacity} kW)`,
           hsn_sac: '84189900',
           quantity: 1,
           unit: 'Nos',
@@ -835,7 +835,7 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
                       onChange={e => setHeatLoadForm(p => ({ ...p, brand: e.target.value }))}
                       style={{ width: '100%' }}
                     >
-                      <option value="Daikin">Daikin (Authorized Dealer)</option>
+                      <option value="Emerson">Emerson Climate Technologies</option>
                       <option value="Emerson">Emerson</option>
                       <option value="any">Compare All Brands</option>
                     </select>
@@ -929,11 +929,11 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
                     <strong>Outdoor CCU: </strong>
                     {heatLoadResult.recommendations.multiUnitCcu ? (
                       <span style={{ color: '#b45309', fontWeight: 700 }}>
-                        {heatLoadResult.recommendations.multiUnitCcu.count} × Daikin {heatLoadResult.recommendations.multiUnitCcu.unit.model_number} ({heatLoadResult.recommendations.multiUnitCcu.totalCapacityTr} TR)
+                        {heatLoadResult.recommendations.multiUnitCcu.count} × Emerson {heatLoadResult.recommendations.multiUnitCcu.unit.model_number} ({heatLoadResult.recommendations.multiUnitCcu.totalCapacityTr} TR)
                       </span>
                     ) : (
                       <span style={{ color: '#0369a1', fontWeight: 700 }}>
-                        Daikin {heatLoadResult.recommendations.ccu?.model_number} ({heatLoadResult.recommendations.ccu?.nominal_tr} TR)
+                        Emerson {heatLoadResult.recommendations.ccu?.model_number} ({heatLoadResult.recommendations.ccu?.nominal_tr} TR)
                       </span>
                     )}
                   </div>
@@ -941,11 +941,11 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
                     <strong>Indoor ACU: </strong>
                     {heatLoadResult.recommendations.multiUnitAcu ? (
                       <span style={{ color: '#b45309', fontWeight: 700 }}>
-                        {heatLoadResult.recommendations.multiUnitAcu.count} × Daikin {heatLoadResult.recommendations.multiUnitAcu.unit.model_number} ({heatLoadResult.recommendations.multiUnitAcu.totalCapacityKw} kW)
+                        {heatLoadResult.recommendations.multiUnitAcu.count} × {heatLoadResult.recommendations.multiUnitAcu.unit.model_number} ({heatLoadResult.recommendations.multiUnitAcu.totalCapacityKw} kW)
                       </span>
                     ) : (
                       <span style={{ color: '#0369a1', fontWeight: 700 }}>
-                        Daikin {heatLoadResult.recommendations.evaporator?.model_number} ({heatLoadResult.recommendations.evaporator?.capacity_kw} kW)
+                        {heatLoadResult.recommendations.evaporator?.model_number} ({heatLoadResult.recommendations.evaporator?.capacity_kw} kW)
                       </span>
                     )}
                   </div>
@@ -1097,7 +1097,7 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
                       onChange={e => setCalcForm(prev => ({ ...prev, brand: e.target.value }))}
                       style={{ width: '100%' }}
                     >
-                      <option value="Daikin">Daikin (Authorized Dealer)</option>
+                      <option value="Emerson">Emerson Climate Technologies</option>
                       <option value="Emerson">Emerson Climate</option>
                       <option value="any">Compare All (Daikin & Emerson)</option>
                     </select>
@@ -1423,10 +1423,10 @@ export default function TechnicalQuotationView({ onNavigateToInvoice }) {
                       modelRecommendation: sizerMode === 'heatload' && heatLoadResult ? {
                         catalogue_ref: heatLoadResult.equipmentRecommendation?.ccu?.modelNumber
                           ? `${heatLoadResult.equipmentRecommendation.ccu.modelNumber} (${heatLoadResult.equipmentRecommendation.ccu.nominal_tr} TR)`
-                          : 'Daikin CCU',
+                          : 'Emerson CCU',
                         evaporator_model: heatLoadResult.equipmentRecommendation?.acu?.modelNumber
                           ? `${heatLoadResult.equipmentRecommendation.acu.modelNumber} (${heatLoadResult.equipmentRecommendation.acu.capacity_kw} kW)`
-                          : 'Daikin ACU',
+                          : 'Commercial ACU',
                       } : (recommendation?.recommendations ? {
                         catalogue_ref: recommendation.recommendations.cdu ? `${recommendation.recommendations.cdu.brand_name || 'Daikin'} ${recommendation.recommendations.cdu.model_number}` : '',
                       } : null)

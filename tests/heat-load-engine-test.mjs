@@ -89,8 +89,8 @@ assert(fb.productComponents.qSensible2Kj > 0, `Subzero sensible heat > 0: ${fb.p
 assert(fb.productComponents.qRespirationKj === 0, 'Frozen goods respiration is 0');
 assert(freezerResult.machineRating.capacityTr > 0, `Freezer capacity TR derived: ${freezerResult.machineRating.capacityTr} TR`);
 
-console.log('\n--- TEST SUITE 5: Daikin Commercial Equipment Matching ---');
-// Test chiller matching with 3.2 TR load (should select CCMS060GARY16 3.56 TR)
+console.log('\n--- TEST SUITE 5: Emerson Commercial Equipment Matching ---');
+// Test chiller matching with medium temp load
 const medMatch = calculateHeatLoad({
   length: 7.0,
   width: 5.0,
@@ -104,13 +104,13 @@ const medMatch = calculateHeatLoad({
   entryTemp: 25.0,
 });
 
-assert(medMatch.recommendations.ccu !== null, 'Daikin CCU matched for medium temp');
+assert(medMatch.recommendations.ccu !== null, 'Emerson CCU matched for medium temp');
 console.log(`  Matched Medium CCU: ${medMatch.recommendations.ccu.model_number} (${medMatch.recommendations.ccu.nominal_tr} TR)`);
-assert(medMatch.recommendations.ccu.model_number.includes('CCM'), 'Matched CCU is a medium-temp CCM model');
-assert(medMatch.recommendations.evaporator !== null, 'Daikin ACU matched');
+assert(medMatch.recommendations.ccu.brand_name === 'Emerson', 'Matched CCU brand is Emerson');
+assert(medMatch.recommendations.evaporator !== null, 'Commercial DX ACU matched');
 console.log(`  Matched Medium ACU: ${medMatch.recommendations.evaporator.model_number} (${medMatch.recommendations.evaporator.capacity_kw} kW)`);
 
-// Test freezer matching with 1.2 TR load (should select CCLS060GARY16 1.54 TR)
+// Test freezer matching with low temp load
 const ltMatch = calculateHeatLoad({
   length: 4.0,
   width: 4.0,
@@ -124,10 +124,10 @@ const ltMatch = calculateHeatLoad({
   entryTemp: 25.0,
 });
 
-assert(ltMatch.recommendations.ccu !== null, 'Daikin CCU matched for low temp freezer');
+assert(ltMatch.recommendations.ccu !== null, 'Emerson CCU matched for low temp freezer');
 console.log(`  Matched Freezer CCU: ${ltMatch.recommendations.ccu.model_number} (${ltMatch.recommendations.ccu.nominal_tr} TR)`);
-assert(ltMatch.recommendations.ccu.model_number.includes('CCL'), 'Matched CCU is a low-temp CCL model');
-assert(ltMatch.recommendations.evaporator !== null, 'Daikin Freezer ACU matched');
+assert(ltMatch.recommendations.ccu.brand_name === 'Emerson', 'Matched Freezer CCU brand is Emerson');
+assert(ltMatch.recommendations.evaporator !== null, 'Commercial Freezer ACU matched');
 console.log(`  Matched Freezer ACU: ${ltMatch.recommendations.evaporator.model_number} (${ltMatch.recommendations.evaporator.capacity_kw} kW)`);
 
 console.log(`\n========================================`);

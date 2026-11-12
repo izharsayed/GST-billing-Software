@@ -24,7 +24,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
     ambientTemp: 43,
     refrigerant: 'R404A',
     compressorType: 'scroll',
-    brand: 'Daikin',
+    brand: 'Emerson',
     dailyMilkLiters: 1000,
   });
   const [recommendation, setRecommendation] = useState(null);
@@ -46,7 +46,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
     entryTemp: 28.0,
     compressorRunHours: 16.0,
     safetyFactor: 0.10,
-    brand: 'Daikin',
+    brand: 'Emerson',
     compressorPreference: 'any',
     refrigerant: 'R404A',
     // Optional internal loads
@@ -166,7 +166,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
         cdu: cduPrice,
         evaporator: evapPrice,
       }));
-      toast('Heat load calculated & Daikin equipment matched!', 'success');
+      toast('Heat load calculated & Emerson equipment matched!', 'success');
     } catch {
       toast('Failed to calculate refrigeration heat load', 'error');
     } finally {
@@ -236,7 +236,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
 
     if (sizerMode === 'heatload') {
       if (!heatLoadResult) {
-        toast('Please run "Calculate Heat Load & Match Daikin Units" first.', 'error');
+        toast('Please run "Calculate Heat Load & Match Equipment" first.', 'error');
         return;
       }
 
@@ -248,7 +248,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
         if (rec.multiUnitCcu) {
           const mu = rec.multiUnitCcu;
           itemsToInsert.push({
-            name: `Daikin ${mu.unit.model_number} Outdoor Condensing Unit (${mu.unit.nominal_tr} TR each, ${mu.count} Sets = ${mu.totalCapacityTr} TR)`,
+            name: `${mu.unit.brand_name || "Emerson"} ${mu.unit.model_number} Outdoor Condensing Unit (${mu.unit.nominal_tr} TR each, ${mu.count} Sets = ${mu.totalCapacityTr} TR)`,
             hsn: '84189900',
             quantity: mu.count,
             unit: 'Set',
@@ -261,7 +261,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
         } else if (rec.ccu) {
           const ccu = rec.ccu;
           itemsToInsert.push({
-            name: `Daikin ${ccu.model_number} Outdoor Condensing Unit (${ccu.nominal_tr || ccu.capacity} TR @ ${heatLoadResult.inputs.temperatures.roomTempC}°C)`,
+            name: `${ccu.brand_name || "Emerson"} ${ccu.model_number} Outdoor Condensing Unit (${ccu.nominal_tr || ccu.capacity} TR @ ${heatLoadResult.inputs.temperatures.roomTempC}°C)`,
             hsn: '84189900',
             quantity: 1,
             unit: 'Set',
@@ -279,7 +279,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
         if (rec.multiUnitAcu) {
           const muA = rec.multiUnitAcu;
           itemsToInsert.push({
-            name: `Daikin ${muA.unit.model_number} DX Air Cooling Unit (${muA.unit.capacity_kw} kW each, ${muA.count} Nos = ${muA.totalCapacityKw} kW)`,
+            name: `${muA.unit.model_number} DX Air Cooling Unit (${muA.unit.capacity_kw} kW each, ${muA.count} Nos = ${muA.totalCapacityKw} kW)`,
             hsn: '84189900',
             quantity: muA.count,
             unit: 'Nos',
@@ -292,7 +292,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
         } else if (rec.evaporator) {
           const evap = rec.evaporator;
           itemsToInsert.push({
-            name: `Daikin ${evap.model_number} DX Air Cooling Unit (${evap.capacity_kw || evap.capacity} kW) - ${evap.defrost_type || 'Auto Defrost'}`,
+            name: `${evap.model_number} DX Air Cooling Unit (${evap.capacity_kw || evap.capacity} kW) - ${evap.defrost_type || 'Auto Defrost'}`,
             hsn: '84189900',
             quantity: 1,
             unit: 'Nos',
@@ -309,7 +309,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
       if (selectedLines.kit) {
         const vr = rec.valveRecommendations || {};
         itemsToInsert.push({
-          name: `Daikin Cold-Room Refrigeration Kit (${vr.expansionValve} TXV + ${vr.orifice} Orifice + ${vr.solenoidValve} Solenoid + ${vr.controller})`,
+          name: `Commercial Cold-Room Refrigeration Kit (${vr.expansionValve} TXV + ${vr.orifice} Orifice + ${vr.solenoidValve} Solenoid + ${vr.controller})`,
           hsn: '84189900',
           quantity: 1,
           unit: 'Set',
@@ -374,7 +374,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
       if (selectedLines.evaporator && rec.evaporator) {
         const evap = rec.evaporator;
         itemsToInsert.push({
-          name: `Daikin ${evap.model_number} Air Cooling Unit Evaporator (${evap.capacity} kW)`,
+          name: `${evap.model_number} Air Cooling Unit Evaporator (${evap.capacity} kW)`,
           hsn: '84189900',
           quantity: 1,
           unit: 'Set',
@@ -453,7 +453,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                 Refrigeration Heat Load &amp; Sizing Engine
               </h3>
               <p style={{ margin: 0, fontSize: '0.78rem', color: 'var(--text-muted)' }}>
-                ASHRAE / USDA Thermodynamic Engine • Daikin Commercial Equipment Matcher
+                ASHRAE / USDA Thermodynamic Engine • Emerson Commercial Equipment Matcher
               </p>
             </div>
           </div>
@@ -476,7 +476,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
             style={{ fontSize: '0.82rem', padding: '0.5rem', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: '0.4rem', fontWeight: 600 }}
             onClick={() => setSizerMode('heatload')}
           >
-            <Cpu size={15} /> Advanced Heat Load Engine (ASHRAE / Daikin)
+            <Cpu size={15} /> Advanced Heat Load Engine (ASHRAE / Emerson)
           </button>
           <button
             type="button"
@@ -869,7 +869,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                         else setCduBrandFilter('all');
                       }}
                     >
-                      <option value="Daikin">Daikin (Authorized Dealer)</option>
+                      <option value="Emerson">Emerson Climate Technologies</option>
                       <option value="Emerson">Emerson</option>
                       <option value="any">Compare All Brands</option>
                     </select>
@@ -929,7 +929,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                 disabled={calculating}
               >
                 {calculating ? <Loader2 size={18} className="animate-spin" /> : <Calculator size={18} />}
-                {calculating ? 'Running Thermodynamic Calculations...' : 'Calculate Heat Load & Match Daikin Units'}
+                {calculating ? 'Running Thermodynamic Calculations...' : 'Calculate Heat Load & Match Equipment'}
               </button>
             </div>
 
@@ -1038,7 +1038,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                   {/* CCU Card */}
                   <div style={{ background: '#fff', padding: '0.75rem', borderRadius: '6px', border: '1px solid #93c5fd' }}>
                     <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0369a1', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <span>🏭</span> Daikin Outdoor Condensing Unit (CCU)
+                      <span>🏭</span> Emerson Outdoor Condensing Unit (CCU)
                     </div>
                     {heatLoadResult.recommendations.multiUnitCcu ? (
                       <div>
@@ -1072,7 +1072,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                   {/* ACU / Evaporator Card */}
                   <div style={{ background: '#fff', padding: '0.75rem', borderRadius: '6px', border: '1px solid #93c5fd' }}>
                     <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0369a1', marginBottom: '4px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                      <span>❄️</span> Daikin Indoor DX Evaporator (ACU)
+                      <span>❄️</span> Indoor DX Evaporator (ACU)
                     </div>
                     {heatLoadResult.recommendations.multiUnitAcu ? (
                       <div>
@@ -1121,8 +1121,8 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                         />
                         <span>
                           {heatLoadResult.recommendations.multiUnitCcu
-                            ? `${heatLoadResult.recommendations.multiUnitCcu.count} × Daikin ${heatLoadResult.recommendations.multiUnitCcu.unit.model_number} Condensing Unit`
-                            : `Daikin ${activeHeatLoadCcu?.model_number || 'CCU'} Condensing Unit`}
+                            ? `${heatLoadResult.recommendations.multiUnitCcu.count} × Emerson ${heatLoadResult.recommendations.multiUnitCcu.unit.model_number} Condensing Unit`
+                            : `${activeHeatLoadCcu?.brand_name || "Emerson"} ${activeHeatLoadCcu?.model_number || 'CCU'} Condensing Unit`}
                         </span>
                       </label>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -1147,8 +1147,8 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                         />
                         <span>
                           {heatLoadResult.recommendations.multiUnitAcu
-                            ? `${heatLoadResult.recommendations.multiUnitAcu.count} × Daikin ${heatLoadResult.recommendations.multiUnitAcu.unit.model_number} Evaporator`
-                            : `Daikin ${activeHeatLoadEvap?.model_number || 'ACU'} Air Cooling Unit`}
+                            ? `${heatLoadResult.recommendations.multiUnitAcu.count} × ${heatLoadResult.recommendations.multiUnitAcu.unit.model_number} Evaporator`
+                            : `${activeHeatLoadEvap?.model_number || 'ACU'} Air Cooling Unit`}
                         </span>
                       </label>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
@@ -1171,7 +1171,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                           checked={selectedLines.kit}
                           onChange={e => setSelectedLines(p => ({ ...p, kit: e.target.checked }))}
                         />
-                        <span>Daikin Refrigeration Kit (TXV + Orifice + Solenoid + Dixell Controller)</span>
+                        <span>Commercial Refrigeration Kit (TXV + Orifice + Solenoid + Dixell Controller)</span>
                       </label>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>₹</span>
@@ -1336,7 +1336,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                     value={calcForm.brand}
                     onChange={e => setCalcForm(p => ({ ...p, brand: e.target.value }))}
                   >
-                    <option value="Daikin">Daikin (Authorized Dealer)</option>
+                    <option value="Emerson">Emerson Climate Technologies</option>
                     <option value="Emerson">Emerson</option>
                     <option value="any">Compare All Brands</option>
                   </select>
@@ -1502,7 +1502,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                           checked={selectedLines.evaporator}
                           onChange={e => setSelectedLines(p => ({ ...p, evaporator: e.target.checked }))}
                         />
-                        <span>Daikin {recommendation.recommendations?.evaporator?.model_number} Air Cooling Unit</span>
+                        <span>{recommendation.recommendations?.evaporator?.model_number} Air Cooling Unit</span>
                       </label>
                       <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
                         <span style={{ fontSize: '0.75rem', color: 'var(--text-muted)' }}>₹</span>

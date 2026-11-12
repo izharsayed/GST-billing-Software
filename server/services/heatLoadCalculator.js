@@ -212,8 +212,8 @@ export function calculateHeatLoad(inputs = {}) {
   const capacityTr = Math.round((capacityKw / 3.517) * 100) / 100;
   const capacityBtuHr = Math.round(capacityKw * 3412.14);
 
-  // 10. Daikin Commercial Equipment Matching Algorithm
-  const matchedEquipment = matchDaikinEquipment({
+  // 10. Commercial Equipment Matching Algorithm (Emerson & Commercial DX Evaporators)
+  const matchedEquipment = matchCommercialEquipment({
     requiredTr: capacityTr,
     requiredKw: capacityKw,
     roomTempC,
@@ -309,35 +309,27 @@ export function calculateHeatLoad(inputs = {}) {
 }
 
 /**
- * Match Daikin Outdoor Condensing Unit (CCU) and Indoor Air Cooling Unit (ACU)
+ * Match Emerson Outdoor Condensing Unit (CCU) and Indoor Air Cooling Unit (ACU)
  */
-export function matchDaikinEquipment({ requiredTr, requiredKw, roomTempC, compressorPreference = 'any' }) {
+export function matchCommercialEquipment({ requiredTr, requiredKw, roomTempC, compressorPreference = 'any' }) {
   const isFreezer = roomTempC < 0;
-  const ccuPrefix = isFreezer ? 'CCL' : 'CCM';
 
-  // Fetch Daikin condensing units matching category
-  let ccuQuery = `
+  // Fetch Emerson condensing units
+  const ccuQuery = `
     SELECT m.*, b.name as brand_name, p.name as product_name,
            prc.selling_price, prc.purchase_cost
     FROM product_models m
     JOIN brands b ON m.brand_id = b.id
     JOIN products p ON m.product_id = p.id
     LEFT JOIN product_prices prc ON m.id = prc.model_id
-    WHERE b.name = 'Daikin' AND m.model_number LIKE ?
+    WHERE b.name = 'Emerson' AND (p.id = 'prod_emerson_cdu' OR p.name LIKE '%Condensing%')
   `;
-  const queryParams = [`%${ccuPrefix}%`];
-
-  if (compressorPreference === 'scroll') {
-    ccuQuery += " AND m.model_number LIKE '%CCLS%' OR m.model_number LIKE '%CCMS%'";
-  } else if (compressorPreference === 'reciprocating') {
-    ccuQuery += " AND m.model_number LIKE '%CCLR%' OR m.model_number LIKE '%CCMR%'";
-  }
 
   let ccuModels = [];
   try {
-    ccuModels = db.prepare(ccuQuery).all(...queryParams);
+    ccuModels = db.prepare(ccuQuery).all();
   } catch (err) {
-    console.error('Error fetching Daikin CCUs:', err);
+    console.error('Error fetching Emerson CCUs:', err);
   }
 
   // Parse specifications into model objects
@@ -348,19 +340,35 @@ export function matchDaikinEquipment({ requiredTr, requiredKw, roomTempC, compre
     } catch (_) {}
     const specMap = Object.fromEntries(specs.map(s => [s.spec_key, s.spec_value]));
     const nomTr = Number(specMap.nominal_tr) || Math.round((m.capacity / 3.517) * 100) / 100;
+    const desc = m.description || '';
+    const isScroll = desc.includes('Scroll') || m.model_number.includes('ZX');
+    const isRecip = desc.includes('Recip') || m.model_number.startsWith('K');
+
     return {
       ...m,
       nominal_tr: nomTr,
-      cooling_capacity_watts: Number(specMap.cooling_capacity_watts) || (m.capacity * 1000),
+      cooling_capacity_watts: Number(specMap.cooling_capacity_watts) || Math.round(m.capacity * 1000),
       power_input_watts: Number(specMap.power_input_watts) || 0,
       air_flow_m3h: Number(specMap.air_flow_m3h) || 0,
-      compressor_type: specMap.compressor_type || (m.model_number.includes('S') ? 'Scroll' : 'Reciprocating'),
-      horse_power: Number(specMap.horse_power) || 0,
+      compressor_type: isScroll ? 'Scroll' : (isRecip ? 'Reciprocating' : (specMap.compressor_type || 'Hermetic')),
+      horse_power: Number(specMap.horse_power) || Math.round(nomTr * 1.35 * 10) / 10,
     };
+  }).filter(c => {
+    // Temperature filtering: Chiller vs Freezer
+    if (isFreezer) {
+      return (c.temp_range_min !== null && c.temp_range_min <= -15) || c.description.toLowerCase().includes('freezer');
+    } else {
+      return (c.temp_range_max !== null && c.temp_range_max >= 0) || c.description.toLowerCase().includes('chiller');
+    }
+  }).filter(c => {
+    // Compressor preference
+    if (compressorPreference === 'scroll') return c.compressor_type === 'Scroll';
+    if (compressorPreference === 'reciprocating') return c.compressor_type === 'Reciprocating';
+    return true;
   }).sort((a, b) => a.nominal_tr - b.nominal_tr);
 
-  // Find lowest nominal_tr >= requiredTr
-  let selectedCcu = enrichedCcus.find(c => c.nominal_tr >= requiredTr);
+  // Find lowest nominal_tr >= requiredTr (or capacity >= requiredKw)
+  let selectedCcu = enrichedCcus.find(c => c.nominal_tr >= requiredTr || c.capacity >= requiredKw);
   let multiUnitCcu = null;
 
   if (!selectedCcu && enrichedCcus.length > 0) {
@@ -377,21 +385,21 @@ export function matchDaikinEquipment({ requiredTr, requiredKw, roomTempC, compre
     selectedCcu = maxUnit; // default representative unit
   }
 
-  // Fetch Daikin indoor evaporators (ACU)
-  let evapQuery = `
+  // Fetch indoor evaporators (ACU)
+  const evapQuery = `
     SELECT m.*, b.name as brand_name, p.name as product_name,
            prc.selling_price, prc.purchase_cost
     FROM product_models m
     JOIN brands b ON m.brand_id = b.id
     JOIN products p ON m.product_id = p.id
     LEFT JOIN product_prices prc ON m.id = prc.model_id
-    WHERE b.name = 'Daikin' AND p.name LIKE '%Evaporator%'
+    WHERE p.id = 'prod_comm_evap' OR p.name LIKE '%Evaporator%'
   `;
   let evapModels = [];
   try {
     evapModels = db.prepare(evapQuery).all();
   } catch (err) {
-    console.error('Error fetching Daikin Evaporators:', err);
+    console.error('Error fetching Evaporators:', err);
   }
 
   const enrichedEvaps = evapModels.map(m => {
@@ -410,13 +418,11 @@ export function matchDaikinEquipment({ requiredTr, requiredKw, roomTempC, compre
   }).sort((a, b) => a.capacity_kw - b.capacity_kw);
 
   // Filter ACUs by temperature suitability
-  // If freezer (<= 0°C), prefer models suitable for subzero (CREZM or CRE1L/CRE2L/CRE3L)
-  // If medium (> 0°C), prefer models suitable for chiller (CREHM or CRE1M/CRE2M/CRE3M)
   const tempAppropriateEvaps = enrichedEvaps.filter(e => {
     if (isFreezer) {
-      return e.temp_range_min <= -15 || e.model_number.includes('ZM') || e.model_number.includes('L');
+      return (e.temp_range_min !== null && e.temp_range_min <= -15) || e.model_number.includes('L');
     } else {
-      return e.temp_range_max >= 0 || e.model_number.includes('HM') || e.model_number.includes('M');
+      return (e.temp_range_max !== null && e.temp_range_max >= 0) || e.model_number.includes('M');
     }
   });
 
@@ -453,3 +459,6 @@ export function matchDaikinEquipment({ requiredTr, requiredKw, roomTempC, compre
     },
   };
 }
+
+// Backward-compatibility alias
+export const matchDaikinEquipment = matchCommercialEquipment;

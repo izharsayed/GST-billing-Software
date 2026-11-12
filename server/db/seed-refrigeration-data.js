@@ -1,9 +1,26 @@
 import { db, runInTransaction } from './index.js';
 
 export function seedRefrigerationData() {
-  console.log('[Seed] Seeding Emerson & Daikin technical catalogue data...');
+  console.log('[Seed] Seeding Emerson technical catalogue data...');
 
   runInTransaction(() => {
+    // 0. Clean up any leftover Daikin models, specs, and products
+    db.prepare(`
+      DELETE FROM model_specifications WHERE model_id IN (
+        SELECT id FROM product_models WHERE brand_id = 'brd_daikin' OR model_number LIKE 'CCM%' OR model_number LIKE 'CCL%' OR model_number LIKE 'CRE%' OR id LIKE 'mod_dk_%'
+      )
+    `).run();
+    db.prepare(`
+      DELETE FROM product_prices WHERE model_id IN (
+        SELECT id FROM product_models WHERE brand_id = 'brd_daikin' OR model_number LIKE 'CCM%' OR model_number LIKE 'CCL%' OR model_number LIKE 'CRE%' OR id LIKE 'mod_dk_%'
+      )
+    `).run();
+    db.prepare(`
+      DELETE FROM product_models WHERE brand_id = 'brd_daikin' OR model_number LIKE 'CCM%' OR model_number LIKE 'CCL%' OR model_number LIKE 'CRE%' OR id LIKE 'mod_dk_%'
+    `).run();
+    db.prepare("DELETE FROM products WHERE id IN ('prod_daikin_cdu', 'prod_daikin_evap')").run();
+    db.prepare("DELETE FROM brands WHERE id = 'brd_daikin' OR name = 'Daikin'").run();
+
     // 1. Brands
     const upsertBrand = (name, desc, defaultId) => {
       let b = db.prepare('SELECT id FROM brands WHERE name = ?').get(name);
@@ -15,7 +32,6 @@ export function seedRefrigerationData() {
       return b.id;
     };
 
-    const daikinBrandId = upsertBrand('Daikin', 'Commercial Condensing Units & Air Cooling Units (Evaporators)', 'brd_daikin');
     const emersonBrandId = upsertBrand('Emerson', 'Hermetic Reciprocating & Copeland Scroll Condensing Units', 'brd_emerson');
     const dixellBrandId = upsertBrand('Dixell', 'Digital Electronic Controllers (XR02CX, XR06CX, XR30CX, XR70CX)', 'brd_dixell');
 
@@ -55,8 +71,7 @@ export function seedRefrigerationData() {
     };
 
     const emCduProdId = upsertProduct('prod_emerson_cdu', 'Emerson Cold Room Condensing Unit', cduCatId, emersonBrandId, 'Set', '84189900', 'Emerson Air-Cooled Condensing Unit for Chiller & Freezer Rooms');
-    const dkCduProdId = upsertProduct('prod_daikin_cdu', 'Daikin Commercial Condensing Unit', cduCatId, daikinBrandId, 'Set', '84189900', 'Daikin Scroll & Reciprocating Condensing Unit for Cold Rooms');
-    const dkEvapProdId = upsertProduct('prod_daikin_evap', 'Daikin Air Cooling Unit (Evaporator)', evapCatId, daikinBrandId, 'Nos', '84189900', 'Daikin Indoor DX Unit Cooler with axial fans');
+    const commEvapProdId = upsertProduct('prod_comm_evap', 'Commercial Air Cooling Unit (Evaporator)', evapCatId, emersonBrandId, 'Nos', '84189900', 'Indoor DX Unit Cooler with axial fans');
     const bmcProdId = upsertProduct('prod_emerson_bmc', 'Emerson Bulk Milk Chiller Unit', bmcCatId, emersonBrandId, 'Set', '84186990', 'Dedicated BMC refrigeration unit with agitator control');
 
     const insertPrice = db.prepare(`
@@ -296,69 +311,30 @@ export function seedRefrigerationData() {
     }
 
     // ---------------------------------------------------------------
-    // 8. DAIKIN COMMERCIAL OUTDOOR CONDENSING UNITS (CCU)
-    // From Daikin Commercial Refrigeration Specification (R404A / 38°C Ambient)
+    // 8. COMMERCIAL AIR COOLING UNITS (DX Evaporators / ACU)
     // ---------------------------------------------------------------
-    const daikinCdus = [
-      // Medium Temp (@ 0°C SST, 38°C Ambient)
-      { model: 'CCMR020GARY16', hp: 2.0, cap_w: 4730, nominal_tr: 1.34, power_w: 1940, airflow: 4050, comp: 'KCM511-CAL', type: 'Reciprocating', temp: 'Medium (0 to 15°C)', refr: 'R404A', liquid: '3/8"', suction: '5/8"', weight: 73, sound: 62 },
-      { model: 'CCMR030GARY16', hp: 3.0, cap_w: 7005, nominal_tr: 1.99, power_w: 3020, airflow: 4050, comp: 'KCM522-CAL', type: 'Reciprocating', temp: 'Medium (0 to 15°C)', refr: 'R404A', liquid: '3/8"', suction: '5/8"', weight: 76, sound: 67 },
-      { model: 'CCMS040GARY16', hp: 4.0, cap_w: 9342, nominal_tr: 2.65, power_w: 3880, airflow: 7450, comp: 'ZB29KQE-TFD', type: 'Scroll', temp: 'Medium (0 to 15°C)', refr: 'R404A', liquid: '1/2"', suction: '7/8"', weight: 94, sound: 71 },
-      { model: 'CCMS060GARY16', hp: 6.0, cap_w: 12524, nominal_tr: 3.56, power_w: 5950, airflow: 7450, comp: 'ZB45KQE-TFD', type: 'Scroll', temp: 'Medium (0 to 15°C)', refr: 'R404A', liquid: '1/2"', suction: '7/8"', weight: 107, sound: 71 },
-      { model: 'CCMS080GARY16', hp: 8.0, cap_w: 18300, nominal_tr: 5.20, power_w: 7120, airflow: 17698, comp: 'ZB58KQE-TFD', type: 'Scroll', temp: 'Medium (0 to 15°C)', refr: 'R404A', liquid: '5/8"', suction: '1-1/8"', weight: 167, sound: 73 },
-      { model: 'CCMS1000ARY16', hp: 10.0, cap_w: 24300, nominal_tr: 6.90, power_w: 9100, airflow: 17698, comp: 'ZB76KQE-TFD', type: 'Scroll', temp: 'Medium (0 to 15°C)', refr: 'R404A', liquid: '5/8"', suction: '1-1/8"', weight: 167, sound: 72 },
-      // Low Temp (@ -25°C SST, 38°C Ambient)
-      { model: 'CCLR020GARY16', hp: 2.0, cap_w: 1853, nominal_tr: 0.53, power_w: 1880, airflow: 4050, comp: 'KCM512-LAL', type: 'Reciprocating', temp: 'Low (-25 to -15°C)', refr: 'R404A', liquid: '3/8"', suction: '5/8"', weight: 78, sound: 68 },
-      { model: 'CCLS040GARY16', hp: 4.0, cap_w: 3816, nominal_tr: 1.08, power_w: 2920, airflow: 7450, comp: 'ZF13K4E-TFD', type: 'Scroll', temp: 'Low (-25 to -15°C)', refr: 'R404A', liquid: '1/2"', suction: '7/8"', weight: 108, sound: 71 },
-      { model: 'CCLS060GARY16', hp: 6.0, cap_w: 5429, nominal_tr: 1.54, power_w: 4080, airflow: 7450, comp: 'ZF18K4E-TFD', type: 'Scroll', temp: 'Low (-25 to -15°C)', refr: 'R404A', liquid: '1/2"', suction: '7/8"', weight: 112, sound: 72 },
-      { model: 'CCLS1000ARY16', hp: 10.0, cap_w: 8546, nominal_tr: 2.43, power_w: 7640, airflow: 17698, comp: 'ZF34KQE-TFD', type: 'Scroll', temp: 'Low (-25 to -15°C)', refr: 'R404A', liquid: '5/8"', suction: '1-1/8"', weight: 172, sound: 72 },
+    const commEvaps = [
+      // High / Medium Temp Chiller Evaporators (0°C to +10°C)
+      { model: 'EM-ACU-040M', cap_kw: 4.0, temp: 'Medium Temp (+2°C to +10°C)', t_min: 0, t_max: 10, airflow: 2350, fans: '350mm × 1 Fan', defrost: 'Air / Electric Defrost', weight: 35 },
+      { model: 'EM-ACU-080M', cap_kw: 8.0, temp: 'Medium Temp (0°C to +10°C)', t_min: 0, t_max: 10, airflow: 4700, fans: '350mm × 2 Fans', defrost: 'Electric / Air Defrost', weight: 58 },
+      { model: 'EM-ACU-120M', cap_kw: 12.0, temp: 'Medium Temp (-5°C to +5°C)', t_min: -5, t_max: 5, airflow: 8500, fans: '400mm × 2 Fans', defrost: 'Electric Defrost Standard', weight: 85 },
+      { model: 'EM-ACU-180M', cap_kw: 18.0, temp: 'Medium Temp (-5°C to +5°C)', t_min: -5, t_max: 5, airflow: 14200, fans: '500mm × 2 Fans', defrost: 'Electric Defrost Standard', weight: 120 },
+      { model: 'EM-ACU-250M', cap_kw: 25.0, temp: 'Medium Temp (-5°C to +5°C)', t_min: -5, t_max: 5, airflow: 18500, fans: '500mm × 3 Fans', defrost: 'Electric Defrost Standard', weight: 165 },
+      // Low Temp Freezer Evaporators (-18°C to -25°C)
+      { model: 'EM-ACU-030L', cap_kw: 3.0, temp: 'Low Temp Freezer (-18°C to -25°C)', t_min: -25, t_max: -18, airflow: 2800, fans: '350mm × 1 Fan', defrost: 'Electric Defrost Elements Built-in', weight: 48 },
+      { model: 'EM-ACU-060L', cap_kw: 6.0, temp: 'Low Temp Freezer (-18°C to -25°C)', t_min: -25, t_max: -18, airflow: 6800, fans: '450mm × 2 Fans', defrost: 'Electric Defrost Elements Built-in', weight: 75 },
+      { model: 'EM-ACU-100L', cap_kw: 10.0, temp: 'Deep Freeze (-20°C to -30°C)', t_min: -30, t_max: -20, airflow: 11000, fans: '450mm × 3 Fans', defrost: 'Heavy-Duty Electric Defrost', weight: 115 },
+      { model: 'EM-ACU-150L', cap_kw: 15.0, temp: 'Deep Freeze (-20°C to -30°C)', t_min: -30, t_max: -20, airflow: 15500, fans: '500mm × 3 Fans', defrost: 'Heavy-Duty Electric Defrost', weight: 155 },
+      { model: 'EM-ACU-200L', cap_kw: 20.0, temp: 'Deep Freeze (-20°C to -30°C)', t_min: -30, t_max: -20, airflow: 21000, fans: '500mm × 4 Fans', defrost: 'Heavy-Duty Electric Defrost', weight: 195 },
     ];
 
-    for (const item of daikinCdus) {
-      const capKw = Math.round((item.cap_w / 1000) * 100) / 100;
-      const desc = `Daikin ${item.temp.includes('Low') ? 'Low-Temp' : 'Medium-Temp'} ${item.type} CDU ${item.hp} HP (${capKw} kW / ${item.nominal_tr} TR) with ${item.comp}`;
+    for (const item of commEvaps) {
       const mid = saveModelAndPrice(
-        'mod_dk_cdu_' + item.model,
-        dkCduProdId, daikinBrandId, item.model,
-        desc,
-        capKw, 'kW', item.temp.includes('Low') ? -25 : 0, item.temp.includes('Low') ? -15 : 15,
-        item.refr, '415V / 3Ph / 50Hz', 'Daikin Commercial Refrigeration Engine', '4'
-      );
-
-      insertSpec.run('sp_hp_' + mid, mid, 'horse_power', String(item.hp), 'HP');
-      insertSpec.run('sp_comp_' + mid, mid, 'internal_compressor', item.comp, '');
-      insertSpec.run('sp_tech_' + mid, mid, 'compressor_type', item.type, '');
-      insertSpec.run('sp_cap_w_' + mid, mid, 'cooling_capacity_watts', String(item.cap_w), 'W');
-      insertSpec.run('sp_nom_tr_' + mid, mid, 'nominal_tr', String(item.nominal_tr), 'TR');
-      insertSpec.run('sp_pwr_w_' + mid, mid, 'power_input_watts', String(item.power_w), 'W');
-      insertSpec.run('sp_airflow_' + mid, mid, 'air_flow_m3h', String(item.airflow), 'm3/h');
-      insertSpec.run('sp_liq_' + mid, mid, 'liquid_line', item.liquid || '1/2"', 'inch');
-      insertSpec.run('sp_suc_' + mid, mid, 'suction_line', item.suction || '7/8"', 'inch');
-      insertSpec.run('sp_snd_' + mid, mid, 'sound_level', String(item.sound || 70), 'dBA');
-      insertSpec.run('sp_wt_' + mid, mid, 'weight', String(item.weight || 100), 'kg');
-    }
-
-    // ---------------------------------------------------------------
-    // 9. DAIKIN AIR COOLING UNITS (Evaporators / ACU)
-    // ---------------------------------------------------------------
-    const daikinEvaps = [
-      // High / Medium Temp
-      { model: 'CREHM150ASV16', cap_kw: 4.30, temp: 'High / Med (+2°C to +15°C)', t_min: 2, t_max: 15, airflow: 2350, fans: '350mm × 1 Fan', defrost: 'Air Defrost / Slotted Heater Option', weight: 35 },
-      { model: 'CREHM300ASV16', cap_kw: 8.94, temp: 'High / Med (0°C to +10°C)', t_min: 0, t_max: 10, airflow: 4700, fans: '350mm × 2 Fans', defrost: 'Electric / Air Defrost', weight: 61 },
-      { model: 'CREHM1200ASY16', cap_kw: 13.00, temp: 'Medium Temp (-5°C to +5°C)', t_min: -5, t_max: 5, airflow: 14200, fans: '500mm × 2 Fans', defrost: 'Electric Defrost Standard', weight: 119 },
-      // Low Temp Freezer
-      { model: 'CREZM200ASV16', cap_kw: 3.12, temp: 'Low Temp Freezer (-18°C to -25°C)', t_min: -25, t_max: -18, airflow: 2800, fans: '350mm × 1 Fan', defrost: 'Electric Defrost Elements Built-in', weight: 52 },
-      { model: 'CREZM500ASV16', cap_kw: 5.83, temp: 'Low Temp Freezer (-18°C to -25°C)', t_min: -25, t_max: -18, airflow: 6800, fans: '450mm × 2 Fans', defrost: 'Electric Defrost Elements Built-in', weight: 78 },
-      { model: 'CREZM1100ASY16', cap_kw: 11.00, temp: 'Deep Freeze (-20°C to -30°C)', t_min: -30, t_max: -20, airflow: 14500, fans: '500mm × 3 Fans', defrost: 'Heavy-Duty Electric Defrost', weight: 155 },
-    ];
-
-    for (const item of daikinEvaps) {
-      const mid = saveModelAndPrice(
-        'mod_dk_evap_' + item.model,
-        dkEvapProdId, daikinBrandId, item.model,
-        `Daikin Indoor DX Air Cooling Unit (${item.cap_kw} kW) - ${item.defrost}`,
+        'mod_acu_' + item.model,
+        commEvapProdId, emersonBrandId, item.model,
+        `Commercial DX Air Cooling Evaporator (${item.cap_kw} kW) - ${item.defrost}`,
         item.cap_kw, 'kW', item.t_min, item.t_max,
-        'R404A', '230V/1Ph / 415V/3Ph', 'Daikin Commercial Refrigeration Engine', '5'
+        'R404A / R22', '230V/1Ph / 415V/3Ph', 'Commercial Refrigeration Spec', '1'
       );
 
       insertSpec.run('sp_airflow_' + mid, mid, 'air_flow_m3h', String(item.airflow), 'm3/h');
