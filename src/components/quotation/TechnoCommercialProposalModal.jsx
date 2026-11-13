@@ -81,7 +81,21 @@ export default function TechnoCommercialProposalModal({
   const getInitialProposalData = () => {
     if (!quotation) return null;
     if (quotation?.proposal_data && typeof quotation.proposal_data === 'object' && Object.keys(quotation.proposal_data).length > 0) {
-      return quotation.proposal_data;
+      const data = JSON.parse(JSON.stringify(quotation.proposal_data));
+      if (!data.annexure_ii) data.annexure_ii = {};
+      if ((!data.annexure_ii.items || data.annexure_ii.items.length <= 1) && quotation.items && quotation.items.length > 1) {
+        data.annexure_ii.items = quotation.items.map(it => ({
+          description: it.description || it.name || '',
+          specs: it.specs || '',
+          quantity: Number(it.quantity) || 1,
+          unit: it.unit || 'Nos',
+          unit_price: Number(it.rate || it.unit_price) || 0,
+          total_amount: it.total_amount != null
+            ? Number(it.total_amount)
+            : (Number(it.quantity) || 1) * (Number(it.rate || it.unit_price) || 0)
+        }));
+      }
+      return data;
     }
 
     const tech = quotation?.technicalInputs || {};
@@ -238,6 +252,27 @@ export default function TechnoCommercialProposalModal({
         freight_status: 'INCLUSIVE',
         extra_piping_rate: 570,
         included_piping_ft: 10,
+        items: (quotation?.items && quotation.items.length > 0)
+          ? quotation.items.map(it => ({
+              description: it.description || it.name || '',
+              specs: it.specs || '',
+              quantity: Number(it.quantity) || 1,
+              unit: it.unit || 'Nos',
+              unit_price: Number(it.rate || it.unit_price) || 0,
+              total_amount: it.total_amount != null
+                ? Number(it.total_amount)
+                : (Number(it.quantity) || 1) * (Number(it.rate || it.unit_price) || 0)
+            }))
+          : [
+              {
+                description: appTitle,
+                specs: `Temp: ${tempRange} • Size: ${externalSizeStr} • Panel: ${panelThk}`,
+                quantity: 1,
+                unit: 'Set',
+                unit_price: (Number(quotation?.equipment_subtotal) || 0) + (Number(quotation?.charges_subtotal) || 0),
+                total_amount: (Number(quotation?.equipment_subtotal) || 0) + (Number(quotation?.charges_subtotal) || 0)
+              }
+            ],
         pricing_notes: [
           'Panel construction: 0.5mm PPGI sheet on inner and outer sides of wall and ceiling panels.',
           'Ceiling mounted slim evaporator in stainless steel/powder coated casing included as per standard specifications.',
@@ -278,8 +313,25 @@ export default function TechnoCommercialProposalModal({
   // Financial calculations
   const basicCost = (Number(quotation.equipment_subtotal) || 0) + (Number(quotation.charges_subtotal) || 0);
   const grandTotal = Number(quotation.total_amount) || 0;
-  const taxAmount = Number(quotation.tax_amount) || 0;
+  const taxAmount = (Number(quotation.tax_amount) > 0)
+    ? Number(quotation.tax_amount)
+    : (grandTotal > basicCost ? grandTotal - basicCost : 0);
   const totalInWords = numberToWords(grandTotal);
+
+  const displayItems = (proposalData.annexure_ii?.items && proposalData.annexure_ii.items.length > 0)
+    ? proposalData.annexure_ii.items
+    : (quotation?.items && quotation.items.length > 0)
+      ? quotation.items
+      : [
+          {
+            description: proposalData.annexure_i?.application || 'Walk-In Cold Storage System',
+            specs: `Temp: ${proposalData.annexure_i?.room_temp || '+2°C'} • Size: ${proposalData.annexure_i?.external_size || ''} • Thk: ${proposalData.annexure_i?.panel_thickness || ''}`,
+            quantity: 1,
+            unit: 'Set',
+            unit_price: basicCost,
+            total_amount: basicCost
+          }
+        ];
 
   // Formatted date
   const displayDate = quotation.quotation_date
@@ -1085,30 +1137,45 @@ export default function TechnoCommercialProposalModal({
                     <thead>
                       <tr style={{ background: '#0b2545', color: '#fff' }}>
                         <th style={{ padding: '0.6rem 0.8rem', textAlign: 'center', width: 45 }}>Item</th>
-                        <th style={{ padding: '0.6rem 0.8rem', textAlign: 'left' }}>Description</th>
-                        <th style={{ padding: '0.6rem 0.8rem', textAlign: 'center', width: 85 }}>Thk. (mm)</th>
-                        <th style={{ padding: '0.6rem 0.8rem', textAlign: 'center', width: 110 }}>Size (Ft)</th>
-                        <th style={{ padding: '0.6rem 0.8rem', textAlign: 'right', width: 160 }}>Supply & Installation (₹)</th>
+                        <th style={{ padding: '0.6rem 0.8rem', textAlign: 'left' }}>Description & Technical Specs</th>
+                        <th style={{ padding: '0.6rem 0.8rem', textAlign: 'center', width: 105 }}>Qty / Unit</th>
+                        <th style={{ padding: '0.6rem 0.8rem', textAlign: 'right', width: 130 }}>Rate (₹)</th>
+                        <th style={{ padding: '0.6rem 0.8rem', textAlign: 'right', width: 150 }}>Amount (₹)</th>
                       </tr>
                     </thead>
                     <tbody>
-                      <tr style={{ borderBottom: '1px solid #cbd5e1' }}>
-                        <td style={{ padding: '0.8rem', textAlign: 'center', fontWeight: 600 }}>1</td>
-                        <td style={{ padding: '0.8rem' }}>
-                          <div style={{ fontWeight: 700, color: '#0f172a' }}>{proposalData.annexure_i.application}</div>
-                          <div style={{ fontSize: '0.78rem', color: '#64748b' }}>Temp: {proposalData.annexure_i.room_temp}</div>
-                          <div style={{ fontSize: '0.78rem', color: '#0369a1', fontWeight: 600 }}>Complete Supply & Installation</div>
-                        </td>
-                        <td style={{ padding: '0.8rem', textAlign: 'center', fontWeight: 600 }}>
-                          {proposalData.annexure_i.panel_thickness.split(' ')[0]} mm
-                        </td>
-                        <td style={{ padding: '0.8rem', textAlign: 'center', fontWeight: 600 }}>
-                          {proposalData.annexure_i.external_size.replace(/Ft/g, '').trim()}
-                        </td>
-                        <td style={{ padding: '0.8rem', textAlign: 'right', fontWeight: 700 }}>
-                          {basicCost.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}
-                        </td>
-                      </tr>
+                      {displayItems.map((item, idx) => {
+                        const itmQty = Number(item.quantity) || 1;
+                        const itmRate = Number(item.unit_price ?? item.rate) || 0;
+                        const itmTotal = item.total_amount != null
+                          ? Number(item.total_amount)
+                          : (itmQty * itmRate);
+
+                        return (
+                          <tr key={idx} style={{ borderBottom: '1px solid #cbd5e1', background: idx % 2 === 1 ? '#f8fafc' : '#fff' }}>
+                            <td style={{ padding: '0.65rem 0.8rem', textAlign: 'center', fontWeight: 600 }}>{idx + 1}</td>
+                            <td style={{ padding: '0.65rem 0.8rem' }}>
+                              <div style={{ fontWeight: 700, color: '#0f172a' }}>{item.description || item.name}</div>
+                              {item.specs && (
+                                <div style={{ fontSize: '0.78rem', color: '#64748b', marginTop: '2px' }}>{item.specs}</div>
+                              )}
+                            </td>
+                            <td style={{ padding: '0.65rem 0.8rem', textAlign: 'center', fontWeight: 600, color: '#334155' }}>
+                              {itmQty} {item.unit || 'Nos'}
+                            </td>
+                            <td style={{ padding: '0.65rem 0.8rem', textAlign: 'right', color: '#475569' }}>
+                              {itmRate > 0
+                                ? itmRate.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                : 'INCLUDED'}
+                            </td>
+                            <td style={{ padding: '0.65rem 0.8rem', textAlign: 'right', fontWeight: 700, color: '#0f172a' }}>
+                              {itmTotal > 0
+                                ? itmTotal.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })
+                                : 'INCLUDED'}
+                            </td>
+                          </tr>
+                        );
+                      })}
                     </tbody>
                   </table>
 
@@ -1532,6 +1599,144 @@ export default function TechnoCommercialProposalModal({
                         annexure_ii: { ...p.annexure_ii, freight_status: e.target.value }
                       }))}
                     />
+                  </div>
+                </div>
+
+                {/* Items List Customizer */}
+                <div style={{ marginTop: '1.25rem', borderTop: '1px solid #e2e8f0', paddingTop: '1rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.6rem' }}>
+                    <label style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0f172a' }}>
+                      Schedule of Items (Bill of Quantities):
+                    </label>
+                    <button
+                      type="button"
+                      className="btn btn-secondary"
+                      style={{ fontSize: '0.74rem', padding: '0.25rem 0.65rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+                      onClick={() => {
+                        const newItem = {
+                          description: 'New Equipment / Line Item',
+                          specs: '',
+                          quantity: 1,
+                          unit: 'Nos',
+                          unit_price: 0,
+                          total_amount: 0
+                        };
+                        setProposalData(p => ({
+                          ...p,
+                          annexure_ii: {
+                            ...p.annexure_ii,
+                            items: [...(p.annexure_ii?.items || displayItems), newItem]
+                          }
+                        }));
+                      }}
+                    >
+                      <Plus size={13} /> Add Line Item
+                    </button>
+                  </div>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                    {(proposalData.annexure_ii?.items || displayItems).map((it, idx) => (
+                      <div key={idx} style={{ display: 'grid', gridTemplateColumns: '1fr 75px 75px 95px 30px', gap: '0.5rem', alignItems: 'center', background: '#f8fafc', padding: '0.45rem 0.65rem', borderRadius: 6, border: '1px solid #e2e8f0' }}>
+                        <div>
+                          <input
+                            type="text"
+                            className="form-input"
+                            style={{ fontSize: '0.8rem', width: '100%', fontWeight: 600 }}
+                            value={it.description || ''}
+                            placeholder="Item description"
+                            onChange={e => {
+                              const val = e.target.value;
+                              setProposalData(p => {
+                                const newItems = [...(p.annexure_ii?.items || displayItems)];
+                                newItems[idx] = { ...newItems[idx], description: val };
+                                return { ...p, annexure_ii: { ...p.annexure_ii, items: newItems } };
+                              });
+                            }}
+                          />
+                          <input
+                            type="text"
+                            className="form-input"
+                            style={{ fontSize: '0.74rem', width: '100%', marginTop: '3px', color: '#64748b' }}
+                            value={it.specs || ''}
+                            placeholder="Optional specifications (e.g. dimensions, model ref)"
+                            onChange={e => {
+                              const val = e.target.value;
+                              setProposalData(p => {
+                                const newItems = [...(p.annexure_ii?.items || displayItems)];
+                                newItems[idx] = { ...newItems[idx], specs: val };
+                                return { ...p, annexure_ii: { ...p.annexure_ii, items: newItems } };
+                              });
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '0.68rem', color: '#64748b', display: 'block' }}>Qty</label>
+                          <input
+                            type="number"
+                            className="form-input"
+                            style={{ fontSize: '0.8rem', textAlign: 'center', width: '100%' }}
+                            value={it.quantity || 1}
+                            onChange={e => {
+                              const val = Number(e.target.value) || 0;
+                              setProposalData(p => {
+                                const newItems = [...(p.annexure_ii?.items || displayItems)];
+                                newItems[idx] = { ...newItems[idx], quantity: val, total_amount: val * (Number(newItems[idx].unit_price) || 0) };
+                                return { ...p, annexure_ii: { ...p.annexure_ii, items: newItems } };
+                              });
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '0.68rem', color: '#64748b', display: 'block' }}>Unit</label>
+                          <input
+                            type="text"
+                            className="form-input"
+                            style={{ fontSize: '0.8rem', textAlign: 'center', width: '100%' }}
+                            value={it.unit || 'Nos'}
+                            onChange={e => {
+                              const val = e.target.value;
+                              setProposalData(p => {
+                                const newItems = [...(p.annexure_ii?.items || displayItems)];
+                                newItems[idx] = { ...newItems[idx], unit: val };
+                                return { ...p, annexure_ii: { ...p.annexure_ii, items: newItems } };
+                              });
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <label style={{ fontSize: '0.68rem', color: '#64748b', display: 'block' }}>Rate (₹)</label>
+                          <input
+                            type="number"
+                            className="form-input"
+                            style={{ fontSize: '0.8rem', textAlign: 'right', width: '100%' }}
+                            value={it.unit_price || 0}
+                            onChange={e => {
+                              const val = Number(e.target.value) || 0;
+                              setProposalData(p => {
+                                const newItems = [...(p.annexure_ii?.items || displayItems)];
+                                newItems[idx] = { ...newItems[idx], unit_price: val, total_amount: val * (Number(newItems[idx].quantity) || 1) };
+                                return { ...p, annexure_ii: { ...p.annexure_ii, items: newItems } };
+                              });
+                            }}
+                          />
+                        </div>
+                        <div>
+                          <button
+                            type="button"
+                            className="icon-btn icon-btn-red"
+                            style={{ padding: '3px', marginTop: '14px' }}
+                            title="Remove Line Item"
+                            onClick={() => {
+                              setProposalData(p => {
+                                const newItems = (p.annexure_ii?.items || displayItems).filter((_, i) => i !== idx);
+                                return { ...p, annexure_ii: { ...p.annexure_ii, items: newItems } };
+                              });
+                            }}
+                          >
+                            <Trash2 size={13} />
+                          </button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
               </div>

@@ -235,7 +235,7 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert, onP
       site_contact: clientObj.name || '',
       equipment_subtotal: Number(data.totals?.subtotal) || Number(bill.totalAmount) || 0,
       charges_subtotal: 0,
-      tax_amount: Number(data.totals?.taxAmount) || 0,
+      tax_amount: Number(data.totals?.totalTaxAmount ?? data.totals?.taxAmount ?? (data.totals?.cgst || 0) + (data.totals?.sgst || 0) + (data.totals?.igst || 0)) || (Number(bill.totalTaxAmount) || 0),
       total_amount: Number(bill.totalAmount) || Number(data.totals?.total) || 0,
       items: mappedItems,
       technicalInputs: technicalSpecs ? {

@@ -1680,7 +1680,7 @@ export default function InvoiceGenerator({ onBack, profile: profileProp, editing
       site_contact: client?.name || '',
       equipment_subtotal: Number(totals?.subtotal) || 0,
       charges_subtotal: 0,
-      tax_amount: Number(totals?.taxAmount) || 0,
+      tax_amount: Number(totals?.totalTaxAmount ?? totals?.taxAmount ?? (totals?.cgst || 0) + (totals?.sgst || 0) + (totals?.igst || 0)) || 0,
       total_amount: Number(totals?.total) || 0,
       items: mappedItems,
       technicalInputs: technicalSpecs ? {
