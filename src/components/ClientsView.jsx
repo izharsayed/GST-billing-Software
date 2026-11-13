@@ -1,8 +1,9 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
 import { Users, Search, FileText, ChevronDown, ChevronUp, Trash2, X, MessageCircle, Mail, Plus, Edit3, Copy, Upload, Download, Wrench, MapPin, Zap, Paperclip, Eye, Folder, Image, File, Printer } from 'lucide-react';
 import HelpButton from './HelpButton';
-import { getAllClients, getAllBills, deleteClient, saveClient, deleteBill, saveBill, getProfile, deleteReceipt, applyStockChanges, trashSavedPdf, getAllServiceCertificates } from '../store';
+import { getAllClients, getAllBills, deleteClient, saveClient, deleteBill, saveBill, getProfile, deleteReceipt, applyStockChanges, trashSavedPdf, getAllServiceCertificates, getAllCommissioningReports } from '../store';
 import ServiceCertificateModal from './ServiceCertificateModal';
+import ColdStorageCommissioningModal from './ColdStorageCommissioningModal';
 import TechnoCommercialProposalModal from './quotation/TechnoCommercialProposalModal';
 import PrintPreviewModal from './PrintPreviewModal';
 import { formatCurrency, INVOICE_TYPES, markPaidPatch, markUnpaidPatch, salesSign, countsAsSales, isCancelledBill, amountDue, localToday, parseLocalDate, appliedStock, stockDelta } from '../utils';
@@ -53,6 +54,10 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert, onP
   const [serviceEquipment, setServiceEquipment] = useState(null);
   const [viewingCertificate, setViewingCertificate] = useState(null);
   const [allCertificates, setAllCertificates] = useState([]);
+  const [commissioningModalOpen, setCommissioningModalOpen] = useState(false);
+  const [commissioningClient, setCommissioningClient] = useState(null);
+  const [selectedCommissioningReport, setSelectedCommissioningReport] = useState(null);
+  const [allCommissioningReports, setAllCommissioningReports] = useState([]);
   const [proposalQuotation, setProposalQuotation] = useState(null);
   const [targetBillForProposal, setTargetBillForProposal] = useState(null);
   const [clientDocTabs, setClientDocTabs] = useState({});
@@ -497,6 +502,8 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert, onP
                                 }
                               } else if (file.isGenerated && file.rawCert) {
                                 openServiceModal(savedClient || { name: clientName }, null, file.rawCert);
+                              } else if (file.isGenerated && file.rawReport) {
+                                openCommissioningModal(savedClient || { name: clientName }, file.rawReport);
                               } else {
                                 setFilePreviewModal(file);
                               }
@@ -532,6 +539,8 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert, onP
                                 }
                               } else if (file.isGenerated && file.rawCert) {
                                 openServiceModal(savedClient || { name: clientName }, null, file.rawCert);
+                              } else if (file.isGenerated && file.rawReport) {
+                                openCommissioningModal(savedClient || { name: clientName }, file.rawReport);
                               } else {
                                 setFilePreviewModal(file);
                               }
@@ -662,6 +671,30 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert, onP
                                   </button>
                                 </>
                               )}
+                              {file.rawReport && (
+                                <>
+                                  <button
+                                    type="button"
+                                    className="icon-btn icon-btn-blue"
+                                    style={{ padding: '3px' }}
+                                    onClick={() => openCommissioningModal(savedClient || { name: clientName }, file.rawReport)}
+                                    title="View / Print Commissioning Report (CSH-1, CSH-2, BOQ)"
+                                    aria-label="View Commissioning Report"
+                                  >
+                                    <Eye size={13} />
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="icon-btn"
+                                    style={{ padding: '3px', color: '#0284c7' }}
+                                    onClick={() => openCommissioningModal(savedClient || { name: clientName }, file.rawReport)}
+                                    title="Edit Commissioning Report"
+                                    aria-label="Edit Commissioning Report"
+                                  >
+                                    <Edit3 size={13} />
+                                  </button>
+                                </>
+                              )}
                             </>
                           ) : (
                             <>
@@ -738,14 +771,26 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert, onP
     setServiceModalOpen(true);
   };
 
+  const openCommissioningModal = (clientObj, reportObj = null) => {
+    setCommissioningClient(clientObj);
+    setSelectedCommissioningReport(reportObj);
+    setCommissioningModalOpen(true);
+  };
+
   useEffect(() => {
     getProfile().then(p => { if (p?.country) setProfileCountry(p.country); }).catch(() => {});
   }, []);
 
   const loadData = async () => {
     try {
-      const [c, b, certs] = await Promise.all([getAllClients(), getAllBills(), getAllServiceCertificates().catch(() => [])]);
+      const [c, b, certs, commReports] = await Promise.all([
+        getAllClients(),
+        getAllBills(),
+        getAllServiceCertificates().catch(() => []),
+        getAllCommissioningReports().catch(() => [])
+      ]);
       setAllCertificates(Array.isArray(certs) ? certs : []);
+      setAllCommissioningReports(Array.isArray(commReports) ? commReports : []);
       setClients(c);
       setBills(b);
     } catch {
@@ -1965,6 +2010,11 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert, onP
                         title="Create Daikin Service Completion Certificate">
                         <Wrench size={14} /> Service Certificate
                       </button>
+                      <button className="btn btn-secondary" style={{ fontSize: '0.78rem', padding: '0.35rem 0.75rem', color: '#0284c7', borderColor: '#38bdf8', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+                        onClick={() => openCommissioningModal(savedClient || { name: clientName })}
+                        title="Create Cold Storage Commissioning Report (Forms CSH-1, CSH-2 & Measurement Sheet)">
+                        <FileText size={14} /> Commissioning Report
+                      </button>
                     </div>
 
                     {/* v1.10.22 — Aging summary strip: shows the four
@@ -2131,6 +2181,25 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert, onP
                           size: null,
                           uploadedAt: cert.rectification_date_time?.split(' ')[0] || cert.created_at?.split('T')[0] || '',
                           notes: `${cert.outdoor_model_no || cert.indoor_model_no || 'Refrigeration Machine'} • Site: ${cert.site_name || 'N/A'}`,
+                        })),
+                        ...(allCommissioningReports || []).filter(rep => {
+                          if (savedClient?.id && rep.customer_id && rep.customer_id === savedClient.id) return true;
+                          return (rep.customer_name || '').trim().toLowerCase() === clientName.trim().toLowerCase();
+                        }).map(rep => ({
+                          id: 'comm_' + rep.id,
+                          cshId: rep.id,
+                          isGenerated: true,
+                          isCommissioning: true,
+                          rawReport: rep,
+                          name: `Commissioning Report - ${rep.report_no || 'CSH'}.pdf`,
+                          category: 'ServiceCert',
+                          categoryLabel: 'Commissioning (CSH-1/2)',
+                          icon: '❄️',
+                          badgeColor: '#0284c7',
+                          badgeBg: '#e0f2fe',
+                          size: null,
+                          uploadedAt: rep.handover_date || (rep.created_at?.split('T')[0] || ''),
+                          notes: `Site: ${rep.site_address?.slice(0, 30) || 'Site'} • Handover: ${rep.handover_date || 'N/A'} • Warranty: ${rep.warranty_end || 'N/A'}`,
                         })),
                         ...clientFiles.map(f => ({
                           ...f,
@@ -2504,6 +2573,22 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert, onP
           equipment={serviceEquipment}
           existingCertificate={viewingCertificate}
           onConvertToInvoice={(draft) => onNew(draft)}
+          onSaved={() => loadData()}
+        />
+      )}
+
+      {/* Cold Storage Commissioning Report Modal (CSH-1, CSH-2 & Measurement Sheet) */}
+      {commissioningModalOpen && (
+        <ColdStorageCommissioningModal
+          isOpen={commissioningModalOpen}
+          onClose={() => {
+            setCommissioningModalOpen(false);
+            setCommissioningClient(null);
+            setSelectedCommissioningReport(null);
+          }}
+          client={commissioningClient}
+          existingReport={selectedCommissioningReport}
+          profile={profileForStatement || {}}
           onSaved={() => loadData()}
         />
       )}

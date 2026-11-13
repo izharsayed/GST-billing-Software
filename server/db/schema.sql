@@ -476,3 +476,34 @@ CREATE TABLE IF NOT EXISTS service_certificates (
 );
 CREATE INDEX IF NOT EXISTS idx_service_certificates_req ON service_certificates(request_no);
 CREATE INDEX IF NOT EXISTS idx_service_certificates_cust ON service_certificates(customer_name);
+
+-- 25. Cold Storage Commissioning Reports (Daikin Form CSH-1, CSH-2, Measurement Sheet)
+CREATE TABLE IF NOT EXISTS commissioning_reports (
+  id TEXT PRIMARY KEY,
+  report_no TEXT UNIQUE NOT NULL,
+  invoice_no TEXT,
+  invoice_date TEXT,
+  customer_name TEXT NOT NULL,
+  customer_id TEXT,
+  branch TEXT DEFAULT 'Pune',
+  dealer_name TEXT DEFAULT 'Bizz Alliance LLP',
+  billing_address TEXT,
+  site_address TEXT,
+  handover_date TEXT,
+  warranty_start TEXT,
+  warranty_end TEXT,
+  ppm1_date TEXT,
+  ppm2_date TEXT,
+  ppm3_date TEXT,
+  distance_dealer TEXT DEFAULT '<60km',
+  units_json TEXT,
+  csh2_data_json TEXT,
+  measurement_data_json TEXT,
+  remarks TEXT,
+  engineer_name TEXT,
+  customer_signatory TEXT,
+  created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+  updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+CREATE INDEX IF NOT EXISTS idx_commissioning_reports_no ON commissioning_reports(report_no);
+CREATE INDEX IF NOT EXISTS idx_commissioning_reports_cust ON commissioning_reports(customer_name);

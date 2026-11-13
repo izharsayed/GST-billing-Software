@@ -591,3 +591,11 @@ export const getNextServiceRequestNumber = () => apiFetch(`${API}/service-certif
 export const getServiceCertificateById = (id) => apiFetch(`${API}/service-certificates/${encodeURIComponent(id)}`);
 export const saveServiceCertificate = (cert) => apiFetch(`${API}/service-certificates`, { method: 'POST', body: JSON.stringify(cert) });
 export const deleteServiceCertificate = (id) => apiFetch(`${API}/service-certificates/${encodeURIComponent(id)}`, { method: 'DELETE' });
+
+// ---- Cold Storage Commissioning Reports (CSH-1 / CSH-2 / Measurement) ----
+export const getCommissioningReports = (clientName) => apiFetch(`${API}/commissioning-reports${clientName ? `?client=${encodeURIComponent(clientName)}` : ''}`);
+export const getAllCommissioningReports = getCommissioningReports;
+export const getNextCommissioningReportNumber = () => apiFetch(`${API}/commissioning-reports/next-number`);
+export const getCommissioningReportById = (id) => apiFetch(`${API}/commissioning-reports/${encodeURIComponent(id)}`);
+export const saveCommissioningReport = (report) => apiFetch(`${API}/commissioning-reports`, { method: 'POST', body: JSON.stringify(report) });
+export const deleteCommissioningReport = (id) => apiFetch(`${API}/commissioning-reports/${encodeURIComponent(id)}`, { method: 'DELETE' });
