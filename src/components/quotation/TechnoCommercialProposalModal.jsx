@@ -249,7 +249,6 @@ export default function TechnoCommercialProposalModal({
       // Annexure II: Commercial Schedule & Notes
       annexure_ii: {
         scope_config: 'Standard Cam Lock PUF Panels (0.5mm PPGI Sheet), Matched Air-Cooled Condensing Unit & High-Efficiency Evaporator Unit.',
-        freight_status: 'INCLUSIVE',
         extra_piping_rate: 570,
         included_piping_ft: 10,
         items: (quotation?.items && quotation.items.length > 0)
@@ -1190,10 +1189,6 @@ export default function TechnoCommercialProposalModal({
                         <span style={{ color: '#475569' }}>Total Basic Cost:</span>
                         <strong style={{ color: '#0f172a' }}>₹{basicCost.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
                       </div>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0' }}>
-                        <span style={{ color: '#475569' }}>Freight / Transport:</span>
-                        <strong style={{ color: '#0284c7' }}>{proposalData.annexure_ii.freight_status}</strong>
-                      </div>
                       <div style={{ display: 'flex', justifyContent: 'space-between', padding: '2px 0', borderTop: '1px solid #cbd5e1' }}>
                         <span style={{ color: '#475569' }}>Taxable Amount:</span>
                         <strong style={{ color: '#0f172a' }}>₹{basicCost.toLocaleString('en-IN', { minimumFractionDigits: 2 })}</strong>
@@ -1573,33 +1568,18 @@ export default function TechnoCommercialProposalModal({
                 <h3 style={{ margin: '0 0 1rem', fontSize: '1.05rem', fontWeight: 700, color: '#0369a1', display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
                   <ShieldCheck size={18} /> 3. Annexure II — Commercial Notes & Extra Piping Allowance
                 </h3>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.25rem' }}>
-                      Extra Copper Piping Rate (₹ per RFT + GST)
-                    </label>
-                    <input
-                      type="number" className="form-input" style={{ width: '100%', fontSize: '0.85rem' }}
-                      value={proposalData.annexure_ii.extra_piping_rate}
-                      onChange={e => setProposalData(p => ({
-                        ...p,
-                        annexure_ii: { ...p.annexure_ii, extra_piping_rate: Number(e.target.value) || 0 }
-                      }))}
-                    />
-                  </div>
-                  <div>
-                    <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.25rem' }}>
-                      Freight / Transport Status
-                    </label>
-                    <input
-                      type="text" className="form-input" style={{ width: '100%', fontSize: '0.85rem' }}
-                      value={proposalData.annexure_ii.freight_status}
-                      onChange={e => setProposalData(p => ({
-                        ...p,
-                        annexure_ii: { ...p.annexure_ii, freight_status: e.target.value }
-                      }))}
-                    />
-                  </div>
+                <div style={{ marginBottom: '1rem', maxWidth: '360px' }}>
+                  <label style={{ display: 'block', fontSize: '0.8rem', fontWeight: 600, marginBottom: '0.25rem' }}>
+                    Extra Copper Piping Rate (₹ per RFT + GST)
+                  </label>
+                  <input
+                    type="number" className="form-input" style={{ width: '100%', fontSize: '0.85rem' }}
+                    value={proposalData.annexure_ii.extra_piping_rate}
+                    onChange={e => setProposalData(p => ({
+                      ...p,
+                      annexure_ii: { ...p.annexure_ii, extra_piping_rate: Number(e.target.value) || 0 }
+                    }))}
+                  />
                 </div>
 
                 {/* Items List Customizer */}
