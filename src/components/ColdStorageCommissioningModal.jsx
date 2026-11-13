@@ -270,103 +270,141 @@ export default function ColdStorageCommissioningModal({
       backdropFilter: 'blur(4px)'
     }}>
       <div style={{
-        background: 'var(--card-bg, #fff)', width: '100%', maxWidth: '1100px', height: '94vh',
-        borderRadius: 10, display: 'flex', flexDirection: 'column', overflow: 'hidden',
-        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.35)', border: '1px solid var(--border)'
+        background: 'var(--card-bg, #fff)', width: '100%', maxWidth: 'min(1240px, 96vw)', height: '94vh',
+        borderRadius: 12, display: 'flex', flexDirection: 'column', overflow: 'hidden',
+        boxShadow: '0 25px 50px -12px rgba(0, 0, 0, 0.45)', border: '1px solid var(--border)'
       }}>
-        {/* MODAL HEADER */}
+        {/* MODAL HEADER - ROW 1: TITLE & ACTIONS */}
         <div className="no-print" style={{
           display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-          padding: '0.75rem 1.25rem', background: '#0b2545', color: '#fff', borderBottom: '1px solid #1e3a5f'
+          padding: '0.75rem 1.25rem', background: '#0b2545', color: '#fff', borderBottom: '1px solid #16365c',
+          gap: '1rem', flexWrap: 'nowrap'
         }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
-            <FileText size={20} style={{ color: '#38bdf8' }} />
-            <div>
-              <div style={{ fontWeight: 800, fontSize: '1.05rem', letterSpacing: '0.5px' }}>
-                COLD STORAGE INSTALLATION & COMMISSIONING FORM
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem', minWidth: 0 }}>
+            <FileText size={22} style={{ color: '#38bdf8', flexShrink: 0 }} />
+            <div style={{ minWidth: 0 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem', flexWrap: 'wrap' }}>
+                <span style={{ fontWeight: 800, fontSize: '1.02rem', letterSpacing: '0.3px', whiteSpace: 'nowrap' }}>
+                  COLD STORAGE INSTALLATION & COMMISSIONING FORM
+                </span>
+                <span style={{
+                  background: 'rgba(56, 189, 248, 0.15)', color: '#38bdf8', padding: '1px 7px',
+                  borderRadius: '12px', fontSize: '0.7rem', fontWeight: 700, border: '1px solid rgba(56, 189, 248, 0.3)',
+                  whiteSpace: 'nowrap'
+                }}>
+                  Daikin CSH-1, CSH-2 & BOQ
+                </span>
               </div>
-              <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                Ref No: <strong>{formData.report_no || 'CSH-NEW'}</strong> • Client: {formData.customer_name} (Daikin CSH-1, CSH-2 & BOQ)
+              <div style={{ fontSize: '0.75rem', color: '#94a3b8', marginTop: '2px', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                Ref No: <strong style={{ color: '#e2e8f0' }}>{formData.report_no || 'CSH-NEW'}</strong> • Client: <strong style={{ color: '#e2e8f0' }}>{formData.customer_name || 'Customer'}</strong>
               </div>
             </div>
           </div>
 
-          {/* TAB BUTTONS */}
-          <div style={{ display: 'flex', gap: '0.35rem', background: 'rgba(255,255,255,0.1)', padding: '3px', borderRadius: 6 }}>
-            <button
-              type="button"
-              className="btn"
-              onClick={() => setActiveTab('csh1')}
-              style={{
-                fontSize: '0.76rem', padding: '0.35rem 0.7rem', border: 'none', borderRadius: 4, cursor: 'pointer',
-                background: activeTab === 'csh1' ? '#0284c7' : 'transparent', color: '#fff', fontWeight: activeTab === 'csh1' ? 700 : 500
-              }}
-            >
-              📋 Form CSH-1 (Warranty & Handover)
-            </button>
-            <button
-              type="button"
-              className="btn"
-              onClick={() => setActiveTab('csh2')}
-              style={{
-                fontSize: '0.76rem', padding: '0.35rem 0.7rem', border: 'none', borderRadius: 4, cursor: 'pointer',
-                background: activeTab === 'csh2' ? '#0284c7' : 'transparent', color: '#fff', fontWeight: activeTab === 'csh2' ? 700 : 500
-              }}
-            >
-              ⚙️ Form CSH-2 (Unit Parameters Log)
-            </button>
-            <button
-              type="button"
-              className="btn"
-              onClick={() => setActiveTab('measurement')}
-              style={{
-                fontSize: '0.76rem', padding: '0.35rem 0.7rem', border: 'none', borderRadius: 4, cursor: 'pointer',
-                background: activeTab === 'measurement' ? '#0284c7' : 'transparent', color: '#fff', fontWeight: activeTab === 'measurement' ? 700 : 500
-              }}
-            >
-              📐 Measurement Sheet (Site BOQ)
-            </button>
-            <button
-              type="button"
-              className="btn"
-              onClick={() => setActiveTab('preview')}
-              style={{
-                fontSize: '0.76rem', padding: '0.35rem 0.7rem', border: 'none', borderRadius: 4, cursor: 'pointer',
-                background: activeTab === 'preview' ? '#059669' : 'transparent', color: '#fff', fontWeight: activeTab === 'preview' ? 700 : 500
-              }}
-            >
-              👁️ 6-Page Print Preview
-            </button>
-          </div>
-
           {/* ACTIONS */}
-          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center' }}>
+          <div style={{ display: 'flex', gap: '0.5rem', alignItems: 'center', flexShrink: 0 }}>
             <button
               type="button"
               className="btn btn-secondary"
               onClick={handlePrint}
-              style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem', display: 'flex', alignItems: 'center', gap: '0.35rem', background: '#1e293b', color: '#fff', border: '1px solid #334155' }}
+              style={{
+                fontSize: '0.8rem', padding: '0.4rem 0.85rem', display: 'inline-flex', alignItems: 'center',
+                gap: '0.35rem', background: '#1e293b', color: '#fff', border: '1px solid #334155',
+                whiteSpace: 'nowrap', fontWeight: 600
+              }}
             >
-              <Printer size={14} /> Print Installation Form
+              <Printer size={15} /> Print Form
             </button>
             <button
               type="button"
               className="btn btn-primary"
               onClick={handleSave}
               disabled={isSaving}
-              style={{ fontSize: '0.8rem', padding: '0.35rem 0.85rem', display: 'flex', alignItems: 'center', gap: '0.35rem', background: '#0284c7', border: 'none' }}
+              style={{
+                fontSize: '0.8rem', padding: '0.4rem 1rem', display: 'inline-flex', alignItems: 'center',
+                gap: '0.35rem', background: '#0284c7', border: 'none', whiteSpace: 'nowrap', fontWeight: 700
+              }}
             >
-              <Save size={14} /> {isSaving ? 'Saving...' : 'Save Installation Form'}
+              <Save size={15} /> {isSaving ? 'Saving...' : 'Save Form'}
             </button>
             <button
               type="button"
               className="icon-btn"
               onClick={onClose}
-              style={{ color: '#94a3b8', padding: '4px' }}
+              style={{ color: '#94a3b8', padding: '6px', marginLeft: '0.25rem', borderRadius: 6 }}
+              title="Close"
+              aria-label="Close"
             >
-              <X size={18} />
+              <X size={20} />
             </button>
           </div>
+        </div>
+
+        {/* MODAL HEADER - ROW 2: DEDICATED TAB BAR */}
+        <div className="no-print" style={{
+          display: 'flex', gap: '0.4rem', padding: '0.45rem 1.25rem', background: '#07182c',
+          borderBottom: '1px solid #1e3a5f', overflowX: 'auto', alignItems: 'center'
+        }}>
+          <button
+            type="button"
+            onClick={() => setActiveTab('csh1')}
+            style={{
+              fontSize: '0.8rem', padding: '0.4rem 0.95rem', border: 'none', borderRadius: 6, cursor: 'pointer',
+              whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
+              background: activeTab === 'csh1' ? '#0284c7' : 'rgba(255,255,255,0.06)',
+              color: activeTab === 'csh1' ? '#fff' : '#cbd5e1',
+              fontWeight: activeTab === 'csh1' ? 700 : 500,
+              boxShadow: activeTab === 'csh1' ? '0 2px 4px rgba(0,0,0,0.25)' : 'none',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            📋 Form CSH-1 (Warranty & Handover)
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('csh2')}
+            style={{
+              fontSize: '0.8rem', padding: '0.4rem 0.95rem', border: 'none', borderRadius: 6, cursor: 'pointer',
+              whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
+              background: activeTab === 'csh2' ? '#0284c7' : 'rgba(255,255,255,0.06)',
+              color: activeTab === 'csh2' ? '#fff' : '#cbd5e1',
+              fontWeight: activeTab === 'csh2' ? 700 : 500,
+              boxShadow: activeTab === 'csh2' ? '0 2px 4px rgba(0,0,0,0.25)' : 'none',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            ⚙️ Form CSH-2 (Unit Parameters Log)
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('measurement')}
+            style={{
+              fontSize: '0.8rem', padding: '0.4rem 0.95rem', border: 'none', borderRadius: 6, cursor: 'pointer',
+              whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
+              background: activeTab === 'measurement' ? '#0284c7' : 'rgba(255,255,255,0.06)',
+              color: activeTab === 'measurement' ? '#fff' : '#cbd5e1',
+              fontWeight: activeTab === 'measurement' ? 700 : 500,
+              boxShadow: activeTab === 'measurement' ? '0 2px 4px rgba(0,0,0,0.25)' : 'none',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            📐 Measurement Sheet (Site BOQ)
+          </button>
+          <button
+            type="button"
+            onClick={() => setActiveTab('preview')}
+            style={{
+              fontSize: '0.8rem', padding: '0.4rem 0.95rem', border: 'none', borderRadius: 6, cursor: 'pointer',
+              whiteSpace: 'nowrap', display: 'inline-flex', alignItems: 'center', gap: '0.4rem',
+              background: activeTab === 'preview' ? '#059669' : 'rgba(255,255,255,0.06)',
+              color: activeTab === 'preview' ? '#fff' : '#cbd5e1',
+              fontWeight: activeTab === 'preview' ? 700 : 500,
+              boxShadow: activeTab === 'preview' ? '0 2px 4px rgba(0,0,0,0.25)' : 'none',
+              transition: 'all 0.15s ease'
+            }}
+          >
+            👁️ 6-Page Print Preview
+          </button>
         </div>
 
         {/* MODAL BODY */}
