@@ -107,6 +107,7 @@ export default function ColdStorageCommissioningModal({
   const [activeTab, setActiveTab] = useState('csh1'); // 'csh1' | 'csh2' | 'measurement' | 'preview'
   const [selectedUnitIdx, setSelectedUnitIdx] = useState(0);
   const [isSaving, setIsSaving] = useState(false);
+  const [isPrinting, setIsPrinting] = useState(false);
   const printRef = useRef(null);
 
   // Initialize form state
@@ -258,10 +259,118 @@ export default function ColdStorageCommissioningModal({
     }
   };
 
-  // Direct print handler
+  // Direct isolated iframe print handler for multi-page official Daikin report
   const handlePrint = () => {
-    window.print();
+    const printEl = document.getElementById('installation-form-print-container') || printRef.current;
+    if (!printEl) {
+      toast('Print container not ready. Please try again.', 'error');
+      return;
+    }
+
+    setIsPrinting(true);
+
+    let iframe = document.getElementById('fgsb-installation-print-frame');
+    if (!iframe) {
+      iframe = document.createElement('iframe');
+      iframe.id = 'fgsb-installation-print-frame';
+      iframe.style.cssText = 'position:fixed;left:-99999px;top:-99999px;width:0;height:0;border:0;';
+      document.body.appendChild(iframe);
+    }
+
+    const contentHtml = printEl.innerHTML;
+
+    const doc = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Installation_Report_${(formData.report_no || 'CSH').replace(/[\/\\]/g, '_')}</title>
+  <style>
+    @page {
+      size: A4 portrait;
+      margin: 8mm 10mm;
+    }
+    * {
+      box-sizing: border-box !important;
+      -webkit-print-color-adjust: exact !important;
+      print-color-adjust: exact !important;
+      color-adjust: exact !important;
+    }
+    html, body {
+      margin: 0 !important;
+      padding: 0 !important;
+      background: #ffffff !important;
+      font-family: Arial, -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      color: #000000 !important;
+      -webkit-font-smoothing: antialiased;
+    }
+    .csh-print-page {
+      page-break-after: always !important;
+      break-after: page !important;
+      page-break-inside: avoid !important;
+      break-inside: avoid !important;
+      margin: 0 auto !important;
+      padding: 6mm 8mm 6mm 8mm !important;
+      min-height: 275mm !important;
+      box-sizing: border-box !important;
+      box-shadow: none !important;
+      border: none !important;
+      background: #ffffff !important;
+      display: flex !important;
+      flex-direction: column !important;
+      justify-content: space-between !important;
+    }
+    .csh-print-page:last-child {
+      page-break-after: auto !important;
+      break-after: auto !important;
+    }
+    table {
+      border-collapse: collapse !important;
+      width: 100% !important;
+    }
+    th, td {
+      border-color: #000000 !important;
+    }
+    .no-print {
+      display: none !important;
+    }
+  </style>
+</head>
+<body>
+  ${contentHtml}
+</body>
+</html>`;
+
+    const frameDoc = iframe.contentWindow.document;
+    frameDoc.open();
+    frameDoc.write(doc);
+    frameDoc.close();
+
+    setTimeout(() => {
+      try {
+        iframe.contentWindow.focus();
+        iframe.contentWindow.print();
+      } catch (err) {
+        console.error('Iframe print error', err);
+        window.print();
+      } finally {
+        setIsPrinting(false);
+      }
+    }, 250);
   };
+
+  // Intercept Ctrl+P inside the commissioning modal to trigger clean iframe print
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e) => {
+      if ((e.ctrlKey || e.metaKey) && (e.key === 'p' || e.key === 'P')) {
+        e.preventDefault();
+        e.stopPropagation();
+        handlePrint();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, formData]);
 
   return (
     <div style={{
@@ -307,13 +416,15 @@ export default function ColdStorageCommissioningModal({
               type="button"
               className="btn btn-secondary"
               onClick={handlePrint}
+              disabled={isPrinting}
+              title="Print all 6 pages (Form CSH-1, CSH-2 for all units, and Measurement Sheet)"
               style={{
                 fontSize: '0.8rem', padding: '0.4rem 0.85rem', display: 'inline-flex', alignItems: 'center',
                 gap: '0.35rem', background: '#1e293b', color: '#fff', border: '1px solid #334155',
-                whiteSpace: 'nowrap', fontWeight: 600
+                whiteSpace: 'nowrap', fontWeight: 600, cursor: isPrinting ? 'wait' : 'pointer'
               }}
             >
-              <Printer size={15} /> Print Form
+              <Printer size={15} /> {isPrinting ? 'Preparing...' : 'Print Form'}
             </button>
             <button
               type="button"
@@ -1017,9 +1128,29 @@ export default function ColdStorageCommissioningModal({
             </div>
           )}
 
-          {/* TAB 4: PRINT PREVIEW (OFFICIAL DAIKIN FORM CSH-1, CSH-2 & MEASUREMENT SHEET) */}
-          {activeTab === 'preview' && (
-            <div ref={printRef} className="printable-commissioning-container" style={{ maxWidth: '860px', margin: '0 auto', color: '#000', fontFamily: 'Arial, sans-serif' }}>
+          {/* TAB 4: PRINT PREVIEW & HIDDEN PERSISTENT PRINT CONTAINER */}
+          {/* Kept persistently in DOM so 'Print Form' button works from ANY tab */}
+          <div
+            id="installation-form-print-container"
+            ref={printRef}
+            className="printable-commissioning-container"
+            style={activeTab === 'preview' ? {
+              maxWidth: '860px',
+              margin: '0 auto',
+              color: '#000',
+              fontFamily: 'Arial, sans-serif',
+              display: 'block'
+            } : {
+              position: 'fixed',
+              left: '-99999px',
+              top: 0,
+              width: '860px',
+              color: '#000',
+              fontFamily: 'Arial, sans-serif',
+              pointerEvents: 'none',
+              opacity: 0
+            }}
+          >
               
               {/* PAGE 1: FORM CSH-1 (HANDOVER & WARRANTY SUMMARY) */}
               <div className="csh-print-page" style={{ background: '#fff', padding: '2rem 2.5rem', border: '1px solid #cbd5e1', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', marginBottom: '2rem', minHeight: '1080px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxSizing: 'border-box' }}>
@@ -1459,7 +1590,40 @@ export default function ColdStorageCommissioningModal({
               </div>
 
             </div>
-          )}
+
+          {/* Print media fallback rules */}
+          <style dangerouslySetInnerHTML={{ __html: `
+            @media print {
+              body * { visibility: hidden !important; }
+              #installation-form-print-container,
+              #installation-form-print-container * {
+                visibility: visible !important;
+              }
+              #installation-form-print-container {
+                position: absolute !important;
+                left: 0 !important;
+                top: 0 !important;
+                width: 100% !important;
+                max-width: none !important;
+                margin: 0 !important;
+                padding: 0 !important;
+                opacity: 1 !important;
+                pointer-events: auto !important;
+              }
+              .csh-print-page {
+                page-break-after: always !important;
+                break-after: page !important;
+                box-shadow: none !important;
+                border: none !important;
+                margin: 0 !important;
+                padding: 6mm 8mm 6mm 8mm !important;
+              }
+              .csh-print-page:last-child {
+                page-break-after: auto !important;
+                break-after: auto !important;
+              }
+            }
+          ` }} />
         </div>
       </div>
     </div>
