@@ -2012,8 +2012,8 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert, onP
                       </button>
                       <button className="btn btn-secondary" style={{ fontSize: '0.78rem', padding: '0.35rem 0.75rem', color: '#0284c7', borderColor: '#38bdf8', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.3rem' }}
                         onClick={() => openCommissioningModal(savedClient || { name: clientName })}
-                        title="Create Cold Storage Commissioning Report (Forms CSH-1, CSH-2 & Measurement Sheet)">
-                        <FileText size={14} /> Commissioning Report
+                        title="Create Cold Storage Site Installation Form (Forms CSH-1, CSH-2 & Measurement Sheet)">
+                        <FileText size={14} /> Installation Form
                       </button>
                     </div>
 
@@ -2191,9 +2191,9 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert, onP
                           isGenerated: true,
                           isCommissioning: true,
                           rawReport: rep,
-                          name: `Commissioning Report - ${rep.report_no || 'CSH'}.pdf`,
+                          name: `Installation Form - ${rep.report_no || 'CSH'}.pdf`,
                           category: 'ServiceCert',
-                          categoryLabel: 'Commissioning (CSH-1/2)',
+                          categoryLabel: 'Installation Form (CSH-1/2)',
                           icon: '❄️',
                           badgeColor: '#0284c7',
                           badgeBg: '#e0f2fe',

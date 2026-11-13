@@ -22,6 +22,7 @@ import { getClientCredit, planCreditApplication } from '../utils/clientCredit';
 import ClientModal from './ClientModal';
 import ColdRoomSizerModal from './quotation/ColdRoomSizerModal';
 import TechnoCommercialProposalModal from './quotation/TechnoCommercialProposalModal';
+import ColdStorageCommissioningModal from './ColdStorageCommissioningModal';
 import { toast } from './Toast';
 
 // Rich text editor component that works with contentEditable properly
@@ -955,6 +956,7 @@ export default function InvoiceGenerator({ onBack, profile: profileProp, editing
   const [showPrintPreview, setShowPrintPreview] = useState(false);
   const [showSizerModal, setShowSizerModal] = useState(false);
   const [showProposalModal, setShowProposalModal] = useState(false);
+  const [showInstallationModal, setShowInstallationModal] = useState(false);
   const [technicalSpecs, setTechnicalSpecs] = useState(() => editingBill?.data?.technicalSpecs || draft?.technicalSpecs || null);
   const [proposalData, setProposalData] = useState(() => editingBill?.data?.proposalData || editingBill?.proposal_data || draft?.proposalData || null);
   const printRef = useRef(null);
@@ -3820,6 +3822,9 @@ export default function InvoiceGenerator({ onBack, profile: profileProp, editing
           <button className="btn btn-secondary" type="button" onClick={() => setShowProposalModal(true)} title="Open 5-Page Techno-Commercial Cold Room Proposal (MIF Project Template)" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: '#0284c7', borderColor: 'rgba(2, 132, 199, 0.35)', background: 'rgba(2, 132, 199, 0.08)', fontWeight: 600 }}>
             <FileText size={16} /> 5-Page Proposal
           </button>
+          <button className="btn btn-secondary" type="button" onClick={() => setShowInstallationModal(true)} title="Open Cold Storage Installation & Commissioning Handover Form (Daikin CSH-1, CSH-2 & BOQ)" style={{ display: 'inline-flex', alignItems: 'center', gap: '0.35rem', color: '#0369a1', borderColor: 'rgba(3, 105, 161, 0.35)', background: 'rgba(3, 105, 161, 0.08)', fontWeight: 600 }}>
+            <FileText size={16} /> Installation Form
+          </button>
           <button className="btn btn-secondary" type="button"
             onClick={() => setPreviewCollapsed(v => !v)}
             title={previewCollapsed ? 'Show the live preview' : 'Hide the preview and use the full width for entry'}>
@@ -5370,6 +5375,25 @@ export default function InvoiceGenerator({ onBack, profile: profileProp, editing
           onProposalSaved={(updatedProposalData) => {
             setProposalData(updatedProposalData);
           }}
+        />
+      )}
+
+      {showInstallationModal && (
+        <ColdStorageCommissioningModal
+          isOpen={showInstallationModal}
+          onClose={() => setShowInstallationModal(false)}
+          client={client}
+          invoice={{
+            invoice_no: details?.invoiceNumber,
+            invoice_date: details?.invoiceDate,
+            customer_name: client?.name,
+            customer_id: client?.id,
+            billing_address: client?.address,
+            site_address: details?.shippingAddress || client?.address,
+            items: items,
+            technicalSpecs: technicalSpecs
+          }}
+          profile={profile}
         />
       )}
 

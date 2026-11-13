@@ -283,10 +283,10 @@ export default function ColdStorageCommissioningModal({
             <FileText size={20} style={{ color: '#38bdf8' }} />
             <div>
               <div style={{ fontWeight: 800, fontSize: '1.05rem', letterSpacing: '0.5px' }}>
-                DAIKIN COLD STORAGE COMMISSIONING REPORT
+                COLD STORAGE INSTALLATION & COMMISSIONING FORM
               </div>
               <div style={{ fontSize: '0.75rem', color: '#94a3b8' }}>
-                Ref No: <strong>{formData.report_no || 'CSH-NEW'}</strong> • Client: {formData.customer_name}
+                Ref No: <strong>{formData.report_no || 'CSH-NEW'}</strong> • Client: {formData.customer_name} (Daikin CSH-1, CSH-2 & BOQ)
               </div>
             </div>
           </div>
@@ -302,7 +302,7 @@ export default function ColdStorageCommissioningModal({
                 background: activeTab === 'csh1' ? '#0284c7' : 'transparent', color: '#fff', fontWeight: activeTab === 'csh1' ? 700 : 500
               }}
             >
-              📋 Form CSH-1 (Summary)
+              📋 Form CSH-1 (Warranty & Handover)
             </button>
             <button
               type="button"
@@ -313,7 +313,7 @@ export default function ColdStorageCommissioningModal({
                 background: activeTab === 'csh2' ? '#0284c7' : 'transparent', color: '#fff', fontWeight: activeTab === 'csh2' ? 700 : 500
               }}
             >
-              ⚙️ Form CSH-2 (Parameters Log)
+              ⚙️ Form CSH-2 (Unit Parameters Log)
             </button>
             <button
               type="button"
@@ -324,7 +324,7 @@ export default function ColdStorageCommissioningModal({
                 background: activeTab === 'measurement' ? '#0284c7' : 'transparent', color: '#fff', fontWeight: activeTab === 'measurement' ? 700 : 500
               }}
             >
-              📐 Measurement Sheet
+              📐 Measurement Sheet (Site BOQ)
             </button>
             <button
               type="button"
@@ -335,7 +335,7 @@ export default function ColdStorageCommissioningModal({
                 background: activeTab === 'preview' ? '#059669' : 'transparent', color: '#fff', fontWeight: activeTab === 'preview' ? 700 : 500
               }}
             >
-              👁️ Print Preview
+              👁️ 6-Page Print Preview
             </button>
           </div>
 
@@ -347,7 +347,7 @@ export default function ColdStorageCommissioningModal({
               onClick={handlePrint}
               style={{ fontSize: '0.8rem', padding: '0.35rem 0.75rem', display: 'flex', alignItems: 'center', gap: '0.35rem', background: '#1e293b', color: '#fff', border: '1px solid #334155' }}
             >
-              <Printer size={14} /> Print
+              <Printer size={14} /> Print Installation Form
             </button>
             <button
               type="button"
@@ -356,7 +356,7 @@ export default function ColdStorageCommissioningModal({
               disabled={isSaving}
               style={{ fontSize: '0.8rem', padding: '0.35rem 0.85rem', display: 'flex', alignItems: 'center', gap: '0.35rem', background: '#0284c7', border: 'none' }}
             >
-              <Save size={14} /> {isSaving ? 'Saving...' : 'Save Report'}
+              <Save size={14} /> {isSaving ? 'Saving...' : 'Save Installation Form'}
             </button>
             <button
               type="button"
@@ -979,146 +979,447 @@ export default function ColdStorageCommissioningModal({
             </div>
           )}
 
-          {/* TAB 4: PRINT PREVIEW (EXACT OFFICIAL DAIKIN FORM CSH-1 & CSH-2 FORMAT) */}
+          {/* TAB 4: PRINT PREVIEW (OFFICIAL DAIKIN FORM CSH-1, CSH-2 & MEASUREMENT SHEET) */}
           {activeTab === 'preview' && (
-            <div ref={printRef} className="printable-commissioning-container" style={{ maxWidth: '820px', margin: '0 auto', background: '#fff', padding: '2rem', border: '1px solid #cbd5e1', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', color: '#000', fontFamily: 'Arial, sans-serif' }}>
-              {/* PAGE 1: FORM CSH-1 */}
-              <div style={{ marginBottom: '2.5rem' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.5rem' }}>
-                  <div>
-                    <div style={{ fontSize: '1.4rem', fontWeight: 900, letterSpacing: '1px', color: '#0284c7' }}>DAIKIN</div>
-                    <div style={{ fontSize: '0.85rem', fontWeight: 800 }}>Form CSH-1</div>
-                    <div style={{ fontSize: '0.95rem', fontWeight: 800, textTransform: 'uppercase', marginTop: '2px' }}>
-                      COLD STORAGE COMMISSIONING REPORT
+            <div ref={printRef} className="printable-commissioning-container" style={{ maxWidth: '860px', margin: '0 auto', color: '#000', fontFamily: 'Arial, sans-serif' }}>
+              
+              {/* PAGE 1: FORM CSH-1 (HANDOVER & WARRANTY SUMMARY) */}
+              <div className="csh-print-page" style={{ background: '#fff', padding: '2rem 2.5rem', border: '1px solid #cbd5e1', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', marginBottom: '2rem', minHeight: '1080px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxSizing: 'border-box' }}>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.75rem', borderBottom: '2px solid #0284c7', paddingBottom: '0.5rem' }}>
+                    <div>
+                      <div style={{ fontSize: '1.6rem', fontWeight: 900, letterSpacing: '1px', color: '#0284c7' }}>DAIKIN</div>
+                      <div style={{ fontSize: '0.88rem', fontWeight: 800 }}>Form CSH-1</div>
+                      <div style={{ fontSize: '1rem', fontWeight: 900, textTransform: 'uppercase', marginTop: '2px' }}>
+                        COLD STORAGE COMMISSIONING REPORT
+                      </div>
+                    </div>
+                    <div style={{ textAlign: 'right', fontSize: '0.8rem', lineHeight: 1.6 }}>
+                      <div>Invoice No: <strong>{formData.invoice_no || 'N/A'}</strong></div>
+                      <div>Invoice Date: <strong>{formData.invoice_date || 'N/A'}</strong></div>
+                      <div>DAIPL Branch: <strong>{formData.branch}</strong></div>
                     </div>
                   </div>
-                  <div style={{ textAlign: 'right', fontSize: '0.8rem' }}>
-                    <div>Invoice No: <strong>{formData.invoice_no || 'N/A'}</strong></div>
-                    <div>Invoice Date: <strong>{formData.invoice_date || 'N/A'}</strong></div>
-                    <div>DAIPL Branch: <strong>{formData.branch}</strong></div>
-                  </div>
-                </div>
 
-                {/* Billing Address Box */}
-                <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', marginBottom: '0.5rem', fontSize: '0.78rem' }}>
-                  <tbody>
-                    <tr style={{ background: '#f1f5f9' }}>
-                      <td colSpan={2} style={{ padding: '3px 6px', fontWeight: 800, borderBottom: '1px solid #000' }}>Customer Name / Address (Billing Address)</td>
-                    </tr>
-                    <tr>
-                      <td style={{ width: '120px', padding: '4px 6px', fontWeight: 700, borderRight: '1px solid #000' }}>Name:</td>
-                      <td style={{ padding: '4px 6px', fontWeight: 700 }}>{formData.customer_name}</td>
-                    </tr>
-                    <tr style={{ borderTop: '1px solid #ccc' }}>
-                      <td style={{ padding: '4px 6px', fontWeight: 700, borderRight: '1px solid #000' }}>Address:</td>
-                      <td style={{ padding: '4px 6px' }}>{formData.billing_address}</td>
-                    </tr>
-                  </tbody>
-                </table>
-
-                {/* Site Address Box */}
-                <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', marginBottom: '0.5rem', fontSize: '0.78rem' }}>
-                  <tbody>
-                    <tr style={{ background: '#f1f5f9' }}>
-                      <td colSpan={2} style={{ padding: '3px 6px', fontWeight: 800, borderBottom: '1px solid #000' }}>Customer Name / Address (Installation & Site Address)</td>
-                    </tr>
-                    <tr>
-                      <td style={{ width: '120px', padding: '4px 6px', fontWeight: 700, borderRight: '1px solid #000' }}>Name:</td>
-                      <td style={{ padding: '4px 6px', fontWeight: 700 }}>{formData.customer_name}</td>
-                    </tr>
-                    <tr style={{ borderTop: '1px solid #ccc' }}>
-                      <td style={{ padding: '4px 6px', fontWeight: 700, borderRight: '1px solid #000' }}>Address:</td>
-                      <td style={{ padding: '4px 6px' }}>{formData.site_address}</td>
-                    </tr>
-                  </tbody>
-                </table>
-
-                {/* Handover & Warranty PPM Box */}
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.5rem' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontSize: '0.76rem' }}>
+                  {/* Billing Address Box */}
+                  <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', marginBottom: '0.5rem', fontSize: '0.78rem' }}>
                     <tbody>
-                      <tr>
-                        <td style={{ padding: '4px 6px', borderBottom: '1px solid #000', borderRight: '1px solid #000' }}>Date of Handing Over:</td>
-                        <td style={{ padding: '4px 6px', borderBottom: '1px solid #000', fontWeight: 700 }}>{formData.handover_date}</td>
+                      <tr style={{ background: '#f1f5f9' }}>
+                        <td colSpan={2} style={{ padding: '4px 6px', fontWeight: 800, borderBottom: '1px solid #000' }}>Customer Name / Address ( Billing Address)</td>
                       </tr>
                       <tr>
-                        <td style={{ padding: '4px 6px', borderBottom: '1px solid #000', borderRight: '1px solid #000' }}>Warranty Starts From:</td>
-                        <td style={{ padding: '4px 6px', borderBottom: '1px solid #000', fontWeight: 700 }}>{formData.warranty_start}</td>
+                        <td style={{ width: '110px', padding: '4px 6px', fontWeight: 700, borderRight: '1px solid #000' }}>Name:</td>
+                        <td style={{ padding: '4px 6px', fontWeight: 700 }}>{formData.customer_name}</td>
                       </tr>
-                      <tr>
-                        <td style={{ padding: '4px 6px', borderRight: '1px solid #000' }}>Warranty Ends On:</td>
-                        <td style={{ padding: '4px 6px', fontWeight: 700, color: '#059669' }}>{formData.warranty_end}</td>
+                      <tr style={{ borderTop: '1px solid #ccc' }}>
+                        <td style={{ padding: '4px 6px', fontWeight: 700, borderRight: '1px solid #000' }}>Address:</td>
+                        <td style={{ padding: '4px 6px' }}>{formData.billing_address || formData.site_address}</td>
                       </tr>
                     </tbody>
                   </table>
 
-                  <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontSize: '0.76rem' }}>
+                  {/* Site Address Box */}
+                  <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', marginBottom: '0.5rem', fontSize: '0.78rem' }}>
+                    <tbody>
+                      <tr style={{ background: '#f1f5f9' }}>
+                        <td colSpan={2} style={{ padding: '4px 6px', fontWeight: 800, borderBottom: '1px solid #000' }}>Customer Name / Address (Installation & Site Address)</td>
+                      </tr>
+                      <tr>
+                        <td style={{ width: '110px', padding: '4px 6px', fontWeight: 700, borderRight: '1px solid #000' }}>Name:</td>
+                        <td style={{ padding: '4px 6px', fontWeight: 700 }}>{formData.customer_name}</td>
+                      </tr>
+                      <tr style={{ borderTop: '1px solid #ccc' }}>
+                        <td style={{ padding: '4px 6px', fontWeight: 700, borderRight: '1px solid #000' }}>Address:</td>
+                        <td style={{ padding: '4px 6px' }}>{formData.site_address}</td>
+                      </tr>
+                    </tbody>
+                  </table>
+
+                  {/* Distance from Dealer */}
+                  <div style={{ display: 'flex', border: '1px solid #000', marginBottom: '0.5rem', fontSize: '0.78rem' }}>
+                    <div style={{ width: '180px', padding: '4px 6px', fontWeight: 700, borderRight: '1px solid #000', background: '#f8fafc' }}>
+                      Distance from Dealer Office :
+                    </div>
+                    <div style={{ display: 'flex', flex: 1 }}>
+                      {['<60km', '60-200km', '>200km'].map(d => (
+                        <div key={d} style={{ flex: 1, textAlign: 'center', padding: '4px', borderRight: '1px solid #000', fontWeight: formData.distance_dealer === d ? 800 : 400, background: formData.distance_dealer === d ? '#e0f2fe' : '#fff' }}>
+                          {formData.distance_dealer === d ? `✓ ${d}` : d}
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+
+                  {/* Handover & Warranty PPM Box */}
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem', marginBottom: '0.75rem' }}>
+                    <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontSize: '0.76rem' }}>
+                      <tbody>
+                        <tr>
+                          <td style={{ padding: '5px 6px', borderBottom: '1px solid #000', borderRight: '1px solid #000', width: '140px' }}>Date of handing over:</td>
+                          <td style={{ padding: '5px 6px', borderBottom: '1px solid #000', fontWeight: 700 }}>{formData.handover_date}</td>
+                        </tr>
+                        <tr>
+                          <td style={{ padding: '5px 6px', borderBottom: '1px solid #000', borderRight: '1px solid #000' }}>Warranty starts from:</td>
+                          <td style={{ padding: '5px 6px', borderBottom: '1px solid #000', fontWeight: 700 }}>{formData.warranty_start}</td>
+                        </tr>
+                        <tr>
+                          <td style={{ padding: '5px 6px', borderRight: '1px solid #000' }}>Warranty ends on:</td>
+                          <td style={{ padding: '5px 6px', fontWeight: 700, color: '#059669' }}>{formData.warranty_end}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+
+                    <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontSize: '0.76rem' }}>
+                      <thead>
+                        <tr style={{ background: '#f1f5f9' }}>
+                          <th colSpan={3} style={{ padding: '4px 6px', borderBottom: '1px solid #000', textAlign: 'center' }}>Due Dates of Free Preventive Maintenance Service</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr>
+                          <td style={{ padding: '4px 6px', borderBottom: '1px solid #000', borderRight: '1px solid #000', fontWeight: 700, width: 35, textAlign: 'center' }}>1st</td>
+                          <td style={{ padding: '4px 6px', borderBottom: '1px solid #000', borderRight: '1px solid #000', fontWeight: 700, textAlign: 'center' }}>{formData.ppm1_date}</td>
+                          <td style={{ padding: '4px 6px', borderBottom: '1px solid #000', fontSize: '0.7rem' }}>(4 month from handing over)</td>
+                        </tr>
+                        <tr>
+                          <td style={{ padding: '4px 6px', borderBottom: '1px solid #000', borderRight: '1px solid #000', fontWeight: 700, textAlign: 'center' }}>2nd</td>
+                          <td style={{ padding: '4px 6px', borderBottom: '1px solid #000', borderRight: '1px solid #000', fontWeight: 700, textAlign: 'center' }}>{formData.ppm2_date}</td>
+                          <td style={{ padding: '4px 6px', borderBottom: '1px solid #000', fontSize: '0.7rem' }}>(8 month from handing over)</td>
+                        </tr>
+                        <tr>
+                          <td style={{ padding: '4px 6px', borderRight: '1px solid #000', fontWeight: 700, textAlign: 'center' }}>3rd</td>
+                          <td style={{ padding: '4px 6px', borderRight: '1px solid #000', fontWeight: 700, textAlign: 'center' }}>{formData.ppm3_date}</td>
+                          <td style={{ padding: '4px 6px', fontSize: '0.7rem' }}>(12 month from handing over)</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {/* Multi-Chamber Equipment Table */}
+                  <div style={{ fontSize: '0.76rem', fontWeight: 700, marginBottom: '0.3rem' }}>
+                    We Have handed over the Refrigeration Unit and Cold Room as described below for your beneficial use:
+                  </div>
+                  <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontSize: '0.76rem', marginBottom: '0.75rem' }}>
                     <thead>
                       <tr style={{ background: '#f1f5f9' }}>
-                        <th colSpan={3} style={{ padding: '3px 6px', borderBottom: '1px solid #000', textAlign: 'center' }}>Due Dates of Free Preventive Maintenance Service</th>
+                        <th style={{ border: '1px solid #000', padding: '4px', width: 30 }}>Sr No</th>
+                        <th style={{ border: '1px solid #000', padding: '4px', textAlign: 'left' }}>Evaporator Model & Make</th>
+                        <th style={{ border: '1px solid #000', padding: '4px', width: 95 }}>Serial No</th>
+                        <th style={{ border: '1px solid #000', padding: '4px', textAlign: 'left' }}>Condenser Model & Make</th>
+                        <th style={{ border: '1px solid #000', padding: '4px', width: 95 }}>Serial No</th>
+                        <th style={{ border: '1px solid #000', padding: '4px', width: 85 }}>Room size</th>
+                        <th style={{ border: '1px solid #000', padding: '4px', width: 60 }}>Room Temp</th>
                       </tr>
                     </thead>
                     <tbody>
-                      <tr>
-                        <td style={{ padding: '3px 6px', borderBottom: '1px solid #000', borderRight: '1px solid #000', fontWeight: 700 }}>1st</td>
-                        <td style={{ padding: '3px 6px', borderBottom: '1px solid #000', borderRight: '1px solid #000', fontWeight: 700 }}>{formData.ppm1_date}</td>
-                        <td style={{ padding: '3px 6px', borderBottom: '1px solid #000', fontSize: '0.7rem' }}>(4 months)</td>
-                      </tr>
-                      <tr>
-                        <td style={{ padding: '3px 6px', borderBottom: '1px solid #000', borderRight: '1px solid #000', fontWeight: 700 }}>2nd</td>
-                        <td style={{ padding: '3px 6px', borderBottom: '1px solid #000', borderRight: '1px solid #000', fontWeight: 700 }}>{formData.ppm2_date}</td>
-                        <td style={{ padding: '3px 6px', borderBottom: '1px solid #000', fontSize: '0.7rem' }}>(8 months)</td>
-                      </tr>
-                      <tr>
-                        <td style={{ padding: '3px 6px', borderRight: '1px solid #000', fontWeight: 700 }}>3rd</td>
-                        <td style={{ padding: '3px 6px', borderRight: '1px solid #000', fontWeight: 700 }}>{formData.ppm3_date}</td>
-                        <td style={{ padding: '3px 6px', fontSize: '0.7rem' }}>(12 months)</td>
-                      </tr>
+                      {formData.units.map((u, idx) => (
+                        <tr key={idx}>
+                          <td style={{ border: '1px solid #000', padding: '5px', textAlign: 'center', fontWeight: 700 }}>{idx + 1}</td>
+                          <td style={{ border: '1px solid #000', padding: '5px', fontWeight: 600 }}>{u.evaporatorMakeModel}</td>
+                          <td style={{ border: '1px solid #000', padding: '5px', textAlign: 'center', fontFamily: 'monospace' }}>{u.evaporatorSerialNo || '—'}</td>
+                          <td style={{ border: '1px solid #000', padding: '5px', fontWeight: 600 }}>{u.condenserMakeModel}</td>
+                          <td style={{ border: '1px solid #000', padding: '5px', textAlign: 'center', fontFamily: 'monospace' }}>{u.condenserSerialNo || '—'}</td>
+                          <td style={{ border: '1px solid #000', padding: '5px', textAlign: 'center' }}>{u.roomSize || '—'}</td>
+                          <td style={{ border: '1px solid #000', padding: '5px', textAlign: 'center', fontWeight: 700 }}>{u.roomTemp}°C</td>
+                        </tr>
+                      ))}
                     </tbody>
                   </table>
+
+                  {formData.remarks && (
+                    <div style={{ fontSize: '0.75rem', marginBottom: '0.75rem' }}>
+                      <strong>Remarks:</strong> {formData.remarks}
+                    </div>
+                  )}
                 </div>
 
-                {/* Multi-Chamber Equipment Table */}
-                <div style={{ fontSize: '0.76rem', fontWeight: 700, margin: '0.4rem 0 0.2rem' }}>Refrigeration Unit & Handover Schedule:</div>
-                <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontSize: '0.76rem', marginBottom: '0.75rem' }}>
-                  <thead>
-                    <tr style={{ background: '#f1f5f9' }}>
-                      <th style={{ border: '1px solid #000', padding: '4px', width: 30 }}>Sr</th>
-                      <th style={{ border: '1px solid #000', padding: '4px', textAlign: 'left' }}>Evaporator Model & Make</th>
-                      <th style={{ border: '1px solid #000', padding: '4px', width: 100 }}>Serial No</th>
-                      <th style={{ border: '1px solid #000', padding: '4px', textAlign: 'left' }}>Condenser Model & Make</th>
-                      <th style={{ border: '1px solid #000', padding: '4px', width: 100 }}>Serial No</th>
-                      <th style={{ border: '1px solid #000', padding: '4px', width: 60 }}>Temp</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {formData.units.map((u, idx) => (
-                      <tr key={idx}>
-                        <td style={{ border: '1px solid #000', padding: '4px', textAlign: 'center', fontWeight: 700 }}>{idx + 1}</td>
-                        <td style={{ border: '1px solid #000', padding: '4px', fontWeight: 600 }}>{u.evaporatorMakeModel}</td>
-                        <td style={{ border: '1px solid #000', padding: '4px', textAlign: 'center', fontFamily: 'monospace' }}>{u.evaporatorSerialNo || '—'}</td>
-                        <td style={{ border: '1px solid #000', padding: '4px', fontWeight: 600 }}>{u.condenserMakeModel}</td>
-                        <td style={{ border: '1px solid #000', padding: '4px', textAlign: 'center', fontFamily: 'monospace' }}>{u.condenserSerialNo || '—'}</td>
-                        <td style={{ border: '1px solid #000', padding: '4px', textAlign: 'center', fontWeight: 700 }}>{u.roomTemp}°C</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-
                 {/* Signatures */}
-                <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '1.5rem', paddingTop: '1rem', borderTop: '1px dashed #94a3b8' }}>
-                  <div style={{ width: '220px', textAlign: 'center', border: '1px solid #000', padding: '0.6rem 0.4rem', borderRadius: 4 }}>
-                    <div style={{ fontSize: '0.78rem', fontWeight: 800 }}>For {formData.dealer_name}</div>
-                    <div style={{ height: '35px' }}></div>
-                    <div style={{ fontSize: '0.7rem', borderTop: '1px solid #000', paddingTop: '2px' }}>Authorized Signatory / DAIPL Dealer</div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '1rem', borderTop: '1px solid #000' }}>
+                  <div style={{ width: '250px', textAlign: 'center', border: '1px solid #000', padding: '0.6rem 0.5rem', borderRadius: 4 }}>
+                    <div style={{ fontSize: '0.82rem', fontWeight: 800 }}>For {formData.dealer_name}</div>
+                    <div style={{ height: '40px' }}></div>
+                    <div style={{ fontSize: '0.72rem', borderTop: '1px solid #000', paddingTop: '3px', fontWeight: 700 }}>
+                      Signature / Seal of DAIPL Dealer
+                    </div>
                   </div>
-                  <div style={{ width: '220px', textAlign: 'center', border: '1px solid #000', padding: '0.6rem 0.4rem', borderRadius: 4 }}>
-                    <div style={{ fontSize: '0.78rem', fontWeight: 800 }}>Accepted by Customer</div>
-                    <div style={{ height: '35px' }}></div>
-                    <div style={{ fontSize: '0.7rem', borderTop: '1px solid #000', paddingTop: '2px' }}>Signature / Seal of Customer</div>
+                  <div style={{ width: '250px', textAlign: 'center', border: '1px solid #000', padding: '0.6rem 0.5rem', borderRadius: 4 }}>
+                    <div style={{ fontSize: '0.82rem', fontWeight: 800 }}>Accepted by</div>
+                    <div style={{ height: '40px' }}></div>
+                    <div style={{ fontSize: '0.72rem', borderTop: '1px solid #000', paddingTop: '3px', fontWeight: 700 }}>
+                      Signature / Seal of Customer
+                    </div>
                   </div>
                 </div>
               </div>
+
+              {/* PAGES 2 to (1 + units.length): FORM CSH-2 FOR EACH CHAMBER UNIT */}
+              {formData.units.map((unit, uIdx) => {
+                const uKey = `unit_${uIdx}`;
+                const csh2 = formData.csh2_data[uKey] || {
+                  voltage_odu: '404',
+                  voltage_idu: '230',
+                  ambient_temp: '28',
+                  thermostat_setting: '2',
+                  room_temp_order: unit.roomTemp || '-20',
+                  actual_box_temp: unit.roomTemp || '-20',
+                  rh_order: '',
+                  actual_rh: '',
+                  compressor_suction_psi: '50',
+                  compressor_discharge_psi: '240',
+                  compressor_rated_amps: '',
+                  compressor_actual_amps: '18',
+                  condenser_fan_amps: '4.5',
+                  condenser_inlet_temp: '40',
+                  condenser_outlet_temp: '38',
+                  evaporator_fan_amps: '1.0',
+                  defrost_frequency: '6',
+                  defrost_termination_temp: '8',
+                  defrost_fan_restart_min: '2',
+                  suction_pipe_size: '6.8',
+                  liquid_pipe_size: '3.8',
+                  pipe_insulation_thickness_mm: '19',
+                  refrigerant_qty_kg: '16',
+                  full_load_amps: '6.2',
+                  checklist: DEFAULT_CSH2_CHECKS.map(c => ({ ...c }))
+                };
+                const checks = csh2.checklist || DEFAULT_CSH2_CHECKS;
+
+                return (
+                  <div key={uIdx} className="csh-print-page" style={{ background: '#fff', padding: '2rem 2.5rem', border: '1px solid #cbd5e1', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', marginBottom: '2rem', minHeight: '1080px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxSizing: 'border-box' }}>
+                    <div>
+                      {/* Header */}
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '0.6rem', borderBottom: '2px solid #0284c7', paddingBottom: '0.4rem' }}>
+                        <div>
+                          <div style={{ fontSize: '1.5rem', fontWeight: 900, color: '#0284c7', letterSpacing: '1px' }}>DAIKIN</div>
+                          <div style={{ fontSize: '0.85rem', fontWeight: 800 }}>Form CSH-2 (Unit #{uIdx + 1})</div>
+                          <div style={{ fontSize: '0.92rem', fontWeight: 800, textTransform: 'uppercase' }}>
+                            COLD STORAGE COMMISSIONING REPORT
+                          </div>
+                          <div style={{ fontSize: '0.74rem', color: '#475569', fontStyle: 'italic' }}>
+                            (From Cold Room Dealer/DAIPL Engineer to Service Dept.)
+                          </div>
+                        </div>
+                        <div style={{ textAlign: 'right', fontSize: '0.78rem', lineHeight: 1.5 }}>
+                          <div>Date of handing Over : <strong>{formData.handover_date}</strong></div>
+                          <div>To Service Dept</div>
+                          <div>DAIPL Branch : <strong>{formData.branch}</strong></div>
+                          <div>Commissioning : <strong>{formData.dealer_name}</strong></div>
+                        </div>
+                      </div>
+
+                      {/* Customer Address Box */}
+                      <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', marginBottom: '0.5rem', fontSize: '0.78rem' }}>
+                        <tbody>
+                          <tr style={{ background: '#f1f5f9' }}>
+                            <td colSpan={2} style={{ padding: '3px 6px', fontWeight: 800, borderBottom: '1px solid #000' }}>
+                              Customer Name / Address ( Site Address)
+                            </td>
+                          </tr>
+                          <tr>
+                            <td style={{ width: '110px', padding: '4px 6px', fontWeight: 700, borderRight: '1px solid #000' }}>Name :</td>
+                            <td style={{ padding: '4px 6px', fontWeight: 700 }}>{formData.customer_name}</td>
+                          </tr>
+                          <tr style={{ borderTop: '1px solid #ccc' }}>
+                            <td style={{ padding: '4px 6px', fontWeight: 700, borderRight: '1px solid #000' }}>Address :</td>
+                            <td style={{ padding: '4px 6px' }}>{formData.site_address}</td>
+                          </tr>
+                        </tbody>
+                      </table>
+
+                      {/* Equipment Spec for This Unit */}
+                      <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', marginBottom: '0.65rem', fontSize: '0.76rem' }}>
+                        <thead>
+                          <tr style={{ background: '#f8fafc' }}>
+                            <th colSpan={2} style={{ border: '1px solid #000', padding: '3px', textAlign: 'center' }}>Evaporating Unit</th>
+                            <th colSpan={2} style={{ border: '1px solid #000', padding: '3px', textAlign: 'center' }}>Condensing Unit</th>
+                            <th colSpan={2} style={{ border: '1px solid #000', padding: '3px', textAlign: 'center' }}>Cold Room</th>
+                          </tr>
+                          <tr style={{ background: '#f1f5f9' }}>
+                            <th style={{ border: '1px solid #000', padding: '3px', width: '22%' }}>Model No.</th>
+                            <th style={{ border: '1px solid #000', padding: '3px', width: '14%' }}>Serial No</th>
+                            <th style={{ border: '1px solid #000', padding: '3px', width: '22%' }}>Model No.</th>
+                            <th style={{ border: '1px solid #000', padding: '3px', width: '14%' }}>Serial No</th>
+                            <th style={{ border: '1px solid #000', padding: '3px', width: '14%' }}>Room Size</th>
+                            <th style={{ border: '1px solid #000', padding: '3px', width: '14%' }}>Room Temp</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          <tr>
+                            <td style={{ border: '1px solid #000', padding: '4px', textAlign: 'center', fontWeight: 700 }}>{unit.evaporatorMakeModel}</td>
+                            <td style={{ border: '1px solid #000', padding: '4px', textAlign: 'center', fontFamily: 'monospace' }}>{unit.evaporatorSerialNo || '0000000'}</td>
+                            <td style={{ border: '1px solid #000', padding: '4px', textAlign: 'center', fontWeight: 700 }}>{unit.condenserMakeModel}</td>
+                            <td style={{ border: '1px solid #000', padding: '4px', textAlign: 'center', fontFamily: 'monospace' }}>{unit.condenserSerialNo || '0000000'}</td>
+                            <td style={{ border: '1px solid #000', padding: '4px', textAlign: 'center' }}>{unit.roomSize || '—'}</td>
+                            <td style={{ border: '1px solid #000', padding: '4px', textAlign: 'center', fontWeight: 800, color: '#0369a1' }}>{unit.roomTemp}°C</td>
+                          </tr>
+                        </tbody>
+                      </table>
+
+                      {/* Section Title */}
+                      <div style={{ fontSize: '0.82rem', fontWeight: 800, textDecoration: 'underline', marginBottom: '0.45rem' }}>
+                        Operating Parameters
+                      </div>
+
+                      {/* 2-Column Parameters Layout */}
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.5rem 1.5rem', fontSize: '0.76rem', lineHeight: 1.8, marginBottom: '0.75rem' }}>
+                        <div>
+                          <div>• Voltage Input (ODU): <strong style={{ textDecoration: 'underline', marginLeft: 4 }}>{csh2.voltage_odu || '404'}</strong> Volt</div>
+                          <div>• Ambient During Commissioning: <strong style={{ textDecoration: 'underline', marginLeft: 4 }}>{csh2.ambient_temp || '28'}</strong> °C</div>
+                          <div>• Room temp. as per order: <strong style={{ textDecoration: 'underline', marginLeft: 4 }}>{csh2.room_temp_order || unit.roomTemp}</strong> °C</div>
+                          <div>• Actual box temp achieved: <strong style={{ textDecoration: 'underline', marginLeft: 4, color: '#059669', fontWeight: 800 }}>{csh2.actual_box_temp || unit.roomTemp}</strong> °C</div>
+                          <div>• RH as per order: <strong style={{ textDecoration: 'underline', marginLeft: 4 }}>{csh2.rh_order || '—'}</strong> %</div>
+                          <div>• Actual RH achieved: <strong style={{ textDecoration: 'underline', marginLeft: 4 }}>{csh2.actual_rh || '—'}</strong> %</div>
+                          <div>• Compressor Suction Pressure: <strong style={{ textDecoration: 'underline', marginLeft: 4 }}>{csh2.compressor_suction_psi || '50'}</strong> Psig</div>
+                          <div>• Compressor Discharge Pressure: <strong style={{ textDecoration: 'underline', marginLeft: 4 }}>{csh2.compressor_discharge_psi || '240'}</strong> Psig</div>
+                          <div>• Compressor rated amps: <strong style={{ textDecoration: 'underline', marginLeft: 4 }}>{csh2.compressor_rated_amps || '—'}</strong> Amps</div>
+                          <div>• Compressor actual amps: <strong style={{ textDecoration: 'underline', marginLeft: 4 }}>{csh2.compressor_actual_amps || '18'}</strong> Amps</div>
+                          <div>• Condenser fan motor amps: <strong style={{ textDecoration: 'underline', marginLeft: 4 }}>{csh2.condenser_fan_amps || '4.5'}</strong> Amps</div>
+                          <div>• Condenser air inlet temp: <strong style={{ textDecoration: 'underline', marginLeft: 4 }}>{csh2.condenser_inlet_temp || '40'}</strong> °C</div>
+                          <div>• Condenser air outlet temp: <strong style={{ textDecoration: 'underline', marginLeft: 4 }}>{csh2.condenser_outlet_temp || '38'}</strong> °C</div>
+                        </div>
+
+                        <div>
+                          <div>• Thermostat setting: <strong style={{ textDecoration: 'underline', marginLeft: 4 }}>{csh2.thermostat_setting || '2'}</strong> °C</div>
+                          <div>• Voltage Input (IDU): <strong style={{ textDecoration: 'underline', marginLeft: 4 }}>{csh2.voltage_idu || '230'}</strong> Volt</div>
+                          <div>• Evaporator fan motor amps: <strong style={{ textDecoration: 'underline', marginLeft: 4 }}>{csh2.evaporator_fan_amps || '1'}</strong> Amps</div>
+                          <div>• Defrost frequency: <strong style={{ textDecoration: 'underline', marginLeft: 4 }}>{csh2.defrost_frequency || '6'}</strong> Hours/Day</div>
+                          <div>• Defrost termination temperature: <strong style={{ textDecoration: 'underline', marginLeft: 4 }}>{csh2.defrost_termination_temp || '8'}</strong> °C</div>
+                          <div>• Defrost fan restart delay: <strong style={{ textDecoration: 'underline', marginLeft: 4 }}>{csh2.defrost_fan_restart_min || '2'}</strong> Minutes</div>
+                          <div>• Suction pipe size Diameter: <strong style={{ textDecoration: 'underline', marginLeft: 4 }}>{csh2.suction_pipe_size || '6.8'}</strong> inches</div>
+                          <div>• Liquid pipe size Diameter: <strong style={{ textDecoration: 'underline', marginLeft: 4 }}>{csh2.liquid_pipe_size || '3.8'}</strong> inches</div>
+                          <div>• Total refrigerant piping Length: <strong style={{ textDecoration: 'underline', marginLeft: 4 }}>{csh2.refrigerant_pipe_length_ft || '—'}</strong> feet</div>
+                          <div>• Pipe insulation thickness: <strong style={{ textDecoration: 'underline', marginLeft: 4 }}>{csh2.pipe_insulation_thickness_mm || '19'}</strong> mm</div>
+                          <div>• Total refrigerant charged Qty: <strong style={{ textDecoration: 'underline', marginLeft: 4 }}>{csh2.refrigerant_qty_kg || '16'}</strong> Kg</div>
+                          <div>• Full Load Amps (FLA): <strong style={{ textDecoration: 'underline', marginLeft: 4 }}>{csh2.full_load_amps || '6.2'}</strong> Amps</div>
+                        </div>
+                      </div>
+
+                      {/* 10-Point Technical Checklist Table */}
+                      <div style={{ border: '1px solid #000', marginBottom: '0.75rem' }}>
+                        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '0.73rem' }}>
+                          <thead>
+                            <tr style={{ background: '#f1f5f9', borderBottom: '1px solid #000' }}>
+                              <th style={{ padding: '3px 6px', textAlign: 'left' }}>Safety Verification Item</th>
+                              <th style={{ padding: '3px 6px', width: 50, textAlign: 'center', borderLeft: '1px solid #000' }}>Yes</th>
+                              <th style={{ padding: '3px 6px', width: 50, textAlign: 'center', borderLeft: '1px solid #000' }}>No</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {checks.map((chk, cIdx) => (
+                              <tr key={cIdx} style={{ borderBottom: cIdx === checks.length - 1 ? 'none' : '1px solid #e2e8f0' }}>
+                                <td style={{ padding: '2.5px 6px' }}>• {chk.label}</td>
+                                <td style={{ padding: '2.5px 6px', textAlign: 'center', borderLeft: '1px solid #000', fontWeight: 800 }}>
+                                  {chk.checked ? '✓' : ''}
+                                </td>
+                                <td style={{ padding: '2.5px 6px', textAlign: 'center', borderLeft: '1px solid #000', fontWeight: 800 }}>
+                                  {!chk.checked ? '✓' : ''}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    </div>
+
+                    {/* Dual Signatures */}
+                    <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '0.75rem', borderTop: '1px solid #000' }}>
+                      <div style={{ width: '240px', textAlign: 'center', border: '1px solid #000', padding: '0.5rem', borderRadius: 4 }}>
+                        <div style={{ fontSize: '0.8rem', fontWeight: 800 }}>For {formData.dealer_name}</div>
+                        <div style={{ height: '35px' }}></div>
+                        <div style={{ fontSize: '0.7rem', borderTop: '1px solid #000', paddingTop: '2px', fontWeight: 700 }}>
+                          Installation Engineer Signature
+                        </div>
+                      </div>
+                      <div style={{ width: '240px', textAlign: 'center', border: '1px solid #000', padding: '0.5rem', borderRadius: 4 }}>
+                        <div style={{ fontSize: '0.8rem', fontWeight: 800 }}>Service Engineer</div>
+                        <div style={{ height: '35px' }}></div>
+                        <div style={{ fontSize: '0.7rem', borderTop: '1px solid #000', paddingTop: '2px', fontWeight: 700 }}>
+                          Signature / Date
+                        </div>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+
+              {/* PAGE 6: MEASUREMENT SHEET (SITE MATERIAL CONSUMPTION BOQ) */}
+              <div className="csh-print-page" style={{ background: '#fff', padding: '2rem 2.5rem', border: '1px solid #cbd5e1', boxShadow: '0 4px 6px -1px rgba(0,0,0,0.1)', minHeight: '1080px', display: 'flex', flexDirection: 'column', justifyContent: 'space-between', boxSizing: 'border-box' }}>
+                <div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: '1.25rem', borderBottom: '2px solid #0284c7', paddingBottom: '0.5rem' }}>
+                    <div>
+                      <div style={{ fontSize: '1.6rem', fontWeight: 900, color: '#0284c7', letterSpacing: '1px' }}>DAIKIN</div>
+                    </div>
+                    <div style={{ fontSize: '0.82rem', textAlign: 'right' }}>
+                      Date: <strong>{formData.handover_date}</strong>
+                    </div>
+                  </div>
+
+                  <div style={{ textAlign: 'center', fontSize: '1.2rem', fontWeight: 900, textDecoration: 'underline', marginBottom: '1.25rem', letterSpacing: '0.5px' }}>
+                    Measurement sheet
+                  </div>
+
+                  <div style={{ fontSize: '0.82rem', lineHeight: 1.5, marginBottom: '1rem' }}>
+                    <div style={{ fontWeight: 600 }}>To,</div>
+                    <div style={{ fontWeight: 800 }}>{formData.customer_name}</div>
+                    <div>{formData.site_address}</div>
+                  </div>
+
+                  <div style={{ fontSize: '0.82rem', marginBottom: '0.4rem' }}>
+                    Dear Sir,
+                  </div>
+                  <div style={{ fontSize: '0.82rem', marginBottom: '0.9rem', fontStyle: 'italic' }}>
+                    Material consumption at site as per measurement is as follows:
+                  </div>
+
+                  {/* Material Table */}
+                  <table style={{ width: '100%', borderCollapse: 'collapse', border: '1px solid #000', fontSize: '0.8rem', marginBottom: '1.5rem' }}>
+                    <thead>
+                      <tr style={{ background: '#f1f5f9' }}>
+                        <th style={{ border: '1px solid #000', padding: '5px', width: 45, textAlign: 'center' }}>Sr.No</th>
+                        <th style={{ border: '1px solid #000', padding: '5px', textAlign: 'left' }}>Description</th>
+                        <th style={{ border: '1px solid #000', padding: '5px', width: 140, textAlign: 'center' }}>Sizes</th>
+                        <th style={{ border: '1px solid #000', padding: '5px', width: 90, textAlign: 'center' }}>Quantity</th>
+                        <th style={{ border: '1px solid #000', padding: '5px', width: 70, textAlign: 'center' }}>UOM</th>
+                        <th style={{ border: '1px solid #000', padding: '5px', width: 110, textAlign: 'left' }}>Remark</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {formData.measurement_data.map((m, idx) => (
+                        <tr key={idx} style={{ background: idx % 2 === 1 ? '#f8fafc' : '#fff' }}>
+                          <td style={{ border: '1px solid #000', padding: '5px', textAlign: 'center', fontWeight: 700 }}>{idx + 1}</td>
+                          <td style={{ border: '1px solid #000', padding: '5px', fontWeight: 600 }}>{m.description}</td>
+                          <td style={{ border: '1px solid #000', padding: '5px', textAlign: 'center' }}>{m.sizes || '—'}</td>
+                          <td style={{ border: '1px solid #000', padding: '5px', textAlign: 'center', fontWeight: 800 }}>{m.quantity}</td>
+                          <td style={{ border: '1px solid #000', padding: '5px', textAlign: 'center' }}>{m.uom}</td>
+                          <td style={{ border: '1px solid #000', padding: '5px' }}>{m.remark || ''}</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+
+                  <div style={{ fontSize: '0.82rem', marginBottom: '2rem' }}>
+                    Kindly acknowledge the same.
+                  </div>
+                </div>
+
+                {/* Dual Signatures */}
+                <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: '1rem', borderTop: '1px solid #000' }}>
+                  <div style={{ width: '250px', textAlign: 'center', border: '1px solid #000', padding: '0.6rem 0.5rem', borderRadius: 4 }}>
+                    <div style={{ fontSize: '0.82rem', fontWeight: 800 }}>For {formData.dealer_name}</div>
+                    <div style={{ height: '45px' }}></div>
+                    <div style={{ fontSize: '0.72rem', borderTop: '1px solid #000', paddingTop: '3px', fontWeight: 700 }}>
+                      Bizz Alliance Signature & Stamp
+                    </div>
+                  </div>
+                  <div style={{ width: '250px', textAlign: 'center', border: '1px solid #000', padding: '0.6rem 0.5rem', borderRadius: 4 }}>
+                    <div style={{ fontSize: '0.82rem', fontWeight: 800 }}>Accepted By</div>
+                    <div style={{ height: '45px' }}></div>
+                    <div style={{ fontSize: '0.72rem', borderTop: '1px solid #000', paddingTop: '3px', fontWeight: 700 }}>
+                      Customer Signature & Stamp
+                    </div>
+                  </div>
+                </div>
+              </div>
+
             </div>
           )}
         </div>
