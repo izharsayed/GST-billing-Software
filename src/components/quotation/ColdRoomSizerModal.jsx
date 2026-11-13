@@ -1208,16 +1208,16 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                         const envW = Math.max(1, liveChamberLayout.outerEnvelope?.widthM || 8);
                         const envH = Math.max(1, liveChamberLayout.outerEnvelope?.heightM || 4.5);
                         const chambers = liveChamberLayout.chambers || [];
-                        const svgW = 600;
-                        const svgH = 220;
+                        const svgW = 660;
+                        const svgH = 240;
 
                         if (layoutViewMode === 'top') {
-                          const scale = Math.min(480 / envL, 160 / envW);
+                          const scale = Math.min(520 / envL, 170 / envW);
                           const ox = (svgW - envL * scale) / 2;
                           const oy = (svgH - envW * scale) / 2;
 
                           return (
-                            <svg width="100%" height={svgH} viewBox={`0 0 ${svgW} ${svgH}`} style={{ maxWidth: '600px' }}>
+                            <svg width="100%" height={svgH} viewBox={`0 0 ${svgW} ${svgH}`} style={{ maxWidth: '660px', display: 'block' }}>
                               {/* Background Grid / Outer Facility Envelope */}
                               <rect
                                 x={ox}
@@ -1232,10 +1232,10 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
 
                               {/* Dimension text on envelope */}
                               <text x={ox + (envL * scale) / 2} y={oy - 8} textAnchor="middle" fontSize="10" fill="#475569" fontWeight="700">
-                                Overall Length: {envL}m
+                                Overall Length: {Math.round(envL * 100) / 100}m
                               </text>
                               <text x={ox - 8} y={oy + (envW * scale) / 2} textAnchor="middle" fontSize="10" fill="#475569" fontWeight="700" transform={`rotate(-90 ${ox - 8} ${oy + (envW * scale) / 2})`}>
-                                Width: {envW}m
+                                Width: {Math.round(envW * 100) / 100}m
                               </text>
 
                               {/* Chambers */}
@@ -1255,8 +1255,52 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                                 else if (ch.door?.hostWall === 'right') { doorX = cx + cw; doorY = cy + chg / 2; }
                                 else if (ch.door?.hostWall === 'back') { doorX = cx + cw / 2; doorY = cy; }
 
+                                const lenM = Math.round((Number(ch.dimensions?.lengthM) || 0) * 100) / 100;
+                                const widM = Math.round((Number(ch.dimensions?.widthM) || 0) * 100) / 100;
+                                const volM = Math.round((Number(ch.dimensions?.volumeM3) || 0) * 10) / 10;
+                                const tempC = Math.round((Number(ch.roomTempC) || 2) * 10) / 10;
+
+                                let nameText = ch.name || `Chamber ${idx + 1}`;
+                                let dimText = `${lenM}m × ${widM}m`;
+                                let volText = `${volM} m³`;
+                                let tempText = `Design: ${tempC}°C`;
+                                let nameSize = 11;
+                                let subSize = 8.5;
+
+                                if (cw < 65) {
+                                  nameText = `C${idx + 1}`;
+                                  dimText = `${lenM}×${widM}`;
+                                  volText = `${volM}m³`;
+                                  tempText = `${tempC}°C`;
+                                  nameSize = 8.5;
+                                  subSize = 7;
+                                } else if (cw < 105) {
+                                  nameText = `Ch. ${idx + 1}`;
+                                  dimText = `${lenM}m × ${widM}m`;
+                                  volText = `${volM} m³`;
+                                  tempText = `${tempC}°C`;
+                                  nameSize = 9.5;
+                                  subSize = 7.5;
+                                } else if (cw < 140) {
+                                  nameText = ch.name || `Chamber ${idx + 1}`;
+                                  dimText = `${lenM}m × ${widM}m`;
+                                  volText = `${volM} m³`;
+                                  tempText = `${tempC}°C`;
+                                  nameSize = 10.5;
+                                  subSize = 8;
+                                }
+
+                                const centerY = cy + chg / 2;
+                                const isCompactHeight = chg < 80;
+
                                 return (
                                   <g key={ch.chamberNumber || idx}>
+                                    <defs>
+                                      <clipPath id={`top-clip-${idx}`}>
+                                        <rect x={cx + 1} y={cy + 1} width={Math.max(0, cw - 2)} height={Math.max(0, chg - 2)} rx="3" />
+                                      </clipPath>
+                                    </defs>
+
                                     <rect
                                       x={cx + 1}
                                       y={cy + 1}
@@ -1267,37 +1311,87 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                                       strokeWidth="1.5"
                                       rx="3"
                                     />
-                                    {/* Chamber Label */}
-                                    <text
-                                      x={cx + cw / 2}
-                                      y={cy + chg / 2 - 10}
-                                      textAnchor="middle"
-                                      fontSize="11"
-                                      fontWeight="800"
-                                      fill="#0f172a"
-                                    >
-                                      {ch.name || `Chamber ${idx + 1}`}
-                                    </text>
-                                    <text
-                                      x={cx + cw / 2}
-                                      y={cy + chg / 2 + 4}
-                                      textAnchor="middle"
-                                      fontSize="9"
-                                      fontWeight="600"
-                                      fill="#334155"
-                                    >
-                                      {ch.dimensions?.lengthM}m × {ch.dimensions?.widthM}m ({ch.dimensions?.volumeM3 || 0} m³)
-                                    </text>
-                                    <text
-                                      x={cx + cw / 2}
-                                      y={cy + chg / 2 + 16}
-                                      textAnchor="middle"
-                                      fontSize="8.5"
-                                      fontWeight="700"
-                                      fill={isFreezer ? '#6b21a8' : '#0369a1'}
-                                    >
-                                      Design: {ch.roomTempC ?? 2.0}°C
-                                    </text>
+
+                                    {/* Text strictly clipped inside chamber bounds */}
+                                    <g clipPath={`url(#top-clip-${idx})`}>
+                                      {isCompactHeight ? (
+                                        <>
+                                          <text
+                                            x={cx + cw / 2}
+                                            y={centerY - 9}
+                                            textAnchor="middle"
+                                            fontSize={nameSize}
+                                            fontWeight="800"
+                                            fill="#0f172a"
+                                          >
+                                            {nameText}
+                                          </text>
+                                          <text
+                                            x={cx + cw / 2}
+                                            y={centerY + 3}
+                                            textAnchor="middle"
+                                            fontSize={subSize}
+                                            fontWeight="600"
+                                            fill="#334155"
+                                          >
+                                            {dimText}
+                                          </text>
+                                          <text
+                                            x={cx + cw / 2}
+                                            y={centerY + 14}
+                                            textAnchor="middle"
+                                            fontSize={subSize}
+                                            fontWeight="700"
+                                            fill={isFreezer ? '#6b21a8' : '#0369a1'}
+                                          >
+                                            {volText} • {tempText}
+                                          </text>
+                                        </>
+                                      ) : (
+                                        <>
+                                          <text
+                                            x={cx + cw / 2}
+                                            y={centerY - 22}
+                                            textAnchor="middle"
+                                            fontSize={nameSize}
+                                            fontWeight="800"
+                                            fill="#0f172a"
+                                          >
+                                            {nameText}
+                                          </text>
+                                          <text
+                                            x={cx + cw / 2}
+                                            y={centerY - 8}
+                                            textAnchor="middle"
+                                            fontSize={subSize}
+                                            fontWeight="600"
+                                            fill="#334155"
+                                          >
+                                            {dimText}
+                                          </text>
+                                          <text
+                                            x={cx + cw / 2}
+                                            y={centerY + 6}
+                                            textAnchor="middle"
+                                            fontSize={subSize}
+                                            fontWeight="600"
+                                            fill="#64748b"
+                                          >
+                                            {volText}
+                                          </text>
+                                          <text
+                                            x={cx + cw / 2}
+                                            y={centerY + 20}
+                                            textAnchor="middle"
+                                            fontSize={subSize}
+                                            fontWeight="700"
+                                            fill={isFreezer ? '#6b21a8' : '#0369a1'}
+                                          >
+                                            {tempText}
+                                          </text>
+                                        </>
+                                      )}
+                                    </g>
 
                                     {/* Dedicated Door Symbol */}
                                     <circle cx={doorX} cy={doorY} r="6" fill="#f59e0b" stroke="#78350f" strokeWidth="1" />
@@ -1311,12 +1405,12 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                           );
                         } else {
                           // SIDE ELEVATION (X-Z)
-                          const scale = Math.min(480 / envL, 160 / envH);
+                          const scale = Math.min(520 / envL, 170 / envH);
                           const ox = (svgW - envL * scale) / 2;
                           const oy = (svgH - envH * scale) / 2;
 
                           return (
-                            <svg width="100%" height={svgH} viewBox={`0 0 ${svgW} ${svgH}`} style={{ maxWidth: '600px' }}>
+                            <svg width="100%" height={svgH} viewBox={`0 0 ${svgW} ${svgH}`} style={{ maxWidth: '660px', display: 'block' }}>
                               {/* Outer Facility Profile */}
                               <rect
                                 x={ox}
@@ -1332,7 +1426,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                               {/* Ceiling PUF & Ground Slab Indicators */}
                               <rect x={ox - 4} y={oy - 6} width={envL * scale + 8} height="6" fill="#0284c7" rx="2" />
                               <text x={ox + (envL * scale) / 2} y={oy - 9} textAnchor="middle" fontSize="9" fill="#0284c7" fontWeight="700">
-                                Insulated PUF Ceiling (T = {envH}m)
+                                Insulated PUF Ceiling (T = {Math.round(envH * 100) / 100}m)
                               </text>
 
                               <rect x={ox - 4} y={oy + envH * scale} width={envL * scale + 8} height="8" fill="#64748b" rx="2" />
@@ -1350,8 +1444,35 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                                 const chg = Math.max(2, chH * scale);
                                 const isUpperTier = cz > 0;
 
+                                const hM = Math.round((Number(chH) || 0) * 100) / 100;
+                                let nameText = ch.name || `Chamber ${idx + 1}`;
+                                if (isUpperTier) nameText += ' (Upper)';
+                                let headroomText = `Clear Headroom: ${hM}m`;
+                                let nameSize = 10;
+                                let subSize = 8.5;
+
+                                if (cw < 60) {
+                                  nameText = `C${idx + 1}${isUpperTier ? ' (U)' : ''}`;
+                                  headroomText = `H: ${hM}m`;
+                                  nameSize = 8.5;
+                                  subSize = 7;
+                                } else if (cw < 95) {
+                                  nameText = `Ch. ${idx + 1}${isUpperTier ? ' (Up)' : ''}`;
+                                  headroomText = `Headroom: ${hM}m`;
+                                  nameSize = 9.5;
+                                  subSize = 7.5;
+                                }
+
+                                const centerY = cy + chg / 2;
+
                                 return (
                                   <g key={ch.chamberNumber || idx}>
+                                    <defs>
+                                      <clipPath id={`side-clip-${idx}`}>
+                                        <rect x={cx + 1} y={cy + 1} width={Math.max(0, cw - 2)} height={Math.max(0, chg - 2)} rx="3" />
+                                      </clipPath>
+                                    </defs>
+
                                     <rect
                                       x={cx + 1}
                                       y={cy + 1}
@@ -1362,26 +1483,29 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                                       strokeWidth="1.5"
                                       rx="3"
                                     />
-                                    <text
-                                      x={cx + cw / 2}
-                                      y={cy + chg / 2 - 4}
-                                      textAnchor="middle"
-                                      fontSize="10"
-                                      fontWeight="800"
-                                      fill="#0f172a"
-                                    >
-                                      {ch.name || `Chamber ${idx + 1}`} {isUpperTier ? '(Upper Tier)' : ''}
-                                    </text>
-                                    <text
-                                      x={cx + cw / 2}
-                                      y={cy + chg / 2 + 10}
-                                      textAnchor="middle"
-                                      fontSize="9"
-                                      fontWeight="600"
-                                      fill="#475569"
-                                    >
-                                      Clear Headroom: {chH}m
-                                    </text>
+
+                                    <g clipPath={`url(#side-clip-${idx})`}>
+                                      <text
+                                        x={cx + cw / 2}
+                                        y={centerY - 4}
+                                        textAnchor="middle"
+                                        fontSize={nameSize}
+                                        fontWeight="800"
+                                        fill="#0f172a"
+                                      >
+                                        {nameText}
+                                      </text>
+                                      <text
+                                        x={cx + cw / 2}
+                                        y={centerY + 10}
+                                        textAnchor="middle"
+                                        fontSize={subSize}
+                                        fontWeight="600"
+                                        fill="#475569"
+                                      >
+                                        {headroomText}
+                                      </text>
+                                    </g>
                                   </g>
                                 );
                               })}
