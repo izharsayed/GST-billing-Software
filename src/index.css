@@ -3682,3 +3682,42 @@ html:not([data-theme="dark"]) .welcome-card-close:hover { background: rgba(15, 2
   .welcome-card h2 { font-size: 1.2rem; }
   .welcome-card-btn { flex: 1 1 100%; justify-content: center; }
 }
+
+/* ========================================================
+   Cold Room Sizer Modal — Layout, spacing & input sizing
+   ======================================================== */
+.cold-room-sizer-modal {
+  padding: 1.25rem 1.5rem !important;
+  max-width: 980px !important;
+}
+
+.cold-room-sizer-modal .form-input {
+  box-sizing: border-box !important;
+  padding: 0.35rem 0.65rem !important;
+  font-size: 0.82rem !important;
+  line-height: normal !important;
+  min-height: 38px !important;
+  height: 38px !important;
+}
+
+.cold-room-sizer-modal select.form-input {
+  box-sizing: border-box !important;
+  padding: 0.35rem 2rem 0.35rem 0.65rem !important;
+  min-height: 38px !important;
+  height: 38px !important;
+  line-height: normal !important;
+  background-position: right 0.65rem center !important;
+}
+
+.cold-room-sizer-modal textarea.form-input {
+  min-height: 60px !important;
+  height: auto !important;
+}
+
+.cold-room-sizer-modal table .form-input {
+  min-height: 28px !important;
+  height: 28px !important;
+  padding: 0.15rem 0.4rem !important;
+  font-size: 0.72rem !important;
+}
+

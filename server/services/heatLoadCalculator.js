@@ -1,44 +1,27 @@
 import { db } from '../db/index.js';
+import {
+  PUF_SPECS,
+  FLOOR_CONSTRUCTION_TYPES,
+  COVERAGE_MODES,
+  DOOR_OPTIONS,
+  calculateAirEnthalpy,
+  calculateAirDensity,
+  calculateAirChangesPerDay,
+  calculateGosneyOlssonInfiltration,
+  calculateClearInternalDimensions,
+  generateStandardChamberLayout,
+  validateCustomChamberLayout,
+  placeAutomaticDoors,
+  calculatePufAreas,
+} from '../../src/components/quotation/chamberUtils.js';
 
-/**
- * Standard ASHRAE / USDA Refrigeration Heat Load Calculation Engine
- * and Daikin Commercial Refrigeration Equipment Matcher.
- */
-
-// PUF panel thickness lookup (mm -> meters) and conductivity (W/m·K)
-export const PUF_SPECS = {
-  60: { thicknessM: 0.06, k: 0.023 },
-  100: { thicknessM: 0.10, k: 0.023 },
-  120: { thicknessM: 0.12, k: 0.023 },
-  150: { thicknessM: 0.15, k: 0.023 },
+export {
+  PUF_SPECS,
+  calculateAirEnthalpy,
+  calculateAirDensity,
+  calculateAirChangesPerDay,
+  calculateGosneyOlssonInfiltration,
 };
-
-/**
- * Calculate psychrometric enthalpy of moist air (kJ/kg)
- * Standard ASHRAE Fundamentals formulation
- */
-export function calculateAirEnthalpy(tempC, relativeHumidity = 0.5) {
-  const T = Number(tempC);
-  const rh = Math.max(0.01, Math.min(1.0, Number(relativeHumidity)));
-  // Saturation vapor pressure over liquid water (Tetens formula, kPa)
-  const pSat = 0.61078 * Math.exp((17.27 * T) / (T + 237.3));
-  const pv = rh * pSat;
-  // Humidity ratio W (kg moisture / kg dry air), atmospheric pressure 101.325 kPa
-  const W = Math.max(0.0001, 0.622 * (pv / Math.max(0.1, 101.325 - pv)));
-  // Moist air specific enthalpy (kJ/kg of dry air)
-  const h = 1.006 * T + W * (2501.0 + 1.86 * T);
-  return h;
-}
-
-/**
- * Calculate recommended daily room air changes based on room volume
- * ASHRAE standard correlation: n = 70 * V^(-0.46)
- */
-export function calculateAirChangesPerDay(volumeM3) {
-  const v = Math.max(1, Number(volumeM3));
-  const n = 70 * Math.pow(v, -0.46);
-  return Math.max(1.5, Math.min(40.0, Math.round(n * 100) / 100));
-}
 
 /**
  * Retrieve all available commodities from the thermal_commodities table
@@ -56,9 +39,11 @@ export function getThermalCommodities() {
 
 /**
  * Main Refrigeration Heat Load Calculation Function
+ * Supports Standard Multi-Axis Slicing (1D, 2D grid, 2D prime proportional bay)
+ * and Custom Per-Room 3D Coordinate Mode.
  */
 export function calculateHeatLoad(inputs = {}) {
-  // 1. Dimensions, Chambers & Volume (supports flat inputs or nested inputs.dimensions)
+  // 1. Dimensions, Chambers & Volume
   const dims = inputs.dimensions || {};
   const unit = (inputs.unit || dims.unit) === 'm' ? 'm' : 'ft';
   let lengthM, widthM, heightM, lengthFt, widthFt, heightFt;
@@ -83,49 +68,66 @@ export function calculateHeatLoad(inputs = {}) {
     heightM = Math.round(heightFt * 0.3048 * 100) / 100;
   }
 
-  // Multi-chamber partitioning (Option 1: Divide 1 room into N equal chambers)
   const numRooms = Math.max(1, Math.round(Number(inputs.numRooms || dims.numRooms || inputs.chambersCount || dims.chambersCount || 1)));
-
-  const roomVolumeM3 = Math.round(lengthM * widthM * heightM * 100) / 100;
-  const roomVolumeFt3 = Math.round(lengthFt * widthFt * heightFt);
-
-  // Surface areas in m2 (Outer Envelope)
-  const floorAreaM2 = Math.round(lengthM * widthM * 100) / 100;
-  const ceilingAreaM2 = floorAreaM2;
-  const wallsAreaM2 = Math.round(2 * (lengthM * heightM + widthM * heightM) * 100) / 100;
-  const totalSurfaceAreaM2 = Math.round((wallsAreaM2 + ceilingAreaM2 + floorAreaM2) * 100) / 100;
-
-  // Internal Partition Walls: (N - 1) walls dividing along length
-  const partitionWallsCount = Math.max(0, numRooms - 1);
-  const singlePartitionWallAreaM2 = Math.round(widthM * heightM * 100) / 100;
-  const totalPartitionAreaM2 = Math.round(partitionWallsCount * singlePartitionWallAreaM2 * 100) / 100;
-  const totalPufSurfaceAreaM2 = Math.round((totalSurfaceAreaM2 + totalPartitionAreaM2) * 100) / 100;
-
-  // Doors: Automatically 1 door per chamber
-  const totalDoors = numRooms;
-
-  // Chamber geometry
-  const chamberLengthM = Math.round((lengthM / numRooms) * 100) / 100;
-  const chamberWidthM = widthM;
-  const chamberHeightM = heightM;
-  const chamberLengthFt = Math.round((lengthFt / numRooms) * 10) / 10;
-  const chamberWidthFt = widthFt;
-  const chamberHeightFt = heightFt;
-  const chamberVolumeM3 = Math.round((roomVolumeM3 / numRooms) * 100) / 100;
-  const chamberVolumeFt3 = Math.round(roomVolumeFt3 / numRooms);
-  const chamberFloorM2 = Math.round(chamberLengthM * widthM * 100) / 100;
-
-  // 2. Insulation (PUF)
+  const isCustomMode = inputs.isCustomMode === true || inputs.mode === 'custom' || inputs.divisionMode === 'custom' || (Array.isArray(inputs.customChambers) && inputs.customChambers.length > 0);
+  const coverageMode = inputs.coverageMode || 'full';
+  const divisionDirections = inputs.divisionDirections || { L: true, W: false, H: false };
   const pufMm = Number(inputs.pufThicknessMm) || 100;
-  const pufSpec = PUF_SPECS[pufMm] || { thicknessM: pufMm / 1000, k: 0.023 };
-  const uValue = Math.round((pufSpec.k / pufSpec.thicknessM) * 1000) / 1000; // W/m2·K
+  const floorConstruction = inputs.floorConstruction || 'puf';
+  const doorOptionId = inputs.doorType || 'swing';
 
-  // 3. Temperatures
+  // 2. Generate or Validate Geometry Layout
+  let layout;
+  if (isCustomMode && Array.isArray(inputs.customChambers) && inputs.customChambers.length > 0) {
+    layout = validateCustomChamberLayout({
+      facility: { lengthM, widthM, heightM },
+      chambers: inputs.customChambers,
+      coverageMode,
+      pufThicknessMm: pufMm,
+      floorConstruction,
+    });
+  } else {
+    layout = generateStandardChamberLayout({
+      lengthM,
+      widthM,
+      heightM,
+      numRooms,
+      divisionDirections,
+      pufThicknessMm: pufMm,
+      floorConstruction,
+    });
+  }
+
+  // 3. Place Automatic Doors with Access Route Validation
+  const doorPlacements = placeAutomaticDoors({
+    chambers: layout.chambers,
+    facility: { lengthM, widthM, heightM },
+    customDoors: inputs.customDoors || [],
+    doorOptionId,
+  });
+
+  // 4. Calculate PUF Areas with Host-Specific Door Deductions
+  const pufAreas = calculatePufAreas({
+    facility: { lengthM, widthM, heightM },
+    chambers: layout.chambers,
+    partitions: layout.partitions,
+    doors: doorPlacements.doors,
+    floorConstruction,
+    pufThicknessMm: pufMm,
+    wastageAllowancePct: inputs.wastageAllowancePct,
+  });
+
+  // 5. Insulation U-Values
+  const pufSpec = PUF_SPECS[pufMm] || { thicknessM: pufMm / 1000, k: 0.023 };
+  const uValueWall = Math.round((pufSpec.k / pufSpec.thicknessM) * 1000) / 1000; // W/m2·K
+  const floorConfig = FLOOR_CONSTRUCTION_TYPES.find(f => f.id === floorConstruction) || FLOOR_CONSTRUCTION_TYPES[0];
+  const uValueFloor = floorConfig.defaultU;
+
+  // 6. Temperatures & Commodity
   const ambientTempC = inputs.ambientTemp !== undefined ? Number(inputs.ambientTemp) : 42.0;
   const roomTempC = inputs.roomTemp !== undefined ? Number(inputs.roomTemp) : 2.0;
-  const deltaT = Math.max(0.1, ambientTempC - roomTempC);
+  const groundTempC = inputs.groundTemp !== undefined ? Number(inputs.groundTemp) : 22.0;
 
-  // 4. Commodity Lookup & Baseline Product Properties
   const commodityId = inputs.commodityId || 'com_apple';
   let commodity = null;
   try {
@@ -149,313 +151,353 @@ export function calculateHeatLoad(inputs = {}) {
 
   const dailyMassKg = Number(inputs.dailyMassKg) || 8000;
   const entryTempC = inputs.entryTemp !== undefined ? Number(inputs.entryTemp) : 28.0;
-  const isChillerMode = roomTempC >= commodity.freezing_point_c;
-  const productMode = isChillerMode ? 'chiller' : 'freezer';
+  const safetyFactor = inputs.safetyFactor !== undefined ? Number(inputs.safetyFactor) : 0.10;
+  const compressorRunHours = inputs.compressorRunHours !== undefined ? Number(inputs.compressorRunHours) : 16.0;
 
-  // 5. Operational parameters
-  const safetyFactor = inputs.safetyFactor !== undefined ? Number(inputs.safetyFactor) : 0.10; // 10%
-  const compressorRunHours = inputs.compressorRunHours !== undefined
-    ? Number(inputs.compressorRunHours)
-    : 16.0;
+  // Psychrometrics
+  const ambientRh = Number(inputs.ambientRh) || 0.50;
+  const roomRh = Number(inputs.roomRh) || 0.85;
+  const airDensity = calculateAirDensity(roomTempC, roomRh);
+  const hAmbient = calculateAirEnthalpy(ambientTempC, ambientRh);
+  const hRoom = calculateAirEnthalpy(roomTempC, roomRh);
+  const deltaH = Math.max(1.0, hAmbient - hRoom);
 
-  // Psychrometrics for Infiltration
-  const airDensity = 1.2; // kg/m3
-  const hAmbient = calculateAirEnthalpy(ambientTempC, inputs.ambientRh || 0.50);
-  const hRoom = calculateAirEnthalpy(roomTempC, inputs.roomRh || 0.85);
-  const deltaH = Math.max(1.0, hAmbient - hRoom); // kJ/kg
-
-  // Internal and equipment base inputs
   const lightsHours = inputs.lightsHours !== undefined ? Number(inputs.lightsHours) : 8;
   const peopleCount = inputs.peopleCount !== undefined ? Number(inputs.peopleCount) : 1;
   const peopleHours = inputs.peopleHours !== undefined ? Number(inputs.peopleHours) : 4;
-  const equipmentKw = inputs.internalEquipmentKw !== undefined ? Number(inputs.internalEquipmentKw) : 0;
-  const equipmentHours = inputs.internalEquipmentHours !== undefined ? Number(inputs.internalEquipmentHours) : 0;
   const fanKw = inputs.fanMotorKw !== undefined ? Number(inputs.fanMotorKw) : 0.5;
   const fanHours = inputs.fanOperatingHours !== undefined ? Number(inputs.fanOperatingHours) : 22;
-  const isFreezerRoom = roomTempC <= 0;
-  const defrostKw = inputs.defrostHeaterKw !== undefined
-    ? Number(inputs.defrostHeaterKw)
-    : (isFreezerRoom ? 3.0 : 0.0);
-  const defrostHours = inputs.defrostDurationHours !== undefined
-    ? Number(inputs.defrostDurationHours)
-    : (isFreezerRoom ? 1.0 : 0.0);
 
-  // --------------------------------------------------------------------------
-  // 6. INDEPENDENT CHAMBER-WISE HEAT LOAD CALCULATION
-  // --------------------------------------------------------------------------
+  // 7. Independent Chamber Calculations
   const chambers = [];
-  let totalChamberQTrans = 0;
-  let totalChamberQAir = 0;
-  let totalChamberQProduct = 0;
-  let totalChamberQInternal = 0;
-  let totalChamberQEquipment = 0;
-  let totalChamberKw = 0;
+  let totalFacilityKw = 0;
+  let totalQTrans = 0;
+  let totalQAir = 0;
+  let totalQProduct = 0;
+  let totalQInternal = 0;
+  let totalQEquip = 0;
 
-  for (let i = 1; i <= numRooms; i++) {
-    // A. Chamber Envelope Exposure (Outer walls exposed to ambient)
-    let chamberExposedAreaM2;
-    if (numRooms === 1) {
-      chamberExposedAreaM2 = totalSurfaceAreaM2;
-    } else if (i === 1 || i === numRooms) {
-      // End chambers: 1 outer end wall (W*H) + 2 side walls (L_c*H) + Floor (L_c*W) + Ceiling (L_c*W)
-      chamberExposedAreaM2 = Math.round(((widthM * heightM) + 2 * (chamberLengthM * heightM) + 2 * (chamberLengthM * widthM)) * 100) / 100;
+  const chamberCount = layout.chambers.length;
+
+  for (let i = 0; i < chamberCount; i++) {
+    const ch = layout.chambers[i];
+    const chNum = ch.chamberNumber;
+    const chRoomTemp = Number(ch.roomTempC ?? roomTempC);
+    const chIsFreezer = chRoomTemp < commodity.freezing_point_c;
+    const deltaT_amb = Math.max(0.1, ambientTempC - chRoomTemp);
+    const deltaT_ground = Math.max(0.1, groundTempC - chRoomTemp);
+
+    // Geometry spans
+    const lM = ch.dimensions.lengthM;
+    const wM = ch.dimensions.widthM;
+    const hM = ch.dimensions.heightM;
+    const volM3 = ch.dimensions.volumeM3;
+    const clearVolM3 = ch.clearDimensions?.usableVolumeM3 || volM3;
+    const floorM2 = Math.round(lM * wM * 100) / 100;
+    const ceilingM2 = floorM2;
+
+    // Transmission: exterior exposed walls
+    // Calculate wall area exposed to exterior boundary
+    let extWallAreaM2 = 0;
+    if (Math.abs(ch.origin.x) < 0.001) extWallAreaM2 += wM * hM; // Left wall
+    if (Math.abs((ch.origin.x + lM) - lengthM) < 0.001) extWallAreaM2 += wM * hM; // Right wall
+    if (Math.abs(ch.origin.y) < 0.001) extWallAreaM2 += lM * hM; // Front wall
+    if (Math.abs((ch.origin.y + wM) - widthM) < 0.001) extWallAreaM2 += lM * hM; // Back wall
+    extWallAreaM2 = Math.round(extWallAreaM2 * 100) / 100;
+
+    const qTransWallsKj = Math.round(uValueWall * extWallAreaM2 * deltaT_amb * 24 * 3.6);
+    const qTransCeilingKj = Math.round(uValueWall * ceilingM2 * deltaT_amb * 24 * 3.6);
+    const qTransFloorKj = Math.round(uValueFloor * floorM2 * deltaT_ground * 24 * 3.6);
+    let qTransChamberKj = qTransWallsKj + qTransCeilingKj + qTransFloorKj;
+
+    // Shared partition heat flux if neighbor has different temperature
+    let qPartitionFluxKj = 0;
+    layout.partitions.forEach(p => {
+      if (p.chambers?.includes(chNum)) {
+        const otherNum = p.chambers.find(cn => cn !== chNum);
+        const otherCh = layout.chambers.find(c => c.chamberNumber === otherNum);
+        if (otherCh) {
+          const otherTemp = Number(otherCh.roomTempC ?? roomTempC);
+          const deltaT_part = otherTemp - chRoomTemp;
+          // Flux added to colder room (deltaT_part > 0), deducted from warmer (deltaT_part < 0)
+          const flux = Math.round(uValueWall * p.areaM2 * deltaT_part * 24 * 3.6);
+          qPartitionFluxKj += flux;
+        }
+      }
+    });
+    qTransChamberKj += qPartitionFluxKj;
+
+    // Door Infiltration
+    let qAirChamberKj = 0;
+    const door = ch.door || doorPlacements.doors.find(d => d.chamberNumber === chNum);
+    const detailed = inputs.doorUsageInputs?.[chNum] || (inputs.openFrequencyPerHour ? inputs : null);
+
+    if (detailed && detailed.openFrequencyPerHour > 0) {
+      // Gosney-Olsson Detailed Model
+      const go = calculateGosneyOlssonInfiltration({
+        doorwayWidthM: door?.widthM || 1.0,
+        doorwayHeightM: door?.heightM || 2.1,
+        ambientTempC,
+        ambientRh,
+        roomTempC: chRoomTemp,
+        roomRh,
+        openFrequencyPerHour: detailed.openFrequencyPerHour,
+        openDurationSec: detailed.openDurationSec || 30,
+        protectionFactor: detailed.protectionFactor || 0.60,
+      });
+      qAirChamberKj = go.qDailyKj;
     } else {
-      // Middle chambers: 0 outer end walls + 2 side walls (L_c*H) + Floor (L_c*W) + Ceiling (L_c*W)
-      chamberExposedAreaM2 = Math.round((2 * (chamberLengthM * heightM) + 2 * (chamberLengthM * widthM)) * 100) / 100;
+      // Default ASHRAE Chapter 24 ACH Model
+      const ach = calculateAirChangesPerDay(clearVolM3);
+      qAirChamberKj = Math.round(clearVolM3 * ach * airDensity * deltaH);
     }
 
-    // Transmission Load for Chamber i
-    const qTransChamberKj = Math.round(uValue * chamberExposedAreaM2 * deltaT * 24 * 3.6);
-
-    // Door Infiltration Load for Chamber i (1 dedicated door per chamber)
-    const chamberAirChanges = calculateAirChangesPerDay(chamberVolumeM3);
-    const qAirChamberKj = Math.round(chamberVolumeM3 * chamberAirChanges * airDensity * deltaH);
-
-    // Product Load for Chamber i (proportional mass allocation)
-    const chamberMassKg = Math.round((dailyMassKg / numRooms) * 10) / 10;
-    let qProductSensible1Chamber = 0;
-    let qProductLatentChamber = 0;
-    let qProductSensible2Chamber = 0;
-    let qRespirationChamber = 0;
+    // Product Load (proportional to volume unless chamber mass specified)
+    const chMassKg = Number(inputs.chamberMassKg?.[chNum] || (dailyMassKg / chamberCount));
+    let qProductSensible1 = 0;
+    let qProductLatent = 0;
+    let qProductSensible2 = 0;
+    let qRespiration = 0;
     let qProductChamberKj = 0;
 
-    if (isChillerMode) {
-      const sensibleDeltaT = Math.max(0, entryTempC - roomTempC);
-      qProductSensible1Chamber = Math.round(chamberMassKg * commodity.cp_above * sensibleDeltaT);
-      qRespirationChamber = Math.round(chamberMassKg * (commodity.respiration_rate_mw_kg || 0) * 0.0864);
-      qProductChamberKj = qProductSensible1Chamber + qRespirationChamber;
+    if (!chIsFreezer) {
+      const sensibleDeltaT = Math.max(0, entryTempC - chRoomTemp);
+      qProductSensible1 = Math.round(chMassKg * commodity.cp_above * sensibleDeltaT);
+      qRespiration = Math.round(chMassKg * (commodity.respiration_rate_mw_kg || 0) * 0.0864);
+      qProductChamberKj = qProductSensible1 + qRespiration;
     } else {
       const preFreezeDeltaT = Math.max(0, entryTempC - commodity.freezing_point_c);
-      qProductSensible1Chamber = Math.round(chamberMassKg * commodity.cp_above * preFreezeDeltaT);
-      qProductLatentChamber = Math.round(chamberMassKg * commodity.latent_heat);
-      const subzeroDeltaT = Math.max(0, commodity.freezing_point_c - roomTempC);
-      qProductSensible2Chamber = Math.round(chamberMassKg * commodity.cp_below * subzeroDeltaT);
-      qProductChamberKj = qProductSensible1Chamber + qProductLatentChamber + qProductSensible2Chamber;
+      qProductSensible1 = Math.round(chMassKg * commodity.cp_above * preFreezeDeltaT);
+      qProductLatent = Math.round(chMassKg * commodity.latent_heat);
+      const subzeroDeltaT = Math.max(0, commodity.freezing_point_c - chRoomTemp);
+      qProductSensible2 = Math.round(chMassKg * commodity.cp_below * subzeroDeltaT);
+      qProductChamberKj = qProductSensible1 + qProductLatent + qProductSensible2;
     }
 
-    // Internal Loads for Chamber i
-    const chamberLightsKw = inputs.lightsKw !== undefined
-      ? Math.round((Number(inputs.lightsKw) / numRooms) * 100) / 100
-      : Math.round((chamberFloorM2 * 0.010) * 100) / 100;
-    const qLightsChamberKj = Math.round(chamberLightsKw * lightsHours * 3600);
-    const chamberPeopleCount = Math.max(1, Math.round(peopleCount / numRooms));
-    const qPeopleChamberKj = Math.round(chamberPeopleCount * 0.25 * peopleHours * 3600);
-    const qMiscEquipmentChamberKj = Math.round((equipmentKw * equipmentHours * 3600) / numRooms);
-    const qInternalChamberKj = qLightsChamberKj + qPeopleChamberKj + qMiscEquipmentChamberKj;
+    // Internal & Equipment
+    const lightsKw = Math.round((floorM2 * 0.010) * 100) / 100;
+    const qLightsKj = Math.round(lightsKw * lightsHours * 3600);
+    const chPeople = Math.max(1, Math.round(peopleCount / chamberCount));
+    const qPeopleKj = Math.round(chPeople * 0.25 * peopleHours * 3600);
+    const qInternalKj = qLightsKj + qPeopleKj;
 
-    // Equipment Loads for Chamber i (Dedicated Evaporator Fan + Defrost)
-    const chamberFanKw = Math.max(0.2, Math.round((fanKw / numRooms) * 100) / 100);
-    const qFanChamberKj = Math.round(chamberFanKw * fanHours * 3600);
-    const chamberDefrostKw = Math.round((defrostKw / numRooms) * 100) / 100;
-    const qDefrostChamberKj = Math.round(chamberDefrostKw * defrostHours * 0.20 * 3600);
-    const qEquipmentChamberKj = qFanChamberKj + qDefrostChamberKj;
+    const chFanKw = Math.max(0.2, Math.round((fanKw / chamberCount) * 100) / 100);
+    const qFanKj = Math.round(chFanKw * fanHours * 3600);
+    const chDefrostKw = chIsFreezer ? 3.0 : 0.0;
+    const qDefrostKj = Math.round(chDefrostKw * (chIsFreezer ? 1.0 : 0.0) * 0.20 * 3600);
+    const qEquipKj = qFanKj + qDefrostKj;
 
-    // Total Daily Heat Load for Chamber i
-    const qTotalChamberKj = qTransChamberKj + qAirChamberKj + qProductChamberKj + qInternalChamberKj + qEquipmentChamberKj;
-    const chamberCapacityKw = Math.round(((qTotalChamberKj * (1 + safetyFactor)) / (compressorRunHours * 3600)) * 100) / 100;
-    const chamberCapacityTr = Math.round((chamberCapacityKw / 3.517) * 100) / 100;
+    // Total Chamber Load
+    const qTotalChamberKj = qTransChamberKj + qAirChamberKj + qProductChamberKj + qInternalKj + qEquipKj;
+    const chamberCapKw = Math.round(((qTotalChamberKj * (1 + safetyFactor)) / (compressorRunHours * 3600)) * 100) / 100;
+    const chamberCapTr = Math.round((chamberCapKw / 3.517) * 100) / 100;
 
-    // Dedicated Indoor Evaporator (ACU) Match for Chamber i
-    const chamberEquip = matchDaikinEquipment({
-      requiredTr: chamberCapacityTr,
-      requiredKw: chamberCapacityKw,
-      roomTempC,
+    // Dedicated Evaporator Match
+    const equipMatch = matchCommercialEquipment({
+      requiredTr: chamberCapTr,
+      requiredKw: chamberCapKw,
+      roomTempC: chRoomTemp,
       compressorPreference: inputs.compressorPreference || 'any',
+      brandPreference: inputs.brandPreference || 'any',
     });
 
     chambers.push({
-      chamberNumber: i,
-      name: `Chamber ${i}`,
+      chamberNumber: chNum,
+      name: ch.name || `Chamber ${chNum}`,
+      origin: ch.origin,
       dimensions: {
-        lengthM: chamberLengthM,
-        widthM: chamberWidthM,
-        heightM: chamberHeightM,
-        lengthFt: chamberLengthFt,
-        widthFt: chamberWidthFt,
-        heightFt: chamberHeightFt,
-        volumeM3: chamberVolumeM3,
-        volumeFt3: chamberVolumeFt3,
-        floorAreaM2: chamberFloorM2,
-        exposedAreaM2: chamberExposedAreaM2,
+        lengthM: lM,
+        widthM: wM,
+        heightM: hM,
+        lengthFt: Math.round(lM / 0.3048 * 10) / 10,
+        widthFt: Math.round(wM / 0.3048 * 10) / 10,
+        heightFt: Math.round(hM / 0.3048 * 10) / 10,
+        volumeM3: volM3,
+        floorAreaM2: floorM2,
+        exposedAreaM2: extWallAreaM2 + ceilingM2 + floorM2,
       },
-      door: {
-        count: 1,
-        type: 'Heavy-Duty PUF Insulated Cold Room Swing Door',
-        spec: 'Positive seal rubber wiper gasket, heated frame & emergency release',
-      },
+      clearDimensions: ch.clearDimensions,
+      door,
+      roomTempC: chRoomTemp,
+      assignedCircuit: chIsFreezer ? 'LT_Freezer_Circuit' : 'MT_Chiller_Circuit',
       thermalBreakdown: {
         qTransmissionKj: qTransChamberKj,
+        qPartitionKj: qPartitionFluxKj,
         qAirInfiltrationKj: qAirChamberKj,
         qProductKj: qProductChamberKj,
-        qSensible1Kj: qProductSensible1Chamber,
-        qLatentKj: qProductLatentChamber,
-        qSensible2Kj: qProductSensible2Chamber,
-        qRespirationKj: qRespirationChamber,
-        qInternalKj: qInternalChamberKj,
-        qLightsKj: qLightsChamberKj,
-        qPeopleKj: qPeopleChamberKj,
-        qEquipmentKj: qEquipmentChamberKj,
-        qFanKj: qFanChamberKj,
-        qDefrostKj: qDefrostChamberKj,
+        qInternalKj,
+        qEquipmentKj: qEquipKj,
         qTotalKj: qTotalChamberKj,
       },
-      capacityKw: chamberCapacityKw,
-      capacityTr: chamberCapacityTr,
-      capacityBtuHr: Math.round(chamberCapacityKw * 3412.14),
-      evaporator: chamberEquip.evaporator,
-      multiUnitAcu: chamberEquip.multiUnitAcu,
-      valveRecommendations: chamberEquip.valveRecommendations,
+      capacityKw: chamberCapKw,
+      capacityTr: chamberCapTr,
+      capacityBtuHr: Math.round(chamberCapKw * 3412.14),
+      evaporator: equipMatch.evaporator,
+      multiUnitAcu: equipMatch.multiUnitAcu,
+      valveRecommendations: equipMatch.valveRecommendations,
     });
 
-    totalChamberQTrans += qTransChamberKj;
-    totalChamberQAir += qAirChamberKj;
-    totalChamberQProduct += qProductChamberKj;
-    totalChamberQInternal += qInternalChamberKj;
-    totalChamberQEquipment += qEquipmentChamberKj;
-    totalChamberKw += chamberCapacityKw;
+    totalQTrans += qTransChamberKj;
+    totalQAir += qAirChamberKj;
+    totalQProduct += qProductChamberKj;
+    totalQInternal += qInternalKj;
+    totalQEquip += qEquipKj;
+    totalFacilityKw += chamberCapKw;
   }
 
-  // --------------------------------------------------------------------------
-  // 7. TOTAL FACILITY AGGREGATION & CENTRAL CCU MATCHING
-  // --------------------------------------------------------------------------
-  const qTotalFacilityKj = totalChamberQTrans + totalChamberQAir + totalChamberQProduct + totalChamberQInternal + totalChamberQEquipment;
-  const facilityCapacityKw = Math.round(totalChamberKw * 100) / 100;
-  const facilityCapacityTr = Math.round((facilityCapacityKw / 3.517) * 100) / 100;
-  const facilityCapacityBtuHr = Math.round(facilityCapacityKw * 3412.14);
+  const facilityKw = Math.round(totalFacilityKw * 100) / 100;
+  const facilityTr = Math.round((facilityKw / 3.517) * 100) / 100;
+  const totalDailyHeatLoadKj = totalQTrans + totalQAir + totalQProduct + totalQInternal + totalQEquip;
 
-  // Match Central Outdoor Condensing Unit (CCU) for combined load
-  const centralEquipment = matchDaikinEquipment({
-    requiredTr: facilityCapacityTr,
-    requiredKw: facilityCapacityKw,
+  // 8. Refrigeration Circuit Allocation & Central Equipment Matching
+  const circuits = [];
+  const mtChambers = chambers.filter(c => c.assignedCircuit === 'MT_Chiller_Circuit');
+  const ltChambers = chambers.filter(c => c.assignedCircuit === 'LT_Freezer_Circuit');
+
+  if (mtChambers.length > 0) {
+    const mtKw = Math.round(mtChambers.reduce((acc, c) => acc + c.capacityKw, 0) * 100) / 100;
+    const mtTr = Math.round((mtKw / 3.517) * 100) / 100;
+    const mtEquip = matchCommercialEquipment({
+      requiredTr: mtTr,
+      requiredKw: mtKw,
+      roomTempC: 2.0,
+      compressorPreference: inputs.compressorPreference || 'any',
+      brandPreference: inputs.brandPreference || 'any',
+    });
+    circuits.push({
+      id: 'circuit_mt',
+      circuitId: 'circuit_MT',
+      name: 'Medium-Temperature (MT) Circuit',
+      designSstC: -7.0,
+      targetTempC: 2.0,
+      chambers: mtChambers.map(c => c.chamberNumber),
+      totalKw: mtKw,
+      totalTr: mtTr,
+      ccu: mtEquip.ccu,
+      multiUnitCcu: mtEquip.multiUnitCcu,
+      unverifiedCatalogData: mtEquip.unverifiedCatalogData || false,
+    });
+  }
+
+  if (ltChambers.length > 0) {
+    const ltKw = Math.round(ltChambers.reduce((acc, c) => acc + c.capacityKw, 0) * 100) / 100;
+    const ltTr = Math.round((ltKw / 3.517) * 100) / 100;
+    const ltEquip = matchCommercialEquipment({
+      requiredTr: ltTr,
+      requiredKw: ltKw,
+      roomTempC: -20.0,
+      compressorPreference: inputs.compressorPreference || 'any',
+      brandPreference: inputs.brandPreference || 'any',
+    });
+    circuits.push({
+      id: 'circuit_lt',
+      circuitId: 'circuit_LT',
+      name: 'Low-Temperature (LT) Circuit',
+      designSstC: -28.0,
+      targetTempC: -20.0,
+      chambers: ltChambers.map(c => c.chamberNumber),
+      totalKw: ltKw,
+      totalTr: ltTr,
+      ccu: ltEquip.ccu,
+      multiUnitCcu: ltEquip.multiUnitCcu,
+      unverifiedCatalogData: ltEquip.unverifiedCatalogData || false,
+    });
+  }
+
+  if (circuits.length === 1) {
+    circuits[0].circuitId = 'single_central';
+  }
+
+  // Central equipment fallback
+  const centralEquip = matchCommercialEquipment({
+    requiredTr: facilityTr,
+    requiredKw: facilityKw,
     roomTempC,
     compressorPreference: inputs.compressorPreference || 'any',
-    brandPreference: inputs.brand || inputs.brandPreference || 'any',
+    brandPreference: inputs.brandPreference || 'any',
   });
 
   return {
     inputs: {
+      ...inputs,
+      numRooms: chamberCount,
+      chambersCount: chamberCount,
+      divisionDirections,
+      floorConstruction,
+      pufThicknessMm: pufMm,
       dimensions: {
-        lengthM, widthM, heightM,
-        lengthFt, widthFt, heightFt,
-        volumeM3: roomVolumeM3,
-        volumeFt3: roomVolumeFt3,
-        surfaceAreaM2: totalSurfaceAreaM2,
-        floorAreaM2,
-        totalPufSurfaceAreaM2,
+        lengthM,
+        widthM,
+        heightM,
+        lengthFt,
+        widthFt,
+        heightFt,
+        volumeM3: layout.outerEnvelope.volumeM3,
+        surfaceAreaM2: pufAreas.gross.envelopeM2,
+        totalPufSurfaceAreaM2: pufAreas.procurement.procurementAreaM2,
+        netInstalledAreaM2: pufAreas.net.totalNetInstalledM2,
       },
-      chambersCount: numRooms,
-      numRooms,
-      partitionWalls: {
-        count: partitionWallsCount,
-        singleWallAreaM2: singlePartitionWallAreaM2,
-        totalAreaM2: totalPartitionAreaM2,
-      },
-      doors: {
-        totalDoors,
-        doorsPerChamber: 1,
-        type: 'Heavy-Duty Cold Room Swing Door',
-      },
-      puf: {
-        thicknessMm: pufMm,
-        kValue: pufSpec.k,
-        uValue,
-      },
-      temperatures: {
-        ambientTempC,
-        roomTempC,
-        deltaT,
-        entryTempC,
-      },
-      commodity: {
-        id: commodity.id,
-        name: commodity.name,
-        category: commodity.category,
-        storageTempRange: `${commodity.storage_temp_min}°C to ${commodity.storage_temp_max}°C`,
-        freezingPointC: commodity.freezing_point_c,
-        cpAbove: commodity.cp_above,
-        latentHeat: commodity.latent_heat,
-        cpBelow: commodity.cp_below,
-        respirationRateMwKg: commodity.respiration_rate_mw_kg,
-        dailyMassKg,
-      },
-      operational: {
-        compressorRunHours,
-        safetyFactorPercent: safetyFactor * 100,
-        airChangesPerDay: calculateAirChangesPerDay(roomVolumeM3),
-      },
-      internalLoads: {
-        lightsKw: Math.round((floorAreaM2 * 0.010) * 100) / 100,
-        lightsHours,
-        peopleCount,
-        peopleHours,
-        equipmentKw,
-        equipmentHours,
-        fanKw,
-        fanHours,
-        defrostKw,
-        defrostHours,
-      },
+      temperatures: { ambientTempC, roomTempC, groundTempC },
+      commodity,
+      puf: { thicknessMm: pufMm, uValue: uValueWall },
     },
     thermalBreakdown: {
-      qTransmissionKj: totalChamberQTrans,
-      qProductKj: totalChamberQProduct,
-      productComponents: {
-        mode: productMode,
-        qSensible1Kj: chambers.reduce((acc, c) => acc + (c.thermalBreakdown.qSensible1Kj || 0), 0),
-        qLatentKj: chambers.reduce((acc, c) => acc + (c.thermalBreakdown.qLatentKj || 0), 0),
-        qSensible2Kj: chambers.reduce((acc, c) => acc + (c.thermalBreakdown.qSensible2Kj || 0), 0),
-        qRespirationKj: chambers.reduce((acc, c) => acc + (c.thermalBreakdown.qRespirationKj || 0), 0),
-      },
-      qAirInfiltrationKj: totalChamberQAir,
-      qInternalKj: totalChamberQInternal,
-      internalComponents: {
-        qLightsKj: chambers.reduce((acc, c) => acc + (c.thermalBreakdown.qLightsKj || 0), 0),
-        qPeopleKj: chambers.reduce((acc, c) => acc + (c.thermalBreakdown.qPeopleKj || 0), 0),
-        qMiscEquipmentKj: Math.max(0, totalChamberQInternal - chambers.reduce((acc, c) => acc + ((c.thermalBreakdown.qLightsKj || 0) + (c.thermalBreakdown.qPeopleKj || 0)), 0)),
-      },
-      qEquipmentKj: totalChamberQEquipment,
-      equipmentComponents: {
-        qFanKj: chambers.reduce((acc, c) => acc + (c.thermalBreakdown.qFanKj || 0), 0),
-        qDefrostKj: chambers.reduce((acc, c) => acc + (c.thermalBreakdown.qDefrostKj || 0), 0),
-      },
-      qTotalKj: qTotalFacilityKj,
-      breakdownPercentages: {
-        transmission: Math.round((totalChamberQTrans / qTotalFacilityKj) * 1000) / 10,
-        product: Math.round((totalChamberQProduct / qTotalFacilityKj) * 1000) / 10,
-        airInfiltration: Math.round((totalChamberQAir / qTotalFacilityKj) * 1000) / 10,
-        internal: Math.round((totalChamberQInternal / qTotalFacilityKj) * 1000) / 10,
-        equipment: Math.round((totalChamberQEquipment / qTotalFacilityKj) * 1000) / 10,
+      qTransmissionKj: totalQTrans,
+      qProductKj: totalQProduct,
+      qAirInfiltrationKj: totalQAir,
+      qInternalKj: totalQInternal,
+      qEquipmentKj: totalQEquip,
+      qTotalKj: totalDailyHeatLoadKj,
+      infiltrationParameters: {
+        model: inputs.infiltrationModel || (inputs.openFrequencyPerHour ? 'gosney_olsson' : 'ashrae'),
       },
     },
     machineRating: {
-      capacityKw: facilityCapacityKw,
-      capacityTr: facilityCapacityTr,
-      capacityBtuHr: facilityCapacityBtuHr,
-      runHours: compressorRunHours,
-      safetyFactorMultiplier: 1 + safetyFactor,
+      capacityKw: facilityKw,
+      capacityTr: facilityTr,
+      capacityBtuHr: Math.round(facilityKw * 3412.14),
+      compressorRunHours,
+      safetyFactor,
     },
     chambers,
+    circuits,
     doors: {
-      totalDoors,
+      totalDoors: doorPlacements.totalDoors,
       doorsPerChamber: 1,
-      doorSpecification: 'Heavy-Duty PUF Insulated Cold Room Swing Door with Heater & Emergency Safety Release',
+      placements: doorPlacements.doors,
     },
     partitionWalls: {
-      count: partitionWallsCount,
-      singleWallAreaM2: singlePartitionWallAreaM2,
-      totalAreaM2: totalPartitionAreaM2,
+      count: layout.partitions.length,
+      totalAreaM2: pufAreas.gross.partitionsM2,
+      partitions: layout.partitions,
     },
-    recommendations: centralEquipment,
+    pufAreas,
+    catalogVerificationStatus: 'unverified',
+    recommendations: {
+      ccu: circuits[0]?.ccu || centralEquip.ccu,
+      multiUnitCcu: circuits[0]?.multiUnitCcu || centralEquip.multiUnitCcu,
+      evaporator: chambers[0]?.evaporator || centralEquip.evaporator,
+      allCandidateEvaps: centralEquip.allCandidateEvaps || [],
+      valveRecommendations: centralEquip.valveRecommendations,
+      circuits,
+      unverified: true,
+      catalogVerificationStatus: 'unverified',
+    },
   };
 }
 
 /**
- * Match Emerson Outdoor Condensing Unit (CCU) and Indoor Air Cooling Unit (ACU)
+ * Match Outdoor Condensing Unit (CCU) and Indoor Air Cooling Unit (ACU)
  */
-export function matchCommercialEquipment({ requiredTr, requiredKw, roomTempC, compressorPreference = 'any', brandPreference = 'any' }) {
+export function matchCommercialEquipment({
+  requiredTr,
+  requiredKw,
+  roomTempC,
+  compressorPreference = 'any',
+  brandPreference = 'any',
+}) {
   const isFreezer = roomTempC < 0;
 
-  // Build brand condition for CDU
   let brandCcuFilter = "b.name IN ('Emerson', 'Daikin')";
   if (brandPreference === 'Daikin') {
     brandCcuFilter = "b.name = 'Daikin'";
@@ -463,7 +505,6 @@ export function matchCommercialEquipment({ requiredTr, requiredKw, roomTempC, co
     brandCcuFilter = "b.name = 'Emerson'";
   }
 
-  // Fetch condensing units
   const ccuQuery = `
     SELECT m.*, b.name as brand_name, p.name as product_name,
            prc.selling_price, prc.purchase_cost
@@ -481,7 +522,6 @@ export function matchCommercialEquipment({ requiredTr, requiredKw, roomTempC, co
     console.error('Error fetching CCUs:', err);
   }
 
-  // Parse specifications into model objects
   const enrichedCcus = ccuModels.map(m => {
     let specs = [];
     try {
@@ -503,25 +543,21 @@ export function matchCommercialEquipment({ requiredTr, requiredKw, roomTempC, co
       horse_power: Number(specMap.horse_power) || Math.round(nomTr * 1.35 * 10) / 10,
     };
   }).filter(c => {
-    // Temperature filtering: Chiller vs Freezer
     if (isFreezer) {
       return (c.temp_range_min !== null && c.temp_range_min <= -15) || c.description.toLowerCase().includes('freezer');
     } else {
       return (c.temp_range_max !== null && c.temp_range_max >= 0) || c.description.toLowerCase().includes('chiller');
     }
   }).filter(c => {
-    // Compressor preference
     if (compressorPreference === 'scroll') return c.compressor_type === 'Scroll';
     if (compressorPreference === 'reciprocating') return c.compressor_type === 'Reciprocating';
     return true;
   }).sort((a, b) => a.nominal_tr - b.nominal_tr);
 
-  // Find lowest nominal_tr >= requiredTr (or capacity >= requiredKw)
   let selectedCcu = enrichedCcus.find(c => c.nominal_tr >= requiredTr || c.capacity >= requiredKw);
   let multiUnitCcu = null;
 
   if (!selectedCcu && enrichedCcus.length > 0) {
-    // Exceeds single largest unit capacity -> calculate multi-unit combination
     const maxUnit = enrichedCcus[enrichedCcus.length - 1];
     const unitCount = Math.ceil(requiredTr / maxUnit.nominal_tr);
     multiUnitCcu = {
@@ -531,10 +567,10 @@ export function matchCommercialEquipment({ requiredTr, requiredKw, roomTempC, co
       totalCapacityKw: Math.round(maxUnit.capacity * unitCount * 100) / 100,
       note: `Total load of ${requiredTr} TR exceeds maximum single unit (${maxUnit.nominal_tr} TR). Recommended: ${unitCount} × ${maxUnit.model_number}`,
     };
-    selectedCcu = maxUnit; // default representative unit
+    selectedCcu = maxUnit;
   }
 
-  // Build brand condition for ACU / Evaporator
+  // Fetch Evaporators
   let brandEvapFilter = "b.name IN ('Emerson', 'Daikin', 'Dixell')";
   if (brandPreference === 'Daikin') {
     brandEvapFilter = "b.name = 'Daikin'";
@@ -542,7 +578,6 @@ export function matchCommercialEquipment({ requiredTr, requiredKw, roomTempC, co
     brandEvapFilter = "b.name = 'Emerson' OR b.name = 'Dixell'";
   }
 
-  // Fetch indoor evaporators (ACU)
   const evapQuery = `
     SELECT m.*, b.name as brand_name, p.name as product_name,
            prc.selling_price, prc.purchase_cost
@@ -574,7 +609,6 @@ export function matchCommercialEquipment({ requiredTr, requiredKw, roomTempC, co
     };
   }).sort((a, b) => a.capacity_kw - b.capacity_kw);
 
-  // Filter ACUs by temperature suitability
   const tempAppropriateEvaps = enrichedEvaps.filter(e => {
     if (isFreezer) {
       return (e.temp_range_min !== null && e.temp_range_min <= -15) || e.model_number.includes('L');
@@ -601,21 +635,17 @@ export function matchCommercialEquipment({ requiredTr, requiredKw, roomTempC, co
   }
 
   return {
-    ccu: selectedCcu || null,
+    ccu: selectedCcu,
     multiUnitCcu,
-    evaporator: selectedAcu || null,
+    evaporator: selectedAcu,
     multiUnitAcu,
-    allCandidateCcus: enrichedCcus,
     allCandidateEvaps: enrichedEvaps,
+    unverifiedCatalogData: true, // Tagged in accordance with master plan
     valveRecommendations: {
-      expansionValve: isFreezer ? 'TIE-HW (MOP)' : 'TIE-SW',
-      orifice: requiredTr <= 2 ? 'TIO-001' : (requiredTr <= 4 ? 'TIO-002' : 'TIO-003'),
-      solenoidValve: requiredTr <= 3 ? '200RB 2T3T' : '200RB 3T3T',
-      solenoidCoil: 'ASC3 208-240VAC 50Hz',
-      controller: isFreezer ? 'Dixell XR06CX (Defrost + Fan Control)' : 'Dixell XR02CX',
+      expansionValve: isFreezer ? 'TIE-HW' : 'TIE-SW',
+      orifice: 'TIO-002',
+      solenoidValve: '200RB 2T3T',
+      controller: isFreezer ? 'Dixell XR06CX' : 'Dixell XR02CX',
     },
   };
 }
-
-// Backward-compatibility alias
-export const matchDaikinEquipment = matchCommercialEquipment;

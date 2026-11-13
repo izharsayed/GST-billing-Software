@@ -2,12 +2,21 @@ import React, { useState, useEffect, useMemo } from 'react';
 import {
   X, Calculator, CheckCircle2, AlertTriangle, Layers, Plus, Loader2,
   Filter, ChevronDown, ChevronUp, Cpu, Flame, Wind, User, Settings2,
-  Snowflake, Zap
+  Snowflake, Zap, Trash2, Info, Eye, ArrowRight, ShieldCheck
 } from 'lucide-react';
 import { calculateColdRoom, calculateHeatLoad, getThermalCommodities } from '../../store';
 import { formatCurrency } from '../../utils';
 import { toast } from '../Toast';
-import { normalizeChamberResult, buildColdRoomInvoiceItems, DOOR_OPTIONS } from './chamberUtils';
+import {
+  normalizeChamberResult,
+  buildColdRoomInvoiceItems,
+  DOOR_OPTIONS,
+  FLOOR_CONSTRUCTION_TYPES,
+  COVERAGE_MODES,
+  generateStandardChamberLayout,
+  validateCustomChamberLayout,
+  placeAutomaticDoors,
+} from './chamberUtils';
 
 export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialSpecs = null }) {
   // Sizing Mode: 'heatload' (ASHRAE / USDA Thermodynamic Engine) | 'reckoner' (Standard Volume Reckoner)
@@ -33,6 +42,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
   // -------------------------------------------------------------
   // 2. ADVANCED HEAT LOAD ENGINE STATE (ASHRAE / USDA / Daikin)
   // -------------------------------------------------------------
+  const [calculationInstanceId] = useState(() => 'cr_' + Math.random().toString(36).substring(2, 9) + '_' + Date.now().toString(36));
   const [commodities, setCommodities] = useState([]);
   const [heatLoadForm, setHeatLoadForm] = useState({
     unit: 'm', // 'm' | 'ft'
@@ -40,6 +50,14 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
     width: 8.0,
     height: 4.5,
     numRooms: 1, // Multi-chamber partition count (default 1)
+    divisionMode: 'standard', // 'standard' | 'custom'
+    divisionDirections: { L: true, W: false, H: false },
+    floorConstruction: 'puf', // 'puf' | 'concrete_subslab' | 'uninsulated_ground'
+    coverageMode: 'full', // 'full' | 'partial'
+    customChambers: [
+      { id: 'ch_1', name: 'Chamber 1', x: 0, y: 0, z: 0, lengthM: 6.0, widthM: 8.0, heightM: 4.5, roomTempC: 2.0, dailyMassKg: 4000 },
+      { id: 'ch_2', name: 'Chamber 2', x: 6.0, y: 0, z: 0, lengthM: 6.0, widthM: 8.0, heightM: 4.5, roomTempC: 2.0, dailyMassKg: 4000 },
+    ],
     pufThicknessMm: 100, // 60, 100, 120, 150
     doorType: 'swing', // 'swing' | 'sliding' | 'hatch'
     sheetMaterial: '0.5 mm PPGI (Inner & Outer)',
@@ -53,6 +71,10 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
     brand: 'Daikin',
     compressorPreference: 'any',
     refrigerant: 'R404A',
+    infiltrationModel: 'ashrae', // 'ashrae' | 'gosney_olsson'
+    openFrequencyPerHour: 15,
+    openDurationSec: 30,
+    protectionFactor: 0.60,
     // Optional internal loads
     lightsKw: '',
     lightsHours: 8,
@@ -64,6 +86,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
     defrostHeaterKw: '',
     defrostDurationHours: '',
   });
+  const [layoutViewMode, setLayoutViewMode] = useState('top'); // 'top' | 'side'
   const [showAdvancedParams, setShowAdvancedParams] = useState(false);
   const [heatLoadResult, setHeatLoadResult] = useState(null);
 
@@ -89,6 +112,100 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
     puf: 1550,
     installation: 18000,
   });
+
+  // Toggle multi-axis division direction (max 2 allowed simultaneously)
+  const handleToggleDivisionDirection = (dir) => {
+    setHeatLoadForm(prev => {
+      const dirs = { ...(prev.divisionDirections || { L: false, W: false, H: false }) };
+      const currentVal = !!dirs[dir];
+      const count = (dirs.L ? 1 : 0) + (dirs.W ? 1 : 0) + (dirs.H ? 1 : 0);
+
+      if (!currentVal && count >= 2) {
+        toast('Maximum 2 division directions can be combined simultaneously. Slicing across all three directions is disallowed.', 'warning');
+        return prev;
+      }
+
+      return {
+        ...prev,
+        divisionDirections: {
+          ...dirs,
+          [dir]: !currentVal,
+        },
+      };
+    });
+  };
+
+  // Custom Chamber operations
+  const handleUpdateCustomChamber = (index, field, value) => {
+    setHeatLoadForm(prev => {
+      const list = [...(prev.customChambers || [])];
+      list[index] = { ...list[index], [field]: value };
+      return { ...prev, customChambers: list };
+    });
+  };
+
+  const handleAddCustomChamber = () => {
+    setHeatLoadForm(prev => {
+      const list = [...(prev.customChambers || [])];
+      const nextNum = list.length + 1;
+      const isM = prev.unit === 'm';
+      const curL = isM ? Number(prev.length) || 12 : (Number(prev.length) || 12) * 0.3048;
+      const curH = isM ? Number(prev.height) || 4.5 : (Number(prev.height) || 4.5) * 0.3048;
+      list.push({
+        id: 'ch_' + Math.random().toString(36).substring(2, 7),
+        name: `Chamber ${nextNum}`,
+        x: 0,
+        y: 0,
+        z: 0,
+        lengthM: Math.round((curL / (nextNum || 1)) * 10) / 10,
+        widthM: 3.0,
+        heightM: curH,
+        roomTempC: 2.0,
+        dailyMassKg: 2000,
+      });
+      return { ...prev, customChambers: list, numRooms: list.length };
+    });
+  };
+
+  const handleRemoveCustomChamber = (index) => {
+    setHeatLoadForm(prev => {
+      const list = (prev.customChambers || []).filter((_, i) => i !== index);
+      return { ...prev, customChambers: list, numRooms: Math.max(1, list.length) };
+    });
+  };
+
+  // Switch to Custom Per-Room mode with automatic coordinate seeding if empty
+  const handleSwitchToCustomMode = () => {
+    setHeatLoadForm(prev => {
+      const isM = prev.unit === 'm';
+      const L = isM ? Number(prev.length) || 12 : (Number(prev.length) || 12) * 0.3048;
+      const W = isM ? Number(prev.width) || 8 : (Number(prev.width) || 8) * 0.3048;
+      const H = isM ? Number(prev.height) || 4.5 : (Number(prev.height) || 4.5) * 0.3048;
+      const n = Math.max(2, Math.round(Number(prev.numRooms) || 2));
+      const seeded = [];
+      const dL = Math.round((L / n) * 1000) / 1000;
+      for (let i = 0; i < n; i++) {
+        seeded.push({
+          id: `ch_${i + 1}`,
+          name: `Chamber ${i + 1}`,
+          x: Math.round(i * dL * 1000) / 1000,
+          y: 0,
+          z: 0,
+          lengthM: dL,
+          widthM: W,
+          heightM: H,
+          roomTempC: Number(prev.roomTemp) || 2.0,
+          dailyMassKg: Math.round((Number(prev.dailyMassKg) || 8000) / n),
+        });
+      }
+      return {
+        ...prev,
+        divisionMode: 'custom',
+        customChambers: seeded,
+        numRooms: seeded.length,
+      };
+    });
+  };
 
   // Fetch commodities on mount
   useEffect(() => {
@@ -140,6 +257,100 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
 
   const selectedCommodity = commodities.find(c => c.id === heatLoadForm.commodityId) || commodities[0];
 
+  // Live layout and geometry derivation (real-time SVG preview & validation)
+  const liveChamberLayout = useMemo(() => {
+    const isM = heatLoadForm.unit === 'm';
+    const L = Math.round((isM ? Number(heatLoadForm.length) || 12 : (Number(heatLoadForm.length) || 12) * 0.3048) * 100) / 100;
+    const W = Math.round((isM ? Number(heatLoadForm.width) || 8 : (Number(heatLoadForm.width) || 8) * 0.3048) * 100) / 100;
+    const H = Math.round((isM ? Number(heatLoadForm.height) || 4.5 : (Number(heatLoadForm.height) || 4.5) * 0.3048) * 100) / 100;
+    const pufMm = Number(heatLoadForm.pufThicknessMm) || 100;
+    const floorConstruction = heatLoadForm.floorConstruction || 'puf';
+    const doorType = heatLoadForm.doorType || 'swing';
+
+    try {
+      if (heatLoadForm.divisionMode === 'custom') {
+        const facility = { lengthM: L, widthM: W, heightM: H, volumeM3: Math.round(L * W * H * 100) / 100 };
+        const customRooms = (heatLoadForm.customChambers || []).map(ch => ({
+          ...ch,
+          origin: {
+            x: isM ? Number(ch.x) || 0 : (Number(ch.x) || 0) * 0.3048,
+            y: isM ? Number(ch.y) || 0 : (Number(ch.y) || 0) * 0.3048,
+            z: isM ? Number(ch.z) || 0 : (Number(ch.z) || 0) * 0.3048,
+          },
+          dimensions: {
+            lengthM: isM ? Number(ch.lengthM) || 1 : (Number(ch.lengthM) || 1) * 0.3048,
+            widthM: isM ? Number(ch.widthM) || 1 : (Number(ch.widthM) || 1) * 0.3048,
+            heightM: isM ? Number(ch.heightM) || 1 : (Number(ch.heightM) || 1) * 0.3048,
+          },
+          roomTempC: Number(ch.roomTempC ?? 2.0),
+        }));
+
+        const validation = validateCustomChamberLayout({
+          facility,
+          chambers: customRooms,
+          coverageMode: heatLoadForm.coverageMode || 'full',
+          pufThicknessMm: pufMm,
+          floorConstruction,
+        });
+
+        const doors = placeAutomaticDoors(validation.chambers, facility, doorType);
+        return {
+          success: true,
+          mode: 'custom',
+          chambers: doors.chambers,
+          partitions: validation.partitions,
+          outerEnvelope: facility,
+          doors,
+          totalChamberVolumeM3: validation.totalChamberVolumeM3,
+          unallocatedVolumeM3: validation.unallocatedVolumeM3,
+          coveragePercent: validation.coveragePercent,
+        };
+      } else {
+        const N = Math.max(1, Math.round(Number(heatLoadForm.numRooms) || 1));
+        const layout = generateStandardChamberLayout({
+          lengthM: L,
+          widthM: W,
+          heightM: H,
+          numRooms: N,
+          divisionDirections: heatLoadForm.divisionDirections || { L: true, W: false, H: false },
+          pufThicknessMm: pufMm,
+          floorConstruction,
+        });
+
+        const doors = placeAutomaticDoors(layout.chambers, layout.outerEnvelope, doorType);
+        return {
+          success: true,
+          mode: layout.mode,
+          chambers: doors.chambers,
+          partitions: layout.partitions,
+          outerEnvelope: layout.outerEnvelope,
+          doors,
+          activeDirections: layout.activeDirections,
+          bayAllocation: layout.bayAllocation,
+        };
+      }
+    } catch (err) {
+      return {
+        success: false,
+        error: err.message,
+        outerEnvelope: { lengthM: L, widthM: W, heightM: H, volumeM3: Math.round(L * W * H * 100) / 100 },
+      };
+    }
+  }, [
+    heatLoadForm.unit,
+    heatLoadForm.length,
+    heatLoadForm.width,
+    heatLoadForm.height,
+    heatLoadForm.numRooms,
+    heatLoadForm.divisionMode,
+    heatLoadForm.divisionDirections,
+    heatLoadForm.customChambers,
+    heatLoadForm.coverageMode,
+    heatLoadForm.pufThicknessMm,
+    heatLoadForm.floorConstruction,
+    heatLoadForm.doorType,
+  ]);
+
   // Quick area and volume preview for heat load inputs
   const liveDimensions = useMemo(() => {
     const l = Number(heatLoadForm.length) || 0;
@@ -176,6 +387,10 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
   // -------------------------------------------------------------
   const handleCalculateHeatLoad = async (e) => {
     if (e) e.preventDefault();
+    if (liveChamberLayout && !liveChamberLayout.success) {
+      toast(liveChamberLayout.error || 'Please correct chamber geometry errors before calculating.', 'error');
+      return;
+    }
     setCalculating(true);
     try {
       const rawRes = await calculateHeatLoad(heatLoadForm);
@@ -200,8 +415,8 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
         installation: defaultInstallRate,
       }));
       toast('Heat load calculated & Daikin equipment matched!', 'success');
-    } catch {
-      toast('Failed to calculate refrigeration heat load', 'error');
+    } catch (err) {
+      toast(err?.message || 'Failed to calculate refrigeration heat load', 'error');
     } finally {
       setCalculating(false);
     }
@@ -278,6 +493,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
         selectedLines,
         activeCcu: activeHeatLoadCcu,
         activeEvap: activeHeatLoadEvap,
+        calculationInstanceId,
       });
 
       onInsert(itemsToInsert, technicalSpecs);
@@ -376,7 +592,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
 
   return (
     <div className="modal-overlay" style={{ zIndex: 1100 }}>
-      <div className="modal-content" style={{ maxWidth: '980px', maxHeight: '92vh', overflowY: 'auto' }}>
+      <div className="modal-content cold-room-sizer-modal" style={{ maxWidth: '980px', maxHeight: '92vh', overflowY: 'auto', padding: '1.25rem 1.5rem' }}>
         {/* Header */}
         <div className="flex justify-between items-center mb-3 pb-2" style={{ borderBottom: '1px solid var(--border-color)' }}>
           <div className="flex items-center gap-2">
@@ -444,173 +660,757 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                 borderRadius: '8px',
                 padding: '0.85rem 1rem'
               }}>
-                <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0369a1', textTransform: 'uppercase', letterSpacing: '0.04em', marginBottom: '0.65rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
-                  <Layers size={14} /> Chamber Dimensions &amp; PUF Insulation
+                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.65rem' }}>
+                  <div style={{ fontSize: '0.78rem', fontWeight: 700, color: '#0369a1', textTransform: 'uppercase', letterSpacing: '0.04em', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                    <Layers size={14} /> Chamber Dimensions, Multi-Axis Division &amp; PUF Construction
+                  </div>
+                  <div style={{ display: 'flex', gap: '4px', background: 'var(--bg-secondary, #f1f5f9)', padding: '2px', borderRadius: '6px' }}>
+                    <button
+                      type="button"
+                      className={`btn btn-sm ${heatLoadForm.divisionMode === 'standard' ? 'btn-primary' : 'btn-ghost'}`}
+                      style={{ padding: '0.2rem 0.6rem', fontSize: '0.72rem', height: 'auto', lineHeight: 1.2, fontWeight: 600 }}
+                      onClick={() => setHeatLoadForm(p => ({ ...p, divisionMode: 'standard' }))}
+                    >
+                      Standard Uniform Division
+                    </button>
+                    <button
+                      type="button"
+                      className={`btn btn-sm ${heatLoadForm.divisionMode === 'custom' ? 'btn-primary' : 'btn-ghost'}`}
+                      style={{ padding: '0.2rem 0.6rem', fontSize: '0.72rem', height: 'auto', lineHeight: 1.2, fontWeight: 600 }}
+                      onClick={handleSwitchToCustomMode}
+                    >
+                      Custom Per-Room 3D Positioning
+                    </button>
+                  </div>
                 </div>
 
-                <div style={{ display: 'grid', gridTemplateColumns: '1.15fr 1fr', gap: '1rem', alignItems: 'start' }}>
-                  {/* Left: Dimensions */}
-                  <div>
-                    <div className="flex justify-between items-center mb-1">
-                      <label className="form-label" style={{ margin: 0, fontWeight: 600, fontSize: '0.8rem' }}>
-                        Dimensions ({heatLoadForm.unit === 'm' ? 'Meters' : 'Feet'})
-                      </label>
-                      <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-secondary)', padding: '2px', borderRadius: '6px' }}>
-                        <button
-                          type="button"
-                          className={`btn btn-sm ${heatLoadForm.unit === 'm' ? 'btn-primary' : 'btn-ghost'}`}
-                          style={{ padding: '0.15rem 0.5rem', fontSize: '0.72rem', height: 'auto', lineHeight: 1.2 }}
-                          onClick={() => setHeatLoadForm(p => ({ ...p, unit: 'm' }))}
-                        >
-                          Meters (m)
-                        </button>
-                        <button
-                          type="button"
-                          className={`btn btn-sm ${heatLoadForm.unit === 'ft' ? 'btn-primary' : 'btn-ghost'}`}
-                          style={{ padding: '0.15rem 0.5rem', fontSize: '0.72rem', height: 'auto', lineHeight: 1.2 }}
-                          onClick={() => setHeatLoadForm(p => ({ ...p, unit: 'ft' }))}
-                        >
-                          Feet (ft)
-                        </button>
+                {/* MODE A: STANDARD UNIFORM MULTI-AXIS DIVISION */}
+                {heatLoadForm.divisionMode === 'standard' ? (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(360px, 1fr))', gap: '1rem', alignItems: 'start' }}>
+                    {/* Left: Overall Dimensions & Division Controls */}
+                    <div>
+                      <div className="flex justify-between items-center mb-1">
+                        <label className="form-label" style={{ margin: 0, fontWeight: 600, fontSize: '0.8rem' }}>
+                          Overall Facility Dimensions ({heatLoadForm.unit === 'm' ? 'Meters' : 'Feet'})
+                        </label>
+                        <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-secondary)', padding: '2px', borderRadius: '6px' }}>
+                          <button
+                            type="button"
+                            className={`btn btn-sm ${heatLoadForm.unit === 'm' ? 'btn-primary' : 'btn-ghost'}`}
+                            style={{ padding: '0.15rem 0.5rem', fontSize: '0.72rem', height: 'auto', lineHeight: 1.2 }}
+                            onClick={() => setHeatLoadForm(p => ({ ...p, unit: 'm' }))}
+                          >
+                            Meters (m)
+                          </button>
+                          <button
+                            type="button"
+                            className={`btn btn-sm ${heatLoadForm.unit === 'ft' ? 'btn-primary' : 'btn-ghost'}`}
+                            style={{ padding: '0.15rem 0.5rem', fontSize: '0.72rem', height: 'auto', lineHeight: 1.2 }}
+                            onClick={() => setHeatLoadForm(p => ({ ...p, unit: 'ft' }))}
+                          >
+                            Feet (ft)
+                          </button>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.4rem' }}>
+                        <div>
+                          <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Length ({heatLoadForm.unit})</span>
+                          <input
+                            type="number"
+                            step="0.1"
+                            className="form-input"
+                            style={{ height: '38px', minHeight: '38px', padding: '0.35rem 0.6rem', fontSize: '0.85rem' }}
+                            title="Overall Length"
+                            placeholder="L"
+                            value={heatLoadForm.length}
+                            onChange={e => setHeatLoadForm(p => ({ ...p, length: Number(e.target.value) }))}
+                          />
+                        </div>
+                        <div>
+                          <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Width ({heatLoadForm.unit})</span>
+                          <input
+                            type="number"
+                            step="0.1"
+                            className="form-input"
+                            style={{ height: '38px', minHeight: '38px', padding: '0.35rem 0.6rem', fontSize: '0.85rem' }}
+                            title="Overall Width"
+                            placeholder="W"
+                            value={heatLoadForm.width}
+                            onChange={e => setHeatLoadForm(p => ({ ...p, width: Number(e.target.value) }))}
+                          />
+                        </div>
+                        <div>
+                          <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Height ({heatLoadForm.unit})</span>
+                          <input
+                            type="number"
+                            step="0.1"
+                            className="form-input"
+                            style={{ height: '38px', minHeight: '38px', padding: '0.35rem 0.6rem', fontSize: '0.85rem' }}
+                            title="Overall Height"
+                            placeholder="H"
+                            value={heatLoadForm.height}
+                            onChange={e => setHeatLoadForm(p => ({ ...p, height: Number(e.target.value) }))}
+                          />
+                        </div>
+                        <div>
+                          <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#0369a1', display: 'block', marginBottom: 2 }}>Chambers (N)</span>
+                          <input
+                            type="number"
+                            min="1"
+                            step="1"
+                            className="form-input"
+                            style={{ height: '38px', minHeight: '38px', padding: '0.35rem 0.6rem', fontSize: '0.85rem', borderColor: '#93c5fd', fontWeight: 700, color: '#0369a1' }}
+                            title="Number of Chambers"
+                            placeholder="1"
+                            value={heatLoadForm.numRooms || 1}
+                            onChange={e => setHeatLoadForm(p => ({ ...p, numRooms: Math.max(1, parseInt(e.target.value) || 1) }))}
+                          />
+                        </div>
+                      </div>
+
+                      {/* Division Direction Independent Checkboxes */}
+                      <div style={{ marginTop: '0.6rem', padding: '0.5rem 0.65rem', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                          <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#1e293b' }}>
+                            Partition Directions (Select 1 or any 2 directions):
+                          </span>
+                          <span style={{ fontSize: '0.68rem', color: '#64748b' }}>
+                            Max 2 directions
+                          </span>
+                        </div>
+                        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: '0.45rem' }}>
+                          <label style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.4rem',
+                            fontSize: '0.76rem',
+                            fontWeight: 600,
+                            padding: '0.3rem 0.45rem',
+                            borderRadius: '4px',
+                            background: heatLoadForm.divisionDirections?.L ? '#dbeafe' : '#ffffff',
+                            border: heatLoadForm.divisionDirections?.L ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
+                            cursor: 'pointer'
+                          }}>
+                            <input
+                              type="checkbox"
+                              checked={!!heatLoadForm.divisionDirections?.L}
+                              onChange={() => handleToggleDivisionDirection('L')}
+                            />
+                            <span>Divide Length (L)</span>
+                          </label>
+
+                          <label style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.4rem',
+                            fontSize: '0.76rem',
+                            fontWeight: 600,
+                            padding: '0.3rem 0.45rem',
+                            borderRadius: '4px',
+                            background: heatLoadForm.divisionDirections?.W ? '#dbeafe' : '#ffffff',
+                            border: heatLoadForm.divisionDirections?.W ? '1.5px solid #2563eb' : '1px solid #cbd5e1',
+                            cursor: 'pointer'
+                          }}>
+                            <input
+                              type="checkbox"
+                              checked={!!heatLoadForm.divisionDirections?.W}
+                              onChange={() => handleToggleDivisionDirection('W')}
+                            />
+                            <span>Divide Width (W)</span>
+                          </label>
+
+                          <label style={{
+                            display: 'flex',
+                            alignItems: 'center',
+                            gap: '0.4rem',
+                            fontSize: '0.76rem',
+                            fontWeight: 600,
+                            padding: '0.3rem 0.45rem',
+                            borderRadius: '4px',
+                            background: heatLoadForm.divisionDirections?.H ? '#fef3c7' : '#ffffff',
+                            border: heatLoadForm.divisionDirections?.H ? '1.5px solid #d97706' : '1px solid #cbd5e1',
+                            cursor: 'pointer'
+                          }}>
+                            <input
+                              type="checkbox"
+                              checked={!!heatLoadForm.divisionDirections?.H}
+                              onChange={() => handleToggleDivisionDirection('H')}
+                            />
+                            <span>Divide Height (H)</span>
+                          </label>
+                        </div>
+
+                        {/* Validation & Advisory Messages */}
+                        {(heatLoadForm.numRooms || 1) > 1 && (!heatLoadForm.divisionDirections?.L && !heatLoadForm.divisionDirections?.W && !heatLoadForm.divisionDirections?.H) && (
+                          <div style={{ marginTop: '0.4rem', fontSize: '0.72rem', color: '#dc2626', background: '#fee2e2', padding: '0.3rem 0.5rem', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                            <AlertTriangle size={13} /> Please select 1 or 2 division directions to partition the cold room into {heatLoadForm.numRooms} chambers.
+                          </div>
+                        )}
+
+                        {Number(heatLoadForm.numRooms) === 2 && ((heatLoadForm.divisionDirections?.L ? 1 : 0) + (heatLoadForm.divisionDirections?.W ? 1 : 0) + (heatLoadForm.divisionDirections?.H ? 1 : 0)) === 2 && (
+                          <div style={{ marginTop: '0.4rem', fontSize: '0.72rem', color: '#b45309', background: '#fef3c7', padding: '0.3rem 0.5rem', borderRadius: '4px', display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                            <AlertTriangle size={13} /> Slicing into N=2 axis-aligned rectangular chambers can only divide 1 spatial direction. For 2-direction division, set N ≥ 3.
+                          </div>
+                        )}
+
+                        {heatLoadForm.divisionDirections?.H && (
+                          <div style={{ marginTop: '0.4rem', fontSize: '0.71rem', color: '#92400e', background: '#fffbeb', border: '1px solid #fde68a', padding: '0.3rem 0.5rem', borderRadius: '4px', display: 'flex', alignItems: 'flex-start', gap: '0.3rem' }}>
+                            <Info size={13} style={{ flexShrink: 0, marginTop: '2px' }} />
+                            <span>
+                              <strong>Height Division Active:</strong> Upper mezzanine level generated. Clear headroom shown in Side Elevation. Note: Upper tier requires structural mezzanine deck design approved by a qualified structural engineer and safety staircase/catwalk egress.
+                            </span>
+                          </div>
+                        )}
+                      </div>
+
+                      {/* Dimensions Metrics Strip */}
+                      <div style={{
+                        display: 'flex',
+                        flexWrap: 'wrap',
+                        alignItems: 'center',
+                        gap: '0.4rem',
+                        fontSize: '0.72rem',
+                        color: '#0369a1',
+                        background: 'rgba(2, 132, 199, 0.08)',
+                        padding: '0.3rem 0.55rem',
+                        borderRadius: '5px',
+                        marginTop: '0.45rem',
+                        fontWeight: 600
+                      }}>
+                        <span>Facility: {liveDimensions.volM3} m³</span>
+                        <span>•</span>
+                        {liveDimensions.numRooms > 1 ? (
+                          <>
+                            <span style={{ color: '#0284c7' }}>{liveDimensions.numRooms} Chambers ({liveDimensions.chamberVolM3} m³ each)</span>
+                            <span>•</span>
+                            <span>Partitions: {liveChamberLayout.partitions?.length || liveDimensions.partitionCount} ({Math.round((liveChamberLayout.partitions?.reduce((s, p) => s + (p.areaM2 || 0), 0) || liveDimensions.partitionAreaM2) * 10) / 10} m²)</span>
+                            <span>•</span>
+                            <span>Doors: {liveDimensions.numRooms} Nos</span>
+                          </>
+                        ) : (
+                          <>
+                            <span>Envelope: {liveDimensions.areaM2} m²</span>
+                            <span>•</span>
+                            <span>1 Door</span>
+                          </>
+                        )}
                       </div>
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: '0.4rem' }}>
-                      <div>
-                        <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Length ({heatLoadForm.unit})</span>
-                        <input
-                          type="number"
-                          step="0.1"
+                    {/* Right: PUF Panel Thickness, Floor Construction & Door Specification */}
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
+                      <div className="form-group" style={{ margin: 0 }}>
+                        <label className="form-label" style={{ fontWeight: 600, fontSize: '0.78rem', marginBottom: '0.25rem' }}>
+                          PUF Panel Thickness (k = 0.023 W/m·K)
+                        </label>
+                        <select
                           className="form-input"
-                          style={{ height: '36px' }}
-                          title="Length"
-                          placeholder="L"
-                          value={heatLoadForm.length}
-                          onChange={e => setHeatLoadForm(p => ({ ...p, length: Number(e.target.value) }))}
-                        />
+                          style={{ height: '38px', minHeight: '38px', padding: '0.35rem 2rem 0.35rem 0.65rem', fontSize: '0.8rem', lineHeight: 'normal', boxSizing: 'border-box' }}
+                          value={heatLoadForm.pufThicknessMm}
+                          onChange={e => setHeatLoadForm(p => ({ ...p, pufThicknessMm: Number(e.target.value) }))}
+                        >
+                          <option value={60}>60 mm (U = 0.383 W/m²·K) — Ante-rooms &amp; Process Areas</option>
+                          <option value={100}>100 mm (U = 0.230 W/m²·K) — Standard Chiller (+2°C to +8°C)</option>
+                          <option value={120}>120 mm (U = 0.192 W/m²·K) — Low Temp Freezer (-18°C)</option>
+                          <option value={150}>150 mm (U = 0.153 W/m²·K) — Deep Freezer (-25°C to -30°C)</option>
+                        </select>
                       </div>
-                      <div>
-                        <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Width ({heatLoadForm.unit})</span>
-                        <input
-                          type="number"
-                          step="0.1"
+
+                      <div className="form-group" style={{ margin: 0 }}>
+                        <label className="form-label" style={{ fontWeight: 600, fontSize: '0.78rem', marginBottom: '0.25rem' }}>
+                          Floor Construction &amp; PUF Accounting
+                        </label>
+                        <select
                           className="form-input"
-                          style={{ height: '36px' }}
-                          title="Width"
-                          placeholder="W"
-                          value={heatLoadForm.width}
-                          onChange={e => setHeatLoadForm(p => ({ ...p, width: Number(e.target.value) }))}
-                        />
+                          style={{ height: '38px', minHeight: '38px', padding: '0.35rem 2rem 0.35rem 0.65rem', fontSize: '0.8rem', lineHeight: 'normal', boxSizing: 'border-box' }}
+                          value={heatLoadForm.floorConstruction || 'puf'}
+                          onChange={e => setHeatLoadForm(p => ({ ...p, floorConstruction: e.target.value }))}
+                        >
+                          {FLOOR_CONSTRUCTION_TYPES.map(fc => (
+                            <option key={fc.id} value={fc.id}>{fc.label}</option>
+                          ))}
+                        </select>
+                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '2px' }}>
+                          {heatLoadForm.floorConstruction === 'puf'
+                            ? 'Floor panels included in PUF procurement.'
+                            : 'Floor panels excluded from procurement (Civil slab construction).'}
+                        </div>
                       </div>
-                      <div>
-                        <span style={{ fontSize: '0.68rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Height ({heatLoadForm.unit})</span>
-                        <input
-                          type="number"
-                          step="0.1"
+
+                      <div className="form-group" style={{ margin: 0 }}>
+                        <label className="form-label" style={{ fontWeight: 600, fontSize: '0.78rem', marginBottom: '0.25rem' }}>
+                          Cold Room Door Specification
+                        </label>
+                        <select
                           className="form-input"
-                          style={{ height: '36px' }}
-                          title="Height"
-                          placeholder="H"
-                          value={heatLoadForm.height}
-                          onChange={e => setHeatLoadForm(p => ({ ...p, height: Number(e.target.value) }))}
-                        />
+                          style={{ height: '38px', minHeight: '38px', padding: '0.35rem 2rem 0.35rem 0.65rem', fontSize: '0.8rem', lineHeight: 'normal', boxSizing: 'border-box' }}
+                          value={heatLoadForm.doorType}
+                          onChange={e => {
+                            const val = e.target.value;
+                            const opt = DOOR_OPTIONS.find(d => d.id === val) || DOOR_OPTIONS[0];
+                            setHeatLoadForm(p => ({ ...p, doorType: val }));
+                            setCustomRates(p => ({ ...p, doors: opt.defaultRate }));
+                          }}
+                        >
+                          {DOOR_OPTIONS.map(d => (
+                            <option key={d.id} value={d.id}>{d.label}</option>
+                          ))}
+                        </select>
+                        <div style={{ fontSize: '0.68rem', color: 'var(--text-muted)', marginTop: '2px', lineHeight: 1.2 }}>
+                          Exactly {liveDimensions.doorsCount} dedicated physical doors assigned (1 per chamber). Deducted strictly from host walls.
+                        </div>
                       </div>
-                      <div>
-                        <span style={{ fontSize: '0.68rem', fontWeight: 700, color: '#0369a1', display: 'block', marginBottom: 2 }}>Chambers (Rooms)</span>
-                        <input
-                          type="number"
-                          min="1"
-                          step="1"
+                    </div>
+                  </div>
+                ) : (
+                  /* MODE B: CUSTOM PER-ROOM 3D POSITIONING */
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
+                    <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: '1rem', alignItems: 'center', background: '#f8fafc', padding: '0.65rem 0.85rem', borderRadius: '6px', border: '1px solid #e2e8f0' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.85rem' }}>
+                        <div>
+                          <span style={{ fontSize: '0.7rem', fontWeight: 600, color: 'var(--text-muted)' }}>Facility Bounds:</span>
+                          <div style={{ fontSize: '0.82rem', fontWeight: 700, color: '#0f172a' }}>
+                            {heatLoadForm.length}m × {heatLoadForm.width}m × {heatLoadForm.height}m ({liveDimensions.volM3} m³)
+                          </div>
+                        </div>
+                      </div>
+
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-end', gap: '0.65rem' }}>
+                        <span style={{ fontSize: '0.72rem', fontWeight: 600 }}>Coverage Mode:</span>
+                        <select
                           className="form-input"
-                          style={{ height: '36px', borderColor: '#93c5fd', fontWeight: 700, color: '#0369a1' }}
-                          title="Number of Chambers (Equal Partitions)"
-                          placeholder="1"
-                          value={heatLoadForm.numRooms || 1}
-                          onChange={e => setHeatLoadForm(p => ({ ...p, numRooms: Math.max(1, parseInt(e.target.value) || 1) }))}
-                        />
+                          style={{ height: '32px', fontSize: '0.75rem', width: 'auto' }}
+                          value={heatLoadForm.coverageMode || 'full'}
+                          onChange={e => setHeatLoadForm(p => ({ ...p, coverageMode: e.target.value }))}
+                        >
+                          {COVERAGE_MODES.map(cm => (
+                            <option key={cm.id} value={cm.id}>{cm.label}</option>
+                          ))}
+                        </select>
                       </div>
                     </div>
 
-                    <div style={{
-                      display: 'flex',
-                      flexWrap: 'wrap',
-                      alignItems: 'center',
-                      gap: '0.4rem',
-                      fontSize: '0.72rem',
-                      color: '#0369a1',
-                      background: 'rgba(2, 132, 199, 0.08)',
-                      padding: '0.3rem 0.55rem',
-                      borderRadius: '5px',
-                      marginTop: '0.45rem',
-                      fontWeight: 600
-                    }}>
-                      <span>Facility: {liveDimensions.volM3} m³</span>
-                      <span>•</span>
-                      {liveDimensions.numRooms > 1 ? (
-                        <>
-                          <span style={{ color: '#0284c7' }}>{liveDimensions.numRooms} Chambers: {liveDimensions.chamberLM}m × {heatLoadForm.width}m ({liveDimensions.chamberVolM3} m³ each)</span>
-                          <span>•</span>
-                          <span>Partitions: {liveDimensions.partitionCount} ({liveDimensions.partitionAreaM2} m²)</span>
-                          <span>•</span>
-                          <span>Doors: {liveDimensions.doorsCount} Nos</span>
-                          <span>•</span>
-                          <span style={{ color: '#0f172a' }}>Total PUF: {liveDimensions.totalPufAreaM2} m²</span>
-                        </>
-                      ) : (
-                        <>
-                          <span>Envelope: {liveDimensions.areaM2} m²</span>
-                          <span>•</span>
-                          <span>1 Door</span>
-                        </>
+                    {/* Custom Chambers Definition Table */}
+                    <div style={{ overflowX: 'auto', border: '1px solid #e2e8f0', borderRadius: '6px' }}>
+                      <table style={{ width: '100%', fontSize: '0.74rem', borderCollapse: 'collapse', textAlign: 'left' }}>
+                        <thead>
+                          <tr style={{ background: '#f1f5f9', borderBottom: '1px solid #cbd5e1', color: '#475569' }}>
+                            <th style={{ padding: '0.4rem 0.5rem' }}>#</th>
+                            <th style={{ padding: '0.4rem 0.5rem' }}>Room Name</th>
+                            <th style={{ padding: '0.4rem 0.5rem' }}>Origin (X, Y, Z) m</th>
+                            <th style={{ padding: '0.4rem 0.5rem' }}>Dimensions (L × W × H) m</th>
+                            <th style={{ padding: '0.4rem 0.5rem' }}>Volume</th>
+                            <th style={{ padding: '0.4rem 0.5rem' }}>Temp (°C)</th>
+                            <th style={{ padding: '0.4rem 0.5rem' }}>Mass (kg/d)</th>
+                            <th style={{ padding: '0.4rem 0.5rem', textAlign: 'center' }}>Action</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {(heatLoadForm.customChambers || []).map((ch, idx) => {
+                            const vol = Math.round((Number(ch.lengthM) || 0) * (Number(ch.widthM) || 0) * (Number(ch.heightM) || 0) * 10) / 10;
+                            return (
+                              <tr key={ch.id || idx} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                                <td style={{ padding: '0.4rem 0.5rem', fontWeight: 700, color: '#64748b' }}>{idx + 1}</td>
+                                <td style={{ padding: '0.4rem 0.5rem' }}>
+                                  <input
+                                    type="text"
+                                    className="form-input"
+                                    style={{ height: '28px', fontSize: '0.74rem', width: '110px' }}
+                                    value={ch.name || `Chamber ${idx + 1}`}
+                                    onChange={e => handleUpdateCustomChamber(idx, 'name', e.target.value)}
+                                  />
+                                </td>
+                                <td style={{ padding: '0.4rem 0.5rem' }}>
+                                  <div style={{ display: 'flex', gap: '3px' }}>
+                                    <input
+                                      type="number"
+                                      step="0.1"
+                                      title="Origin X"
+                                      placeholder="X"
+                                      className="form-input"
+                                      style={{ height: '28px', fontSize: '0.72rem', width: '50px' }}
+                                      value={ch.x ?? 0}
+                                      onChange={e => handleUpdateCustomChamber(idx, 'x', Number(e.target.value))}
+                                    />
+                                    <input
+                                      type="number"
+                                      step="0.1"
+                                      title="Origin Y"
+                                      placeholder="Y"
+                                      className="form-input"
+                                      style={{ height: '28px', fontSize: '0.72rem', width: '50px' }}
+                                      value={ch.y ?? 0}
+                                      onChange={e => handleUpdateCustomChamber(idx, 'y', Number(e.target.value))}
+                                    />
+                                    <input
+                                      type="number"
+                                      step="0.1"
+                                      title="Origin Z"
+                                      placeholder="Z"
+                                      className="form-input"
+                                      style={{ height: '28px', fontSize: '0.72rem', width: '50px' }}
+                                      value={ch.z ?? 0}
+                                      onChange={e => handleUpdateCustomChamber(idx, 'z', Number(e.target.value))}
+                                    />
+                                  </div>
+                                </td>
+                                <td style={{ padding: '0.4rem 0.5rem' }}>
+                                  <div style={{ display: 'flex', gap: '3px' }}>
+                                    <input
+                                      type="number"
+                                      step="0.1"
+                                      title="Length"
+                                      placeholder="L"
+                                      className="form-input"
+                                      style={{ height: '28px', fontSize: '0.72rem', width: '50px' }}
+                                      value={ch.lengthM}
+                                      onChange={e => handleUpdateCustomChamber(idx, 'lengthM', Number(e.target.value))}
+                                    />
+                                    <input
+                                      type="number"
+                                      step="0.1"
+                                      title="Width"
+                                      placeholder="W"
+                                      className="form-input"
+                                      style={{ height: '28px', fontSize: '0.72rem', width: '50px' }}
+                                      value={ch.widthM}
+                                      onChange={e => handleUpdateCustomChamber(idx, 'widthM', Number(e.target.value))}
+                                    />
+                                    <input
+                                      type="number"
+                                      step="0.1"
+                                      title="Height"
+                                      placeholder="H"
+                                      className="form-input"
+                                      style={{ height: '28px', fontSize: '0.72rem', width: '50px' }}
+                                      value={ch.heightM}
+                                      onChange={e => handleUpdateCustomChamber(idx, 'heightM', Number(e.target.value))}
+                                    />
+                                  </div>
+                                </td>
+                                <td style={{ padding: '0.4rem 0.5rem', fontWeight: 600, color: '#0369a1' }}>
+                                  {vol} m³
+                                </td>
+                                <td style={{ padding: '0.4rem 0.5rem' }}>
+                                  <input
+                                    type="number"
+                                    step="0.5"
+                                    className="form-input"
+                                    style={{ height: '28px', fontSize: '0.72rem', width: '55px' }}
+                                    value={ch.roomTempC ?? 2.0}
+                                    onChange={e => handleUpdateCustomChamber(idx, 'roomTempC', Number(e.target.value))}
+                                  />
+                                </td>
+                                <td style={{ padding: '0.4rem 0.5rem' }}>
+                                  <input
+                                    type="number"
+                                    step="500"
+                                    className="form-input"
+                                    style={{ height: '28px', fontSize: '0.72rem', width: '65px' }}
+                                    value={ch.dailyMassKg ?? 2000}
+                                    onChange={e => handleUpdateCustomChamber(idx, 'dailyMassKg', Number(e.target.value))}
+                                  />
+                                </td>
+                                <td style={{ padding: '0.4rem 0.5rem', textAlign: 'center' }}>
+                                  <button
+                                    type="button"
+                                    className="icon-btn text-danger"
+                                    title="Delete Chamber"
+                                    disabled={(heatLoadForm.customChambers || []).length <= 1}
+                                    onClick={() => handleRemoveCustomChamber(idx)}
+                                  >
+                                    <Trash2 size={14} />
+                                  </button>
+                                </td>
+                              </tr>
+                            );
+                          })}
+                        </tbody>
+                      </table>
+                    </div>
+
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <button
+                        type="button"
+                        className="btn btn-sm btn-secondary"
+                        style={{ fontSize: '0.74rem', display: 'flex', alignItems: 'center', gap: '0.3rem' }}
+                        onClick={handleAddCustomChamber}
+                      >
+                        <Plus size={13} /> Add Custom Chamber
+                      </button>
+
+                      {liveChamberLayout.success && (
+                        <div style={{ fontSize: '0.72rem', color: '#15803d', fontWeight: 600, display: 'flex', alignItems: 'center', gap: '0.3rem' }}>
+                          <CheckCircle2 size={13} />
+                          Allocated: {liveChamberLayout.totalChamberVolumeM3} m³ / {liveDimensions.volM3} m³ ({liveChamberLayout.coveragePercent}% coverage)
+                          {liveChamberLayout.unallocatedVolumeM3 > 0 && ` • Unallocated: ${liveChamberLayout.unallocatedVolumeM3} m³`}
+                        </div>
                       )}
                     </div>
                   </div>
+                )}
 
-                  {/* Right: PUF Panel Thickness & Door Specification */}
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '0.65rem' }}>
-                    <div className="form-group" style={{ margin: 0 }}>
-                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8rem', marginBottom: '0.25rem' }}>
-                        PUF Panel Thickness (k = 0.023 W/m·K)
-                      </label>
-                      <select
-                        className="form-input"
-                        style={{ height: '36px', fontSize: '0.82rem' }}
-                        value={heatLoadForm.pufThicknessMm}
-                        onChange={e => setHeatLoadForm(p => ({ ...p, pufThicknessMm: Number(e.target.value) }))}
-                      >
-                        <option value={60}>60 mm (U = 0.383 W/m²·K) — Ante-rooms &amp; Process Areas</option>
-                        <option value={100}>100 mm (U = 0.230 W/m²·K) — Standard Chiller (+2°C to +8°C)</option>
-                        <option value={120}>120 mm (U = 0.192 W/m²·K) — Low Temp Freezer (-18°C)</option>
-                        <option value={150}>150 mm (U = 0.153 W/m²·K) — Deep Freezer (-25°C to -30°C)</option>
-                      </select>
+                {/* 2D VISUAL LAYOUT PREVIEW (Top-View Plan & Side Elevation) */}
+                <div style={{ marginTop: '0.85rem', borderTop: '1px solid #e2e8f0', paddingTop: '0.65rem' }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.45rem' }}>
+                    <div style={{ fontSize: '0.75rem', fontWeight: 700, color: '#0369a1', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                      <Eye size={13} /> 2D Layout &amp; Door Swing Preview
                     </div>
-
-                    <div className="form-group" style={{ margin: 0 }}>
-                      <label className="form-label" style={{ fontWeight: 600, fontSize: '0.8rem', marginBottom: '0.25rem' }}>
-                        Cold Room Door Specification
-                      </label>
-                      <select
-                        className="form-input"
-                        style={{ height: '36px', fontSize: '0.82rem' }}
-                        value={heatLoadForm.doorType}
-                        onChange={e => {
-                          const val = e.target.value;
-                          const opt = DOOR_OPTIONS.find(d => d.id === val) || DOOR_OPTIONS[0];
-                          setHeatLoadForm(p => ({ ...p, doorType: val }));
-                          setCustomRates(p => ({ ...p, doors: opt.defaultRate }));
-                        }}
+                    <div style={{ display: 'flex', gap: '2px', background: 'var(--bg-secondary, #f1f5f9)', padding: '2px', borderRadius: '5px' }}>
+                      <button
+                        type="button"
+                        className={`btn btn-sm ${layoutViewMode === 'top' ? 'btn-primary' : 'btn-ghost'}`}
+                        style={{ padding: '0.15rem 0.55rem', fontSize: '0.7rem', height: 'auto', lineHeight: 1.2, fontWeight: 600 }}
+                        onClick={() => setLayoutViewMode('top')}
                       >
-                        {DOOR_OPTIONS.map(d => (
-                          <option key={d.id} value={d.id}>{d.label}</option>
-                        ))}
-                      </select>
-                      <div style={{ fontSize: '0.71rem', color: 'var(--text-muted)', marginTop: '0.25rem', lineHeight: 1.3 }}>
-                        {liveDimensions.doorsCount > 1
-                          ? `${liveDimensions.doorsCount} doors assigned (1 per chamber).`
-                          : '1 door assigned for thermal envelope.'}
-                      </div>
+                        Plan View (X-Y)
+                      </button>
+                      <button
+                        type="button"
+                        className={`btn btn-sm ${layoutViewMode === 'side' ? 'btn-primary' : 'btn-ghost'}`}
+                        style={{ padding: '0.15rem 0.55rem', fontSize: '0.7rem', height: 'auto', lineHeight: 1.2, fontWeight: 600 }}
+                        onClick={() => setLayoutViewMode('side')}
+                      >
+                        Side Elevation (X-Z)
+                      </button>
                     </div>
                   </div>
+
+                  {/* SVG Canvas / Error Alert */}
+                  {!liveChamberLayout.success ? (
+                    <div style={{
+                      background: '#fee2e2',
+                      border: '1.5px solid #ef4444',
+                      borderRadius: '6px',
+                      padding: '0.65rem 0.85rem',
+                      color: '#b91c1c',
+                      fontSize: '0.76rem',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '0.5rem'
+                    }}>
+                      <AlertTriangle size={16} style={{ flexShrink: 0 }} />
+                      <span><strong>Geometry Layout Error:</strong> {liveChamberLayout.error}</span>
+                    </div>
+                  ) : (
+                    <div style={{
+                      background: '#f8fafc',
+                      border: '1px solid #cbd5e1',
+                      borderRadius: '6px',
+                      padding: '0.5rem',
+                      display: 'flex',
+                      flexDirection: 'column',
+                      alignItems: 'center'
+                    }}>
+                      {(() => {
+                        const envL = Math.max(1, liveChamberLayout.outerEnvelope?.lengthM || 12);
+                        const envW = Math.max(1, liveChamberLayout.outerEnvelope?.widthM || 8);
+                        const envH = Math.max(1, liveChamberLayout.outerEnvelope?.heightM || 4.5);
+                        const chambers = liveChamberLayout.chambers || [];
+                        const svgW = 600;
+                        const svgH = 220;
+
+                        if (layoutViewMode === 'top') {
+                          const scale = Math.min(480 / envL, 160 / envW);
+                          const ox = (svgW - envL * scale) / 2;
+                          const oy = (svgH - envW * scale) / 2;
+
+                          return (
+                            <svg width="100%" height={svgH} viewBox={`0 0 ${svgW} ${svgH}`} style={{ maxWidth: '600px' }}>
+                              {/* Background Grid / Outer Facility Envelope */}
+                              <rect
+                                x={ox}
+                                y={oy}
+                                width={envL * scale}
+                                height={envW * scale}
+                                fill="#ffffff"
+                                stroke="#1e293b"
+                                strokeWidth="3"
+                                rx="4"
+                              />
+
+                              {/* Dimension text on envelope */}
+                              <text x={ox + (envL * scale) / 2} y={oy - 8} textAnchor="middle" fontSize="10" fill="#475569" fontWeight="700">
+                                Overall Length: {envL}m
+                              </text>
+                              <text x={ox - 8} y={oy + (envW * scale) / 2} textAnchor="middle" fontSize="10" fill="#475569" fontWeight="700" transform={`rotate(-90 ${ox - 8} ${oy + (envW * scale) / 2})`}>
+                                Width: {envW}m
+                              </text>
+
+                              {/* Chambers */}
+                              {chambers.map((ch, idx) => {
+                                const cx = ox + (ch.origin?.x || 0) * scale;
+                                const cy = oy + (ch.origin?.y || 0) * scale;
+                                const cw = Math.max(2, (ch.dimensions?.lengthM || 1) * scale);
+                                const chg = Math.max(2, (ch.dimensions?.widthM || 1) * scale);
+                                const isFreezer = (ch.roomTempC ?? 2) < 0;
+                                const fillBg = isFreezer ? '#ede9fe' : (idx % 2 === 0 ? '#e0f2fe' : '#e0f7fa');
+                                const strokeColor = isFreezer ? '#7c3aed' : '#0284c7';
+
+                                // Door marker coordinates
+                                let doorX = cx + cw / 2;
+                                let doorY = cy + chg;
+                                if (ch.door?.hostWall === 'left') { doorX = cx; doorY = cy + chg / 2; }
+                                else if (ch.door?.hostWall === 'right') { doorX = cx + cw; doorY = cy + chg / 2; }
+                                else if (ch.door?.hostWall === 'back') { doorX = cx + cw / 2; doorY = cy; }
+
+                                return (
+                                  <g key={ch.chamberNumber || idx}>
+                                    <rect
+                                      x={cx + 1}
+                                      y={cy + 1}
+                                      width={cw - 2}
+                                      height={chg - 2}
+                                      fill={fillBg}
+                                      stroke={strokeColor}
+                                      strokeWidth="1.5"
+                                      rx="3"
+                                    />
+                                    {/* Chamber Label */}
+                                    <text
+                                      x={cx + cw / 2}
+                                      y={cy + chg / 2 - 10}
+                                      textAnchor="middle"
+                                      fontSize="11"
+                                      fontWeight="800"
+                                      fill="#0f172a"
+                                    >
+                                      {ch.name || `Chamber ${idx + 1}`}
+                                    </text>
+                                    <text
+                                      x={cx + cw / 2}
+                                      y={cy + chg / 2 + 4}
+                                      textAnchor="middle"
+                                      fontSize="9"
+                                      fontWeight="600"
+                                      fill="#334155"
+                                    >
+                                      {ch.dimensions?.lengthM}m × {ch.dimensions?.widthM}m ({ch.dimensions?.volumeM3 || 0} m³)
+                                    </text>
+                                    <text
+                                      x={cx + cw / 2}
+                                      y={cy + chg / 2 + 16}
+                                      textAnchor="middle"
+                                      fontSize="8.5"
+                                      fontWeight="700"
+                                      fill={isFreezer ? '#6b21a8' : '#0369a1'}
+                                    >
+                                      Design: {ch.roomTempC ?? 2.0}°C
+                                    </text>
+
+                                    {/* Dedicated Door Symbol */}
+                                    <circle cx={doorX} cy={doorY} r="6" fill="#f59e0b" stroke="#78350f" strokeWidth="1" />
+                                    <text x={doorX} y={doorY + 3} textAnchor="middle" fontSize="7" fontWeight="800" fill="#ffffff">
+                                      D
+                                    </text>
+                                  </g>
+                                );
+                              })}
+                            </svg>
+                          );
+                        } else {
+                          // SIDE ELEVATION (X-Z)
+                          const scale = Math.min(480 / envL, 160 / envH);
+                          const ox = (svgW - envL * scale) / 2;
+                          const oy = (svgH - envH * scale) / 2;
+
+                          return (
+                            <svg width="100%" height={svgH} viewBox={`0 0 ${svgW} ${svgH}`} style={{ maxWidth: '600px' }}>
+                              {/* Outer Facility Profile */}
+                              <rect
+                                x={ox}
+                                y={oy}
+                                width={envL * scale}
+                                height={envH * scale}
+                                fill="#ffffff"
+                                stroke="#1e293b"
+                                strokeWidth="3"
+                                rx="4"
+                              />
+
+                              {/* Ceiling PUF & Ground Slab Indicators */}
+                              <rect x={ox - 4} y={oy - 6} width={envL * scale + 8} height="6" fill="#0284c7" rx="2" />
+                              <text x={ox + (envL * scale) / 2} y={oy - 9} textAnchor="middle" fontSize="9" fill="#0284c7" fontWeight="700">
+                                Insulated PUF Ceiling (T = {envH}m)
+                              </text>
+
+                              <rect x={ox - 4} y={oy + envH * scale} width={envL * scale + 8} height="8" fill="#64748b" rx="2" />
+                              <text x={ox + (envL * scale) / 2} y={oy + envH * scale + 18} textAnchor="middle" fontSize="9" fill="#475569" fontWeight="700">
+                                Floor: {heatLoadForm.floorConstruction === 'puf' ? 'Insulated PUF Panels' : 'Civil Concrete Slab'} (Z = 0m)
+                              </text>
+
+                              {/* Chambers Elevation */}
+                              {chambers.map((ch, idx) => {
+                                const cx = ox + (ch.origin?.x || 0) * scale;
+                                const cz = (ch.origin?.z || 0);
+                                const chH = (ch.dimensions?.heightM || envH);
+                                const cy = oy + (envH - (cz + chH)) * scale;
+                                const cw = Math.max(2, (ch.dimensions?.lengthM || 1) * scale);
+                                const chg = Math.max(2, chH * scale);
+                                const isUpperTier = cz > 0;
+
+                                return (
+                                  <g key={ch.chamberNumber || idx}>
+                                    <rect
+                                      x={cx + 1}
+                                      y={cy + 1}
+                                      width={cw - 2}
+                                      height={chg - 2}
+                                      fill={isUpperTier ? '#fef3c7' : '#e0f2fe'}
+                                      stroke={isUpperTier ? '#d97706' : '#0284c7'}
+                                      strokeWidth="1.5"
+                                      rx="3"
+                                    />
+                                    <text
+                                      x={cx + cw / 2}
+                                      y={cy + chg / 2 - 4}
+                                      textAnchor="middle"
+                                      fontSize="10"
+                                      fontWeight="800"
+                                      fill="#0f172a"
+                                    >
+                                      {ch.name || `Chamber ${idx + 1}`} {isUpperTier ? '(Upper Tier)' : ''}
+                                    </text>
+                                    <text
+                                      x={cx + cw / 2}
+                                      y={cy + chg / 2 + 10}
+                                      textAnchor="middle"
+                                      fontSize="9"
+                                      fontWeight="600"
+                                      fill="#475569"
+                                    >
+                                      Clear Headroom: {chH}m
+                                    </text>
+                                  </g>
+                                );
+                              })}
+
+                              {/* Mezzanine Deck Divider if Height Divided */}
+                              {liveChamberLayout.partitions?.some(p => p.type === 'deck' || p.normalAxis === 'Z') && (
+                                <line
+                                  x1={ox}
+                                  y1={oy + (envH * scale) / 2}
+                                  x2={ox + envL * scale}
+                                  y2={oy + (envH * scale) / 2}
+                                  stroke="#d97706"
+                                  strokeWidth="3"
+                                  strokeDasharray="4 2"
+                                />
+                              )}
+                            </svg>
+                          );
+                        }
+                      })()}
+                      <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: '0.3rem', display: 'flex', alignItems: 'center', gap: '0.8rem' }}>
+                        <span>🟡 D = Dedicated Chamber Door</span>
+                        <span>•</span>
+                        <span>🟦 Blue Border = Insulated Partitions</span>
+                        <span>•</span>
+                        <span>Every chamber receives exactly 1 dedicated door with verified egress route.</span>
+                      </div>
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -631,7 +1431,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                   </label>
                   <select
                     className="form-input"
-                    style={{ height: '36px', fontSize: '0.83rem' }}
+                    style={{ height: '38px', minHeight: '38px', padding: '0.35rem 2rem 0.35rem 0.65rem', fontSize: '0.83rem', lineHeight: 'normal', boxSizing: 'border-box' }}
                     value={heatLoadForm.commodityId}
                     onChange={e => handleCommodityChange(e.target.value)}
                   >
@@ -671,7 +1471,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                     <input
                       type="number"
                       className="form-input"
-                      style={{ height: '36px' }}
+                      style={{ height: '38px', minHeight: '38px', padding: '0.35rem 0.6rem', fontSize: '0.85rem' }}
                       value={heatLoadForm.dailyMassKg}
                       onChange={e => setHeatLoadForm(p => ({ ...p, dailyMassKg: Number(e.target.value) }))}
                     />
@@ -681,7 +1481,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                     <input
                       type="number"
                       className="form-input"
-                      style={{ height: '36px' }}
+                      style={{ height: '38px', minHeight: '38px', padding: '0.35rem 0.6rem', fontSize: '0.85rem' }}
                       value={heatLoadForm.entryTemp}
                       onChange={e => setHeatLoadForm(p => ({ ...p, entryTemp: Number(e.target.value) }))}
                     />
@@ -691,7 +1491,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                     <input
                       type="number"
                       className="form-input"
-                      style={{ height: '36px' }}
+                      style={{ height: '38px', minHeight: '38px', padding: '0.35rem 0.6rem', fontSize: '0.85rem' }}
                       value={heatLoadForm.ambientTemp}
                       onChange={e => setHeatLoadForm(p => ({ ...p, ambientTemp: Number(e.target.value) }))}
                     />
@@ -701,7 +1501,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                     <input
                       type="number"
                       className="form-input"
-                      style={{ height: '36px' }}
+                      style={{ height: '38px', minHeight: '38px', padding: '0.35rem 0.6rem', fontSize: '0.85rem' }}
                       value={heatLoadForm.roomTemp}
                       onChange={e => setHeatLoadForm(p => ({ ...p, roomTemp: Number(e.target.value) }))}
                     />
@@ -725,7 +1525,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                     <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 600 }}>Compressor Run Target</label>
                     <select
                       className="form-input"
-                      style={{ height: '36px', fontSize: '0.82rem' }}
+                      style={{ height: '38px', minHeight: '38px', padding: '0.35rem 2rem 0.35rem 0.65rem', fontSize: '0.82rem', lineHeight: 'normal', boxSizing: 'border-box' }}
                       value={heatLoadForm.compressorRunHours}
                       onChange={e => setHeatLoadForm(p => ({ ...p, compressorRunHours: Number(e.target.value) }))}
                     >
@@ -738,7 +1538,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                     <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 600 }}>Safety Factor</label>
                     <select
                       className="form-input"
-                      style={{ height: '36px', fontSize: '0.82rem' }}
+                      style={{ height: '38px', minHeight: '38px', padding: '0.35rem 2rem 0.35rem 0.65rem', fontSize: '0.82rem', lineHeight: 'normal', boxSizing: 'border-box' }}
                       value={heatLoadForm.safetyFactor}
                       onChange={e => setHeatLoadForm(p => ({ ...p, safetyFactor: Number(e.target.value) }))}
                     >
@@ -779,54 +1579,136 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                       borderRadius: '6px',
                       marginTop: '0.5rem',
                       border: '1px solid var(--border-color, #e2e8f0)',
-                      display: 'grid',
-                      gridTemplateColumns: 'repeat(4, 1fr)',
-                      gap: '0.6rem'
+                      display: 'flex',
+                      flexDirection: 'column',
+                      gap: '0.65rem'
                     }}>
-                      <div>
-                        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Lighting (kW)</span>
-                        <input
-                          type="number"
-                          step="0.1"
-                          placeholder="Auto (10W/m²)"
-                          className="form-input"
-                          style={{ height: '34px', fontSize: '0.82rem' }}
-                          value={heatLoadForm.lightsKw}
-                          onChange={e => setHeatLoadForm(p => ({ ...p, lightsKw: e.target.value }))}
-                        />
+                      <div style={{
+                        display: 'grid',
+                        gridTemplateColumns: 'repeat(4, 1fr)',
+                        gap: '0.6rem'
+                      }}>
+                        <div>
+                          <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Lighting (kW)</span>
+                          <input
+                            type="number"
+                            step="0.1"
+                            placeholder="Auto (10W/m²)"
+                            className="form-input"
+                            style={{ height: '34px', fontSize: '0.82rem' }}
+                            value={heatLoadForm.lightsKw}
+                            onChange={e => setHeatLoadForm(p => ({ ...p, lightsKw: e.target.value }))}
+                          />
+                        </div>
+                        <div>
+                          <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Occupants (count)</span>
+                          <input
+                            type="number"
+                            className="form-input"
+                            style={{ height: '34px', fontSize: '0.82rem' }}
+                            value={heatLoadForm.peopleCount}
+                            onChange={e => setHeatLoadForm(p => ({ ...p, peopleCount: Number(e.target.value) }))}
+                          />
+                        </div>
+                        <div>
+                          <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Fan Motor (kW)</span>
+                          <input
+                            type="number"
+                            step="0.1"
+                            className="form-input"
+                            style={{ height: '34px', fontSize: '0.82rem' }}
+                            value={heatLoadForm.fanMotorKw}
+                            onChange={e => setHeatLoadForm(p => ({ ...p, fanMotorKw: Number(e.target.value) }))}
+                          />
+                        </div>
+                        <div>
+                          <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Defrost Heater (kW)</span>
+                          <input
+                            type="number"
+                            step="0.5"
+                            placeholder="Auto"
+                            className="form-input"
+                            style={{ height: '34px', fontSize: '0.82rem' }}
+                            value={heatLoadForm.defrostHeaterKw}
+                            onChange={e => setHeatLoadForm(p => ({ ...p, defrostHeaterKw: e.target.value }))}
+                          />
+                        </div>
                       </div>
-                      <div>
-                        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Occupants (count)</span>
-                        <input
-                          type="number"
-                          className="form-input"
-                          style={{ height: '34px', fontSize: '0.82rem' }}
-                          value={heatLoadForm.peopleCount}
-                          onChange={e => setHeatLoadForm(p => ({ ...p, peopleCount: Number(e.target.value) }))}
-                        />
-                      </div>
-                      <div>
-                        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Fan Motor (kW)</span>
-                        <input
-                          type="number"
-                          step="0.1"
-                          className="form-input"
-                          style={{ height: '34px', fontSize: '0.82rem' }}
-                          value={heatLoadForm.fanMotorKw}
-                          onChange={e => setHeatLoadForm(p => ({ ...p, fanMotorKw: Number(e.target.value) }))}
-                        />
-                      </div>
-                      <div>
-                        <span style={{ fontSize: '0.72rem', fontWeight: 600, color: 'var(--text-muted)', display: 'block', marginBottom: 2 }}>Defrost Heater (kW)</span>
-                        <input
-                          type="number"
-                          step="0.5"
-                          placeholder="Auto"
-                          className="form-input"
-                          style={{ height: '34px', fontSize: '0.82rem' }}
-                          value={heatLoadForm.defrostHeaterKw}
-                          onChange={e => setHeatLoadForm(p => ({ ...p, defrostHeaterKw: e.target.value }))}
-                        />
+
+                      {/* Infiltration Model Toggle: ASHRAE ACH vs Gosney-Olsson */}
+                      <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: '0.5rem' }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '0.35rem' }}>
+                          <span style={{ fontSize: '0.74rem', fontWeight: 700, color: '#1e293b' }}>
+                            Air Infiltration Calculation Method:
+                          </span>
+                          <div style={{ display: 'flex', gap: '8px' }}>
+                            <label style={{ fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '3px', cursor: 'pointer' }}>
+                              <input
+                                type="radio"
+                                name="infilMethod"
+                                checked={heatLoadForm.infiltrationModel !== 'gosney_olsson'}
+                                onChange={() => setHeatLoadForm(p => ({ ...p, infiltrationModel: 'ashrae' }))}
+                              />
+                              ASHRAE Table 7 ACH (Standard)
+                            </label>
+                            <label style={{ fontSize: '0.72rem', display: 'flex', alignItems: 'center', gap: '3px', cursor: 'pointer' }}>
+                              <input
+                                type="radio"
+                                name="infilMethod"
+                                checked={heatLoadForm.infiltrationModel === 'gosney_olsson'}
+                                onChange={() => setHeatLoadForm(p => ({ ...p, infiltrationModel: 'gosney_olsson' }))}
+                              />
+                              Gosney-Olsson Door Dynamics (Provisional)
+                            </label>
+                          </div>
+                        </div>
+
+                        {heatLoadForm.infiltrationModel === 'gosney_olsson' && (
+                          <div style={{
+                            background: '#fffbeb',
+                            border: '1px solid #fde68a',
+                            borderRadius: '4px',
+                            padding: '0.45rem 0.6rem',
+                            display: 'grid',
+                            gridTemplateColumns: 'repeat(3, 1fr)',
+                            gap: '0.5rem',
+                            marginTop: '0.35rem'
+                          }}>
+                            <div>
+                              <span style={{ fontSize: '0.68rem', fontWeight: 600, color: '#92400e', display: 'block', marginBottom: 2 }}>Door Openings (/hr)</span>
+                              <input
+                                type="number"
+                                className="form-input"
+                                style={{ height: '30px', fontSize: '0.75rem' }}
+                                value={heatLoadForm.openFrequencyPerHour ?? 15}
+                                onChange={e => setHeatLoadForm(p => ({ ...p, openFrequencyPerHour: Number(e.target.value) }))}
+                              />
+                            </div>
+                            <div>
+                              <span style={{ fontSize: '0.68rem', fontWeight: 600, color: '#92400e', display: 'block', marginBottom: 2 }}>Open Duration (sec/door)</span>
+                              <input
+                                type="number"
+                                className="form-input"
+                                style={{ height: '30px', fontSize: '0.75rem' }}
+                                value={heatLoadForm.openDurationSec ?? 30}
+                                onChange={e => setHeatLoadForm(p => ({ ...p, openDurationSec: Number(e.target.value) }))}
+                              />
+                            </div>
+                            <div>
+                              <span style={{ fontSize: '0.68rem', fontWeight: 600, color: '#92400e', display: 'block', marginBottom: 2 }}>Strip Curtain Protection</span>
+                              <select
+                                className="form-input"
+                                style={{ height: '30px', fontSize: '0.75rem' }}
+                                value={heatLoadForm.protectionFactor ?? 0.60}
+                                onChange={e => setHeatLoadForm(p => ({ ...p, protectionFactor: Number(e.target.value) }))}
+                              >
+                                <option value={0.60}>PVC Strip Curtain (0.60 / 60%)</option>
+                                <option value={0.80}>Air Curtain Fan (0.80 / 80%)</option>
+                                <option value={1.00}>Unprotected Open Door (1.00 / 100%)</option>
+                              </select>
+                            </div>
+                          </div>
+                        )}
                       </div>
                     </div>
                   )}
@@ -849,7 +1731,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                     <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 600 }}>Brand Preference</label>
                     <select
                       className="form-input"
-                      style={{ height: '36px', fontSize: '0.82rem' }}
+                      style={{ height: '38px', minHeight: '38px', padding: '0.35rem 2rem 0.35rem 0.65rem', fontSize: '0.82rem', lineHeight: 'normal', boxSizing: 'border-box' }}
                       value={heatLoadForm.brand}
                       onChange={e => {
                         const val = e.target.value;
@@ -868,7 +1750,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                     <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 600 }}>Compressor Technology</label>
                     <select
                       className="form-input"
-                      style={{ height: '36px', fontSize: '0.82rem' }}
+                      style={{ height: '38px', minHeight: '38px', padding: '0.35rem 2rem 0.35rem 0.65rem', fontSize: '0.82rem', lineHeight: 'normal', boxSizing: 'border-box' }}
                       value={heatLoadForm.compressorPreference}
                       onChange={e => setHeatLoadForm(p => ({ ...p, compressorPreference: e.target.value }))}
                     >
@@ -882,7 +1764,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                     <label className="form-label" style={{ fontSize: '0.75rem', fontWeight: 600 }}>Refrigerant</label>
                     <select
                       className="form-input"
-                      style={{ height: '36px', fontSize: '0.82rem' }}
+                      style={{ height: '38px', minHeight: '38px', padding: '0.35rem 2rem 0.35rem 0.65rem', fontSize: '0.82rem', lineHeight: 'normal', boxSizing: 'border-box' }}
                       value={heatLoadForm.refrigerant}
                       onChange={e => setHeatLoadForm(p => ({ ...p, refrigerant: e.target.value }))}
                     >
@@ -1123,6 +2005,51 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                   )}
                 </div>
 
+                {/* Catalog Unverified Engineering Alert Banner */}
+                {(heatLoadResult.recommendations?.unverified || heatLoadResult.catalogVerificationStatus === 'unverified') && (
+                  <div style={{
+                    background: '#fffbeb',
+                    border: '1.5px solid #f59e0b',
+                    borderRadius: '6px',
+                    padding: '0.55rem 0.8rem',
+                    marginBottom: '0.85rem',
+                    color: '#92400e',
+                    fontSize: '0.76rem',
+                    display: 'flex',
+                    alignItems: 'center',
+                    gap: '0.5rem',
+                  }}>
+                    <AlertTriangle size={16} style={{ flexShrink: 0, color: '#d97706' }} />
+                    <span>
+                      <strong>Catalog Data Unverified — Engineering Verification Required:</strong> Machinery ratings reflect estimated duty. Manufacturer rating charts and selection software must be verified prior to procurement.
+                    </span>
+                  </div>
+                )}
+
+                {/* Multi-Circuit Refrigeration Architecture Banner (if MT + LT split) */}
+                {heatLoadResult.recommendations?.circuits?.length > 1 && (
+                  <div style={{
+                    background: '#f0fdf4',
+                    border: '1.5px solid #16a34a',
+                    borderRadius: '8px',
+                    padding: '0.75rem',
+                    marginBottom: '0.85rem'
+                  }}>
+                    <div style={{ fontSize: '0.78rem', fontWeight: 800, color: '#15803d', marginBottom: '0.4rem', display: 'flex', alignItems: 'center', gap: '0.35rem' }}>
+                      <Cpu size={14} /> MULTI-CIRCUIT REFRIGERATION ARCHITECTURE (SST Split: MT Chiller + LT Freezer)
+                    </div>
+                    <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.5rem', fontSize: '0.74rem' }}>
+                      {heatLoadResult.recommendations.circuits.map(ckt => (
+                        <div key={ckt.circuitId} style={{ background: '#ffffff', padding: '0.5rem', borderRadius: '5px', border: '1px solid #bbf7d0' }}>
+                          <strong style={{ color: '#166534' }}>{ckt.name}:</strong>
+                          <div>Duty: {ckt.capacityTr} TR ({ckt.capacityKw} kW) • SST: {ckt.designSstC}°C</div>
+                          <div style={{ color: '#4b5563' }}>Chambers: {(ckt.chambers || []).join(', ')}</div>
+                        </div>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
                 {/* Separate Result Cards for EVERY Chamber */}
                 <div style={{ marginBottom: '0.85rem' }}>
                   <div style={{
@@ -1138,7 +2065,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                   }}>
                     <span style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
                       <Layers size={15} style={{ color: '#0284c7' }} />
-                      Chamber-Wise Thermal Sizing & Dedicated Evaporators ({heatLoadResult.chambers?.length || 1} {heatLoadResult.chambers?.length === 1 ? 'Chamber' : 'Chambers'})
+                      Chamber-Wise Thermal Sizing &amp; Dedicated Evaporators ({heatLoadResult.chambers?.length || 1} {heatLoadResult.chambers?.length === 1 ? 'Chamber' : 'Chambers'})
                     </span>
                     <span style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>
                       1 Dedicated Evaporator + 1 Dedicated Door per Chamber
@@ -1161,7 +2088,7 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                         gap: '0.45rem',
                         boxShadow: '0 1px 3px rgba(0,0,0,0.04)'
                       }}>
-                        {/* Chamber Header & Door */}
+                        {/* Chamber Header & Dedicated Door */}
                         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', borderBottom: '1px solid #f1f5f9', paddingBottom: '0.35rem' }}>
                           <span style={{ fontWeight: 800, fontSize: '0.9rem', color: '#0f172a' }}>{ch.name}</span>
                           <span style={{
@@ -1173,18 +2100,23 @@ export default function ColdRoomSizerModal({ isOpen, onClose, onInsert, initialS
                             borderRadius: '4px',
                             fontWeight: 700
                           }}>
-                            🚪 1 Door Assigned
+                            🚪 {ch.door?.hostWall ? `Host: ${ch.door.hostWall.toUpperCase()}` : 'Dedicated Door'}
                           </span>
                         </div>
 
-                        {/* Dimensions & Volume */}
+                        {/* Dimensions & Clear Volume */}
                         <div style={{ background: '#f8fafc', padding: '0.4rem 0.5rem', borderRadius: '4px', border: '1px solid #e2e8f0' }}>
                           <div style={{ fontSize: '0.75rem', color: '#334155', fontWeight: 600 }}>
                             Size: {ch.dimensions.lengthM}m × {ch.dimensions.widthM}m × {ch.dimensions.heightM}m
                           </div>
                           <div style={{ fontSize: '0.68rem', color: '#64748b', marginTop: '1px' }}>
-                            Volume: <strong>{ch.dimensions.volumeM3} m³</strong> ({ch.dimensions.volumeFt3} cu.ft) • Floor: {ch.dimensions.floorAreaM2} m²
+                            Gross: {ch.dimensions.volumeM3} m³ • Clear Usable: <strong>{ch.clearDimensions?.usableVolumeM3 || ch.dimensions.volumeM3} m³</strong>
                           </div>
+                          {ch.door?.egressRoute && (
+                            <div style={{ fontSize: '0.66rem', color: '#15803d', marginTop: '2px', fontWeight: 600 }}>
+                              Route: {ch.door.egressRoute.join(' → ')} (Egress Verified)
+                            </div>
+                          )}
                         </div>
 
                         {/* Chamber Heat Load */}

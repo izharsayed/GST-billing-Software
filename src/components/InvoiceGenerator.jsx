@@ -1820,8 +1820,12 @@ export default function InvoiceGenerator({ onBack, profile: profileProp, editing
   const handleInsertColdRoom = (newItems, specs) => {
     setItems(prev => {
       const isSingleEmpty = prev.length === 1 && !prev[0].name && (Number(prev[0].rate) === 0 || !prev[0].rate);
-      const base = isSingleEmpty ? [] : prev;
-      return [...base, ...newItems.map((item, idx) => ({
+      const targetInstanceId = specs?.calculationInstanceId;
+      // Filter out only previous items from this specific calculation instance (if any)
+      const filteredPrev = isSingleEmpty
+        ? []
+        : (targetInstanceId ? prev.filter(item => item.calculationInstanceId !== targetInstanceId) : prev);
+      return [...filteredPrev, ...newItems.map((item, idx) => ({
         id: (Date.now() + idx).toString(),
         name: item.name,
         hsn: item.hsn || '84189900',
@@ -1831,6 +1835,9 @@ export default function InvoiceGenerator({ onBack, profile: profileProp, editing
         discount: Number(item.discount) || 0,
         taxPercent: item.taxPercent !== undefined ? Number(item.taxPercent) : (showGST ? defaultTaxRate : 0),
         cessPercent: 0,
+        calculationInstanceId: item.calculationInstanceId || targetInstanceId,
+        source: item.source || 'cold_room_sizer',
+        componentType: item.componentType,
       }))];
     });
     setTechnicalSpecs(specs);
