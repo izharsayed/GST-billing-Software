@@ -442,6 +442,7 @@ function App() {
   // v1.10.76 - a fresh editor for every invoice opened, so nothing (such as
   // the stock record of the last invoice) carries over to the next one.
   const [editorKey, setEditorKey] = useState(0);
+  const [returnView, setReturnView] = useState('dashboard');
   // v1.10.77 (#84) - sidebar auto-hide (desktop): a slim strip of icons that
   // opens over the page when pointed at, for more room on small screens.
   const [sidebarAutoHide, setSidebarAutoHide] = useState(() => {
@@ -452,6 +453,7 @@ function App() {
     try { localStorage.setItem('freegstbill_sidebarAutoHide', on ? '1' : '0'); } catch { /* private mode */ }
   };
   const handleNewInvoice = (initialDraft) => {
+    setReturnView(currentView === 'new' ? 'dashboard' : currentView);
     setEditorKey((k) => k + 1);
     const isExplicitDraft = initialDraft && typeof initialDraft === 'object' && !initialDraft.nativeEvent;
     if (isExplicitDraft) {
@@ -465,6 +467,7 @@ function App() {
   };
 
   const handleEditInvoice = (bill) => {
+    setReturnView(currentView === 'new' ? 'dashboard' : currentView);
     setEditorKey((k) => k + 1);
     sessionStorage.removeItem('gst_invoiceDraft');
     setEditingBill(bill);
@@ -475,6 +478,7 @@ function App() {
   // enough to build the same PDF the invoice screen prints (same pages, HD),
   // prints it, and comes back.
   const handlePrintInvoice = (bill) => {
+    setReturnView(currentView === 'new' ? 'dashboard' : currentView);
     setEditorKey((k) => k + 1);
     sessionStorage.removeItem('gst_invoiceDraft');
     setEditingBill({ ...bill, _printOnOpen: true });
@@ -482,6 +486,7 @@ function App() {
   };
 
   const handleDuplicateInvoice = (bill) => {
+    setReturnView(currentView === 'new' ? 'dashboard' : currentView);
     setEditorKey((k) => k + 1);
     sessionStorage.removeItem('gst_invoiceDraft');
     const clone = JSON.parse(JSON.stringify(bill));
@@ -510,6 +515,7 @@ function App() {
   };
 
   const handleConvertToInvoice = (bill) => {
+    setReturnView(currentView === 'new' ? 'dashboard' : currentView);
     setEditorKey((k) => k + 1);
     sessionStorage.removeItem('gst_invoiceDraft');
     const clone = JSON.parse(JSON.stringify(bill));
@@ -1014,7 +1020,7 @@ function App() {
         {currentView === 'new' && (
           <InvoiceGenerator
             key={editorKey}
-            onBack={() => { setEditingBill(null); setCurrentView('dashboard'); }}
+            onBack={() => { setEditingBill(null); setCurrentView(returnView || 'dashboard'); }}
             profile={profile} editingBill={editingBill}
           />
         )}

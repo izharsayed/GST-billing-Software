@@ -1,9 +1,10 @@
 import { useState, useEffect, useRef, useMemo } from 'react';
-import { Users, Search, FileText, ChevronDown, ChevronUp, Trash2, X, MessageCircle, Mail, Plus, Edit3, Copy, Upload, Download, Wrench, MapPin, Zap, Paperclip, Eye, Folder, Image, File } from 'lucide-react';
+import { Users, Search, FileText, ChevronDown, ChevronUp, Trash2, X, MessageCircle, Mail, Plus, Edit3, Copy, Upload, Download, Wrench, MapPin, Zap, Paperclip, Eye, Folder, Image, File, Printer } from 'lucide-react';
 import HelpButton from './HelpButton';
 import { getAllClients, getAllBills, deleteClient, saveClient, deleteBill, saveBill, getProfile, deleteReceipt, applyStockChanges, trashSavedPdf, getAllServiceCertificates } from '../store';
 import ServiceCertificateModal from './ServiceCertificateModal';
 import TechnoCommercialProposalModal from './quotation/TechnoCommercialProposalModal';
+import PrintPreviewModal from './PrintPreviewModal';
 import { formatCurrency, INVOICE_TYPES, markPaidPatch, markUnpaidPatch, salesSign, countsAsSales, isCancelledBill, amountDue, localToday, parseLocalDate, appliedStock, stockDelta } from '../utils';
 import { getPrintSettings } from '../utils/printSettings';
 import { openWhatsAppShare } from '../utils/share';
@@ -56,6 +57,7 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert, onP
   const [targetBillForProposal, setTargetBillForProposal] = useState(null);
   const [clientDocTabs, setClientDocTabs] = useState({});
   const [filePreviewModal, setFilePreviewModal] = useState(null);
+  const [viewBill, setViewBill] = useState(null);
   const [uploadModalClient, setUploadModalClient] = useState(null);
   const [uploadCategory, setUploadCategory] = useState('PO');
   const [uploadNotes, setUploadNotes] = useState('');
@@ -486,7 +488,13 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert, onP
                           <div
                             onClick={() => {
                               if (file.isGenerated && file.rawBill) {
-                                (onPrint || onEdit)(file.rawBill);
+                                if (file.rawBill.data) {
+                                  setViewBill(file.rawBill);
+                                } else if (onPrint) {
+                                  onPrint(file.rawBill);
+                                } else {
+                                  onEdit(file.rawBill);
+                                }
                               } else if (file.isGenerated && file.rawCert) {
                                 openServiceModal(savedClient || { name: clientName }, null, file.rawCert);
                               } else {
@@ -515,7 +523,13 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert, onP
                           <div
                             onClick={() => {
                               if (file.isGenerated && file.rawBill) {
-                                (onPrint || onEdit)(file.rawBill);
+                                if (file.rawBill.data) {
+                                  setViewBill(file.rawBill);
+                                } else if (onPrint) {
+                                  onPrint(file.rawBill);
+                                } else {
+                                  onEdit(file.rawBill);
+                                }
                               } else if (file.isGenerated && file.rawCert) {
                                 openServiceModal(savedClient || { name: clientName }, null, file.rawCert);
                               } else {
@@ -572,12 +586,32 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert, onP
                                     type="button"
                                     className="icon-btn icon-btn-blue"
                                     style={{ padding: '3px' }}
-                                    onClick={() => (onPrint ? onPrint(file.rawBill) : onEdit(file.rawBill))}
-                                    title="View & Print Document"
+                                    onClick={() => {
+                                      if (file.rawBill.data) {
+                                        setViewBill(file.rawBill);
+                                      } else if (onPrint) {
+                                        onPrint(file.rawBill);
+                                      } else {
+                                        onEdit(file.rawBill);
+                                      }
+                                    }}
+                                    title="View Document"
                                     aria-label="View Document"
                                   >
                                     <Eye size={13} />
                                   </button>
+                                  {onPrint && (
+                                    <button
+                                      type="button"
+                                      className="icon-btn"
+                                      style={{ padding: '3px', color: '#475569' }}
+                                      onClick={() => onPrint(file.rawBill)}
+                                      title="Print Document"
+                                      aria-label="Print Document"
+                                    >
+                                      <Printer size={13} />
+                                    </button>
+                                  )}
                                   {onConvert && ['quotation', 'proforma', 'delivery-challan'].includes(file.rawBill.invoiceType) && !file.rawBill.convertedTo && (
                                     <button
                                       type="button"
@@ -2346,6 +2380,18 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert, onP
                                             </td>
                                             <td>
                                               <div className="table-actions">
+                                                {/* View Document Modal */}
+                                                {bill.data && (
+                                                  <button
+                                                    type="button"
+                                                    className="icon-btn icon-btn-blue"
+                                                    onClick={() => setViewBill(bill)}
+                                                    title="View Document"
+                                                    aria-label="View Document"
+                                                  >
+                                                    <Eye size={14} />
+                                                  </button>
+                                                )}
                                                 {/* 5-Page Techno-Commercial Project Proposal */}
                                                 {isProposalEligible && (
                                                   <button
@@ -2356,6 +2402,19 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert, onP
                                                     aria-label="5-Page Proposal"
                                                   >
                                                     <FileText size={14} />
+                                                  </button>
+                                                )}
+                                                {/* Print Document */}
+                                                {onPrint && (
+                                                  <button
+                                                    type="button"
+                                                    className="icon-btn"
+                                                    style={{ color: '#475569' }}
+                                                    onClick={() => onPrint(bill)}
+                                                    title="Print Document"
+                                                    aria-label="Print Document"
+                                                  >
+                                                    <Printer size={14} />
                                                   </button>
                                                 )}
                                                 {/* Convert to Tax Invoice */}
@@ -2697,6 +2756,26 @@ export default function ClientsView({ onEdit, onDuplicate, onNew, onConvert, onP
             </div>
           </div>
         </div>
+      )}
+
+      {/* Document View / Print Preview Modal */}
+      {viewBill?.data && (
+        <PrintPreviewModal
+          isOpen
+          onClose={() => setViewBill(null)}
+          onPrint={() => (onPrint ? onPrint(viewBill) : onEdit(viewBill))}
+          cancelled={isCancelledBill(viewBill)}
+          profile={viewBill.data.profile || profileForStatement}
+          client={viewBill.data.client || {}}
+          details={viewBill.data.details || {}}
+          items={viewBill.data.items || []}
+          totals={viewBill.data.totals || {}}
+          invoiceType={viewBill.invoiceType || viewBill.data.invoiceType || 'tax-invoice'}
+          customTerms={viewBill.data.customTerms}
+          customNotes={viewBill.data.customNotes}
+          extraSections={viewBill.data.extraSections || []}
+          invoiceOptions={viewBill.data.invoiceOptions || {}}
+        />
       )}
     </div>
   );
