@@ -809,7 +809,9 @@ export default function MastersView() {
                         {/* Capacity */}
                         <td style={{ padding: '0.7rem 0.85rem' }}>
                           <span style={{ fontWeight: 600, fontSize: '0.85rem', whiteSpace: 'nowrap' }}>
-                            {m.capacity ? `${m.capacity} ${m.capacity_unit || 'kW'}` : '—'}
+                            {m.capacity_unit === 'NA' || m.capacity_unit === 'N/A'
+                              ? (m.capacity ? `${m.capacity}` : 'NA')
+                              : (m.capacity ? `${m.capacity} ${m.capacity_unit || 'kW'}` : '—')}
                           </span>
                         </td>
 
@@ -1509,11 +1511,13 @@ export default function MastersView() {
                     <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.3rem' }}>Capacity</label>
                     <div style={{ display: 'flex', gap: '0.3rem' }}>
                       <input type="number" step="any" name="capacity" defaultValue={editModal.data?.capacity ?? ''} className="form-input" placeholder="e.g. 2.5" style={{ flex: 1 }} />
-                      <select name="capacity_unit" defaultValue={editModal.data?.capacity_unit || 'TR'} className="form-input" style={{ width: 85 }}>
+                      <select name="capacity_unit" defaultValue={editModal.data?.capacity_unit === 'N/A' ? 'NA' : (editModal.data?.capacity_unit || 'TR')} className="form-input" style={{ width: 85 }}>
                         <option value="TR">TR</option>
+                        <option value="kW">kW</option>
                         <option value="HP">HP</option>
                         <option value="Watts">Watts</option>
                         <option value="BTU/hr">BTU/hr</option>
+                        <option value="NA">NA</option>
                       </select>
                     </div>
                   </div>
