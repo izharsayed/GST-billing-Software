@@ -18,6 +18,9 @@ export function seedRefrigerationData() {
     const daikinBrandId = upsertBrand('Daikin', 'Daikin Airconditioning India Pvt. Ltd. - Cold Room Units', 'brd_daikin');
     const emersonBrandId = upsertBrand('Emerson', 'Hermetic Reciprocating & Copeland Scroll Condensing Units', 'brd_emerson');
     const dixellBrandId = upsertBrand('Dixell', 'Digital Electronic Controllers (XR02CX, XR06CX, XR30CX, XR70CX)', 'brd_dixell');
+    const subzeroBrandId = upsertBrand('Sub-Zero', 'Sub-Zero Microprocessor Temperature Controllers', 'brd_subzero');
+    const carelBrandId = upsertBrand('Carel', 'Carel Electronic Refrigeration Controllers & Probes', 'brd_carel');
+    const danfossBrandId = upsertBrand('Danfoss', 'Danfoss Electronic Controllers & Sensors', 'brd_danfoss');
 
 // 2. Categories
     const upsertCategory = (name, desc, defaultId) => {
@@ -59,6 +62,7 @@ export function seedRefrigerationData() {
     const dkEvapProdId = upsertProduct('prod_daikin_evap', 'Daikin Air Cooling Unit (Evaporator)', evapCatId, daikinBrandId, 'Nos', '84189900', 'Daikin Indoor DX Air Cooling Unit with axial fans');
     const commEvapProdId = upsertProduct('prod_comm_evap', 'Commercial Air Cooling Unit (Evaporator)', evapCatId, emersonBrandId, 'Nos', '84189900', 'Indoor DX Unit Cooler with axial fans');
     const bmcProdId = upsertProduct('prod_emerson_bmc', 'Emerson Bulk Milk Chiller Unit', bmcCatId, emersonBrandId, 'Set', '84186990', 'Dedicated BMC refrigeration unit with agitator control');
+    const ctrlProdId = upsertProduct('prod_digital_controller', 'Digital Temperature Controller', ctrlCatId, dixellBrandId, 'Nos', '90321000', 'Digital microprocessor temperature controller with defrost management and sensor probe inputs');
 
     const insertPrice = db.prepare(`
       INSERT INTO product_prices (id, product_id, model_id, purchase_cost, selling_price, min_selling_price)
@@ -468,6 +472,22 @@ export function seedRefrigerationData() {
     for (const c of thermalCommodities) {
       insertCommodity.run(c.id, c.name, c.category, c.min_t, c.max_t, c.freeze_t, c.cp_above, c.latent, c.cp_below, c.resp_rate);
     }
+
+    // 10. Digital Temperature Controllers (Dixell, Sub-Zero, Danfoss)
+    saveModelAndPrice('mod_dixell_xr02cx', ctrlProdId, dixellBrandId, 'XR02CX-5N0C0', 'Dixell Digital Controller for Chiller with Off-Cycle Defrost (1 x 20A Relay, 1 x NTC Probe)', null, 'NA', -40, 110, 'N/A', '230V / 1Ph / 50Hz', 'Dixell XR Series Catalogue', '12');
+    insertPrice.run('prc_mod_dixell_xr02cx', ctrlProdId, 'mod_dixell_xr02cx', 1250, 1850, 1600);
+
+    saveModelAndPrice('mod_dixell_xr06cx', ctrlProdId, dixellBrandId, 'XR06CX-5N0C1', 'Dixell Digital Controller for Freezer with Defrost & Fan Control (3 x 8A Relays, 2 x NTC Probes)', null, 'NA', -40, 110, 'N/A', '230V / 1Ph / 50Hz', 'Dixell XR Series Catalogue', '14');
+    insertPrice.run('prc_mod_dixell_xr06cx', ctrlProdId, 'mod_dixell_xr06cx', 1950, 2750, 2400);
+
+    saveModelAndPrice('mod_subzero_7510p', ctrlProdId, subzeroBrandId, 'SZ-7510P', 'Sub-Zero Digital Temperature Controller with Off-Cycle Defrost (1 x 20A Relay, 1 x NTC Probe)', null, 'NA', -50, 99, 'N/A', '230V / 1Ph / 50Hz', 'Sub-Zero Catalogue', '4');
+    insertPrice.run('prc_mod_subzero_7510p', ctrlProdId, 'mod_subzero_7510p', 1100, 1650, 1400);
+
+    saveModelAndPrice('mod_subzero_7524p', ctrlProdId, subzeroBrandId, 'SZ-7524P', 'Sub-Zero Digital Freezer Controller with Defrost & Fan Control (2 x Relays, 2 x NTC Probes)', null, 'NA', -50, 99, 'N/A', '230V / 1Ph / 50Hz', 'Sub-Zero Catalogue', '6');
+    insertPrice.run('prc_mod_subzero_7524p', ctrlProdId, 'mod_subzero_7524p', 1650, 2400, 2100);
+
+    saveModelAndPrice('mod_danfoss_erc212', ctrlProdId, danfossBrandId, 'ERC 212', 'Danfoss Digital Multi-function Refrigeration Controller with 2 Relays & Eco Mode', null, 'NA', -40, 105, 'N/A', '230V / 1Ph / 50Hz', 'Danfoss ERC Series', '8');
+    insertPrice.run('prc_mod_danfoss_erc212', ctrlProdId, 'mod_danfoss_erc212', 1850, 2650, 2300);
 
     // 10. Store Service Completion Template defaults
     const serviceCertTemplate = {

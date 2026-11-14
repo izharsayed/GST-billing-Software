@@ -106,6 +106,16 @@ export default function MastersView() {
         if (m.temp_range_min === null || m.temp_range_min > -15) return false;
       } else if (filterApp === 'chiller') {
         if (m.temp_range_min === null || m.temp_range_min <= -15) return false;
+      } else if (filterApp === 'controller') {
+        const isCtrl = (m.category_id === 'cat_controllers') ||
+          (m.product_name || '').toLowerCase().includes('controller') ||
+          (m.description || '').toLowerCase().includes('controller') ||
+          (m.brand_name || '').toLowerCase().includes('dixell') ||
+          (m.brand_name || '').toLowerCase().includes('sub-zero') ||
+          (m.model_number || '').toUpperCase().startsWith('XR') ||
+          (m.model_number || '').toUpperCase().startsWith('SZ') ||
+          (m.model_number || '').toUpperCase().startsWith('ERC');
+        if (!isCtrl) return false;
       }
       if (filterRefrigerant && m.refrigerant !== filterRefrigerant) return false;
       if (filterPrice === 'zero') {
@@ -239,6 +249,46 @@ export default function MastersView() {
     try {
       await saveProductModel(data);
       toast('Compressor / Condensing Unit saved successfully!', 'success');
+      setEditModal(null);
+      loadAll();
+    } catch (err) {
+      toast(err.message, 'error');
+    }
+  };
+
+  const handleSaveController = async (e) => {
+    e.preventDefault();
+    const fd = new FormData(e.target);
+    const brandIdVal = fd.get('brand_id');
+    const existingBrand = brands.find(b => b.id === brandIdVal);
+    const customBrand = fd.get('brand_name_custom');
+
+    const ctrlBaseProd = products.find(p => p.category_id === 'cat_controllers' || p.id === 'prod_digital_controller' || p.name?.toLowerCase().includes('controller'))
+      || products[0];
+
+    const data = {
+      id: editModal?.data?.id || undefined,
+      product_id: editModal?.data?.product_id || ctrlBaseProd?.id || 'prod_digital_controller',
+      category_id: 'cat_controllers',
+      brand_id: existingBrand ? existingBrand.id : null,
+      brand_name: existingBrand ? existingBrand.name : (customBrand || 'Dixell'),
+      model_number: fd.get('model_number'),
+      capacity: null,
+      capacity_unit: 'NA',
+      temp_range_min: fd.get('temp_range_min') !== '' ? Number(fd.get('temp_range_min')) : -40,
+      temp_range_max: fd.get('temp_range_max') !== '' ? Number(fd.get('temp_range_max')) : 110,
+      refrigerant: fd.get('refrigerant') || 'N/A',
+      voltage_phase: fd.get('voltage_phase') || '230V / 1Ph / 50Hz',
+      purchase_cost: Number(fd.get('purchase_cost')) || 0,
+      selling_price: Number(fd.get('selling_price')) || 0,
+      catalogue_ref: fd.get('catalogue_ref') || 'Standard Controller Catalogue',
+      catalogue_page: fd.get('catalogue_page') || '1',
+      description: `${fd.get('app_type_label') || 'Digital Controller'} | ${fd.get('relay_config') || 'Relay Output'} | ${fd.get('probes') || 'NTC Probes'}${fd.get('extra_notes') ? ' | ' + fd.get('extra_notes') : ''}`.trim(),
+    };
+
+    try {
+      await saveProductModel(data);
+      toast('Digital Temperature Controller saved successfully!', 'success');
       setEditModal(null);
       loadAll();
     } catch (err) {
@@ -622,6 +672,7 @@ export default function MastersView() {
                 <option value="">All Applications</option>
                 <option value="freezer">❄️ Freezer (≤ -15°C)</option>
                 <option value="chiller">🟢 Chiller (&gt; -15°C)</option>
+                <option value="controller">🎛️ Digital Controllers</option>
               </select>
 
               {/* Refrigerant Filter */}
@@ -705,19 +756,36 @@ export default function MastersView() {
         {tab !== 'history' && (
           <div style={{ display: 'flex', gap: '0.5rem', flexWrap: 'wrap', alignItems: 'center', flexShrink: 0 }}>
             {tab === 'models' && (
-              <button
-                type="button"
-                className="btn btn-primary"
-                onClick={() => setEditModal({ type: 'compressor', data: null })}
-                style={{
-                  display: 'flex', alignItems: 'center', gap: '0.4rem',
-                  background: '#1d4ed8', fontSize: '0.85rem', padding: '0.45rem 0.85rem',
-                  fontWeight: 600, height: 38, boxSizing: 'border-box',
-                  boxShadow: '0 2px 4px rgba(29, 78, 216, 0.25)', whiteSpace: 'nowrap'
-                }}
-              >
-                <span>❄️</span> Add Compressor / CDU
-              </button>
+              <>
+                <button
+                  type="button"
+                  className="btn btn-primary"
+                  onClick={() => setEditModal({ type: 'compressor', data: null })}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '0.4rem',
+                    background: '#1d4ed8', fontSize: '0.85rem', padding: '0.45rem 0.85rem',
+                    fontWeight: 600, height: 38, boxSizing: 'border-box',
+                    boxShadow: '0 2px 4px rgba(29, 78, 216, 0.25)', whiteSpace: 'nowrap'
+                  }}
+                >
+                  <span>❄️</span> Add Compressor / CDU
+                </button>
+                <button
+                  type="button"
+                  className="btn btn-secondary"
+                  onClick={() => setEditModal({ type: 'controller', data: null })}
+                  style={{
+                    display: 'flex', alignItems: 'center', gap: '0.4rem',
+                    fontSize: '0.85rem', padding: '0.45rem 0.85rem',
+                    fontWeight: 600, height: 38, boxSizing: 'border-box',
+                    whiteSpace: 'nowrap', borderColor: '#0284c7', color: '#0369a1',
+                    background: 'rgba(2, 132, 199, 0.08)'
+                  }}
+                  title="Add Digital Temperature Controller (Dixell, Sub-Zero, Carel, Danfoss)"
+                >
+                  <span>🎛️</span> Add Controller
+                </button>
+              </>
             )}
             <button
               type="button"
@@ -1292,7 +1360,7 @@ export default function MastersView() {
           }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.2rem' }}>
               <h2 style={{ margin: 0, fontSize: '1.25rem', fontWeight: 700 }}>
-                {editModal.data ? 'Edit' : 'Add New'} {editModal.type === 'models' ? 'Model' : editModal.type === 'compressor' ? 'Compressor / CDU' : editModal.type === 'categories' ? 'Category' : editModal.type === 'brands' ? 'Brand' : editModal.type === 'warehouses' ? 'Warehouse / Van' : 'Charge Item'}
+                {editModal.data ? 'Edit' : 'Add New'} {editModal.type === 'models' ? 'Model' : editModal.type === 'compressor' ? 'Compressor / CDU' : editModal.type === 'controller' ? 'Digital Controller' : editModal.type === 'categories' ? 'Category' : editModal.type === 'brands' ? 'Brand' : editModal.type === 'warehouses' ? 'Warehouse / Van' : 'Charge Item'}
               </h2>
               <button className="icon-btn" onClick={() => setEditModal(null)}>
                 <X size={18} />
@@ -1463,6 +1531,157 @@ export default function MastersView() {
                   <button type="button" className="btn btn-secondary" onClick={() => setEditModal(null)}>Cancel</button>
                   <button type="submit" className="btn btn-primary" style={{ background: '#1d4ed8' }}>
                     Save Compressor / CDU
+                  </button>
+                </div>
+              </form>
+            )}
+
+            {/* FORM: DIGITAL TEMPERATURE CONTROLLER */}
+            {editModal.type === 'controller' && (
+              <form onSubmit={handleSaveController}>
+                {/* Brand Selection */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.3rem' }}>
+                      Controller Brand / Maker *
+                    </label>
+                    <select
+                      name="brand_id"
+                      className="form-input"
+                      style={{ width: '100%' }}
+                      defaultValue={brands.find(b => b.name?.toLowerCase().includes('dixell'))?.id || brands[0]?.id}
+                    >
+                      {brands.map(b => (
+                        <option key={b.id} value={b.id}>{b.name}</option>
+                      ))}
+                      <option value="custom">+ Other / Custom Brand</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.3rem' }}>
+                      Custom Brand Name (if not in list)
+                    </label>
+                    <input type="text" name="brand_name_custom" className="form-input" placeholder="e.g. Sub-Zero, Carel, Danfoss, Eliwell" style={{ width: '100%' }} />
+                  </div>
+                </div>
+
+                {/* Model Number & Application Mode */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.3rem' }}>
+                      Controller Model Number *
+                    </label>
+                    <input
+                      type="text"
+                      name="model_number"
+                      defaultValue={editModal.data?.model_number || ''}
+                      className="form-input"
+                      placeholder="e.g. XR02CX-5N0C0 / XR06CX / SZ-7510P"
+                      style={{ width: '100%' }}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.3rem' }}>
+                      Application / Temperature Control Mode
+                    </label>
+                    <select name="app_type_label" className="form-input" style={{ width: '100%' }}>
+                      <option value="Chiller Controller (Off-Cycle Defrost)">Chiller (+2°C to +8°C) — Off-Cycle Defrost</option>
+                      <option value="Freezer Controller (Defrost & Fan Management)">Freezer (-18°C to -25°C) — Defrost & Fan Control</option>
+                      <option value="Universal Microprocessor Controller">Universal Multi-Stage (-40°C to +50°C)</option>
+                      <option value="Milk Chiller (BMC) Agitator Controller">Bulk Milk Chiller (BMC) & Agitator</option>
+                      <option value="Dual Mode Heating & Cooling Controller">Dual Heating / Cooling Mode</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Relay Outputs & Sensor Probes */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.3rem' }}>
+                      Relay Outputs & Defrost Rating
+                    </label>
+                    <select name="relay_config" className="form-input" style={{ width: '100%' }}>
+                      <option value="1 Relay (Compressor 20A / 8A) — Off-cycle Defrost">1 Relay (Compressor 20A / 8A) — Off-cycle</option>
+                      <option value="2 Relays (Compressor 8A + Defrost 8A)">2 Relays (Compressor 8A + Defrost 8A)</option>
+                      <option value="3 Relays (Compressor 8A + Defrost 8A + Evap Fan 8A)">3 Relays (Compressor + Defrost + Fan 8A)</option>
+                      <option value="4 Relays (Compressor + Defrost + Fan + Alarm/Light)">4 Relays (Compressor + Defrost + Fan + Alarm)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.3rem' }}>
+                      Sensor Probe Inputs
+                    </label>
+                    <select name="probes" className="form-input" style={{ width: '100%' }}>
+                      <option value="1 x NTC/PTC (Room Air Temperature)">1 × NTC/PTC (Room Air Temp)</option>
+                      <option value="2 x NTC/PTC (Room Air + Evaporator Defrost Termination)">2 × NTC/PTC (Room Air + Defrost Termination)</option>
+                      <option value="3 x NTC/PTC (Room + Defrost + Condenser/Aux)">3 × NTC/PTC (Room + Defrost + Condenser/Aux)</option>
+                      <option value="PT100 / Thermocouple Input">PT100 / Thermocouple (Industrial)</option>
+                    </select>
+                  </div>
+                </div>
+
+                {/* Power Supply & Temperature Range */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.3rem' }}>
+                      Power Supply / Voltage
+                    </label>
+                    <select name="voltage_phase" defaultValue={editModal.data?.voltage_phase || '230V / 1Ph / 50Hz'} className="form-input" style={{ width: '100%' }}>
+                      <option value="230V / 1Ph / 50Hz">230V AC ±10% / 50-60Hz (Standard)</option>
+                      <option value="110V / 1Ph / 60Hz">110V AC / 60Hz</option>
+                      <option value="12V AC/DC">12V AC/DC (Low Voltage)</option>
+                      <option value="24V AC/DC">24V AC/DC (Low Voltage)</option>
+                    </select>
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.3rem' }}>
+                      Control Temperature Range (°C)
+                    </label>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem' }}>
+                      <input type="number" step="any" name="temp_range_min" defaultValue={editModal.data?.temp_range_min ?? -40} className="form-input" placeholder="Min" style={{ width: '50%' }} />
+                      <span>to</span>
+                      <input type="number" step="any" name="temp_range_max" defaultValue={editModal.data?.temp_range_max ?? 110} className="form-input" placeholder="Max" style={{ width: '50%' }} />
+                    </div>
+                  </div>
+                </div>
+
+                {/* Pricing */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.3rem' }}>
+                      Purchase Cost (₹)
+                    </label>
+                    <input type="number" step="any" name="purchase_cost" defaultValue={editModal.data?.purchase_cost || 0} className="form-input" style={{ width: '100%' }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.3rem' }}>
+                      Selling Price (₹) *
+                    </label>
+                    <input type="number" step="any" name="selling_price" defaultValue={editModal.data?.selling_price || 0} className="form-input" style={{ width: '100%' }} required />
+                  </div>
+                </div>
+
+                {/* Catalogue Ref & Notes */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '1rem', marginBottom: '1.25rem' }}>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.3rem' }}>
+                      Catalogue / Manufacturer Source Ref
+                    </label>
+                    <input type="text" name="catalogue_ref" defaultValue={editModal.data?.catalogue_ref || 'Digital Controller Spec Sheet'} className="form-input" style={{ width: '100%' }} />
+                  </div>
+                  <div>
+                    <label style={{ display: 'block', fontSize: '0.85rem', fontWeight: 600, marginBottom: '0.3rem' }}>
+                      Features / Extra Notes
+                    </label>
+                    <input type="text" name="extra_notes" placeholder="e.g. RS485 Modbus, TTL port, built-in buzzer, IP65 front" className="form-input" style={{ width: '100%' }} />
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '0.5rem', borderTop: '1px solid var(--border)', paddingTop: '1rem' }}>
+                  <button type="button" className="btn btn-secondary" onClick={() => setEditModal(null)}>Cancel</button>
+                  <button type="submit" className="btn btn-primary" style={{ background: '#0284c7' }}>
+                    Save Controller
                   </button>
                 </div>
               </form>

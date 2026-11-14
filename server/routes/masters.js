@@ -209,8 +209,12 @@ router.post('/models', (req, res) => {
 
     let effectiveProductId = product_id;
     if (!effectiveProductId) {
+      if (req.body.category_id === 'cat_controllers' || (description && description.toLowerCase().includes('controller'))) {
+        const ctrlProd = db.prepare("SELECT id FROM products WHERE category_id = 'cat_controllers' OR id = 'prod_digital_controller'").get();
+        if (ctrlProd) effectiveProductId = ctrlProd.id;
+      }
       let cduProd = null;
-      if (effectiveBrandId) {
+      if (!effectiveProductId && effectiveBrandId) {
         cduProd = db.prepare("SELECT id FROM products WHERE brand_id = ? AND (category_id = 'cat_cdu' OR name LIKE '%Condensing%')").get(effectiveBrandId);
       }
       if (!cduProd) {
