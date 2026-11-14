@@ -17,7 +17,7 @@
 
 $ErrorActionPreference = 'Stop'
 
-$Repo = 'IamRamgarhia/Free-GST-Billing-Software'
+$Repo = 'izharsayed/GST-billing-Software'
 $Dest = $env:FREEGSTBILL_DIR
 if (-not $Dest) { $Dest = Join-Path $env:LOCALAPPDATA 'Programs\Free GST Billing' }
 

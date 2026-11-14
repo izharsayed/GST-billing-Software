@@ -1090,8 +1090,8 @@ app.get('/api/check-update', async (req, res) => {
     const ctrl = new AbortController();
     const t = setTimeout(() => ctrl.abort(), 4000);
     const [pkgRes, relRes] = await Promise.all([
-      fetch('https://raw.githubusercontent.com/IamRamgarhia/Free-GST-Billing-Software/main/package.json', { signal: ctrl.signal }).catch(() => null),
-      fetch('https://api.github.com/repos/IamRamgarhia/Free-GST-Billing-Software/releases/latest', {
+      fetch('https://raw.githubusercontent.com/izharsayed/GST-billing-Software/client-demo/package.json', { signal: ctrl.signal }).catch(() => null),
+      fetch('https://api.github.com/repos/izharsayed/GST-billing-Software/releases/latest', {
         signal: ctrl.signal,
         headers: { 'Accept': 'application/vnd.github+json', 'User-Agent': 'FreeGSTBill-update-check' },
       }).catch(() => null),
